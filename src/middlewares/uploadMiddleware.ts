@@ -71,21 +71,27 @@ const processProfileImage = async (req: Request, res: Response, next: NextFuncti
 
   try {
     const file = req.files.profileImage[0];
-    const filePath = path.join('uploads', 'profiles', file.filename);
+    const originalPath = file.path;
+    const processedPath = path.join('uploads', 'profiles', 'processed-' + file.filename);
 
     // Process image with Sharp
-    await sharp(file.path)
+    await sharp(originalPath)
       .resize(300, 300, { // Resize to 300x300
         fit: 'cover',
         position: 'center'
       })
       .jpeg({ quality: 80 }) // Convert to JPEG with 80% quality
-      .toFile(filePath);
+      .toFile(processedPath);
+
+    // Delete the original file
+    await fs.unlink(originalPath);
 
     // Update the file path in the request
-    file.path = filePath;
+    file.path = processedPath;
+    file.filename = 'processed-' + file.filename;
     next();
   } catch (error) {
+    console.error('Error processing profile image:', error);
     next(error);
   }
 };

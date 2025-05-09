@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createEmployee } from '../controllers/employeeController';
+import { createEmployee, listEmployees } from '../controllers/employeeController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { isAdmin } from '../middlewares/roleMiddleware';
 import { uploadMiddleware } from '../middlewares/uploadMiddleware';
@@ -12,5 +12,8 @@ router.use(isAdmin as any);
 
 // Create employee with file uploads and image processing
 router.post('/', uploadMiddleware, createEmployee as any);
+
+// List employees
+router.get('/', listEmployees as any);
 
 export default router; 

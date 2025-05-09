@@ -24,15 +24,51 @@ interface CreateEmployeeRequest {
   roleId: string;
 
   // Employee details
-  employeeNumber: string;
   fatherName: string;
   designation: string;
   joiningDate: Date;
+  dateOfBirth: Date;
   shiftId: string;
   departmentId: string;
   subDepartmentId?: string;
   managerId?: string;
   skills?: string; // Comma-separated string of skills
+  
+  // New fields
+  workLocation: 'Onsite' | 'Remote' | 'Hybrid';
+  gender: string;
+  address: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  salary: number;
+}
+
+// Function to generate employee number
+async function generateEmployeeNumber(): Promise<string> {
+  // Get the current year
+  const currentYear = new Date().getFullYear().toString().slice(-2);
+  
+  // Get the latest employee number for the current year
+  const latestEmployee = await prisma.employee.findFirst({
+    where: {
+      employeeNumber: {
+        startsWith: `EMP${currentYear}`
+      }
+    },
+    orderBy: {
+      employeeNumber: 'desc'
+    }
+  });
+
+  let sequence = 1;
+  if (latestEmployee) {
+    // Extract the sequence number from the latest employee number
+    const latestSequence = parseInt(latestEmployee.employeeNumber.slice(-4));
+    sequence = latestSequence + 1;
+  }
+
+  // Format: EMPYY#### (e.g., EMP240001)
+  return `EMP${currentYear}${sequence.toString().padStart(4, '0')}`;
 }
 
 export const createEmployee = async (req: Request, res: Response) => {
@@ -42,15 +78,21 @@ export const createEmployee = async (req: Request, res: Response) => {
       password,
       fullName,
       roleId,
-      employeeNumber,
       fatherName,
       designation,
       joiningDate,
+      dateOfBirth,
       shiftId,
       departmentId,
       subDepartmentId,
       managerId,
-      skills
+      skills,
+      workLocation,
+      gender,
+      address,
+      emergencyContactName,
+      emergencyContactPhone,
+      salary
     }: CreateEmployeeRequest = req.body;
 
     // Handle uploaded files
@@ -72,11 +114,27 @@ export const createEmployee = async (req: Request, res: Response) => {
     const processedSkills = skills ? skills.split(',').map(skill => skill.trim()) : [];
 
     // Validate required fields
-    if (!email || !password || !fullName || !roleId || !employeeNumber || 
-        !fatherName || !designation || !joiningDate || !shiftId || !departmentId) {
+    if (!email || !password || !fullName || !roleId || 
+        !fatherName || !designation || !joiningDate || !dateOfBirth || !shiftId || 
+        !departmentId || !workLocation || !gender || !address || 
+        !emergencyContactName || !emergencyContactPhone || !salary) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields'
+      });
+    }
+
+    // Validate work location
+    console.log('Received workLocation:', workLocation);
+    console.log('workLocation type:', typeof workLocation);
+    console.log('workLocation length:', workLocation.length);
+    console.log('workLocation char codes:', Array.from(workLocation).map(c => c.charCodeAt(0)));
+
+    if (!['Onsite', 'Remote', 'Hybrid'].includes(workLocation)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid work location. Must be one of: Onsite, Remote, Hybrid',
+        received: workLocation
       });
     }
 
@@ -92,17 +150,8 @@ export const createEmployee = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if employee number already exists
-    const existingEmployee = await prisma.employee.findUnique({
-      where: { employeeNumber }
-    });
-
-    if (existingEmployee) {
-      return res.status(400).json({
-        success: false,
-        message: 'Employee number already exists'
-      });
-    }
+    // Generate employee number
+    const employeeNumber = await generateEmployeeNumber();
 
     // Hash password
     const salt = await bcrypt.genSalt(10);
@@ -132,13 +181,19 @@ export const createEmployee = async (req: Request, res: Response) => {
           subDepartmentId,
           position: designation,
           fatherName,
-          dateOfBirth: new Date(), // This should be added to the request
+          dateOfBirth: new Date(dateOfBirth),
           hireDate: new Date(joiningDate),
           status: 'active',
           managerId,
           profileImage,
           documents: documents ? JSON.stringify(documents) : null,
-          skills: skills || null
+          skills: skills || null,
+          workLocation,
+          gender,
+          address,
+          emergencyContactName,
+          emergencyContactPhone,
+          salary
         }
       });
 
@@ -159,13 +214,146 @@ export const createEmployee = async (req: Request, res: Response) => {
           status: result.status,
           profileImage: result.profileImage,
           documents: result.documents ? JSON.parse(result.documents) : [],
-          skills: result.skills ? JSON.parse(result.skills) : []
+          skills: result.skills ? result.skills.split(',').map(skill => skill.trim()) : [],
+          workLocation: result.workLocation,
+          gender: result.gender,
+          address: result.address,
+          emergencyContact: {
+            name: result.emergencyContactName,
+            phone: result.emergencyContactPhone
+          },
+          salary: result.salary
         }
       }
     });
 
   } catch (error) {
     console.error('Create employee error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+export const listEmployees = async (req: Request, res: Response) => {
+  try {
+    const {
+      page = '1',
+      limit = '10',
+      search,
+      department,
+      status,
+      workLocation
+    } = req.query;
+
+    const pageNumber = parseInt(page as string);
+    const limitNumber = parseInt(limit as string);
+    const skip = (pageNumber - 1) * limitNumber;
+
+    // Build where clause
+    const where: any = {};
+    
+    if (search) {
+      where.OR = [
+        { employeeNumber: { contains: search as string } },
+        { position: { contains: search as string } },
+        { user: { fullName: { contains: search as string } } }
+      ];
+    }
+
+    if (department) {
+      where.departmentId = department;
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (workLocation) {
+      where.workLocation = workLocation;
+    }
+
+    // Get total count for pagination
+    const total = await prisma.employee.count({ where });
+
+    // Get employees with related data
+    const employees = await prisma.employee.findMany({
+      where,
+      skip,
+      take: limitNumber,
+      include: {
+        user: {
+          select: {
+            fullName: true,
+            email: true,
+            status: true
+          }
+        },
+        department: {
+          select: {
+            name: true
+          }
+        },
+        subDepartment: {
+          select: {
+            name: true
+          }
+        },
+        manager: {
+          select: {
+            user: {
+              select: {
+                fullName: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        hireDate: 'desc'
+      }
+    });
+
+    // Format the response
+    const formattedEmployees = employees.map(emp => ({
+      id: emp.id,
+      employeeNumber: emp.employeeNumber,
+      fullName: emp.user.fullName,
+      email: emp.user.email,
+      designation: emp.position,
+      department: emp.department?.name,
+      subDepartment: emp.subDepartment?.name,
+      manager: emp.manager?.user.fullName,
+      status: emp.status,
+      profileImage: emp.profileImage,
+      workLocation: emp.workLocation,
+      gender: emp.gender,
+      address: emp.address,
+      emergencyContact: {
+        name: emp.emergencyContactName,
+        phone: emp.emergencyContactPhone
+      },
+      salary: emp.salary,
+      skills: emp.skills ? emp.skills.split(',').map(skill => skill.trim()) : [],
+      documents: emp.documents ? JSON.parse(emp.documents) : []
+    }));
+
+    return res.json({
+      success: true,
+      data: {
+        employees: formattedEmployees,
+        pagination: {
+          total,
+          page: pageNumber,
+          limit: limitNumber,
+          totalPages: Math.ceil(total / limitNumber)
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('List employees error:', error);
     return res.status(500).json({
       success: false,
       message: 'Internal server error'

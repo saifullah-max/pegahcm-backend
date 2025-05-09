@@ -1,0 +1,274 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+		"name": "PegaHCM",
+		"description": "PegaHCM API Collection",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Create Employee",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "multipart/form-data"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "email",
+							"value": "john.doe@company.com",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "SecurePass123!",
+							"type": "text"
+						},
+						{
+							"key": "fullName",
+							"value": "John Doe",
+							"type": "text"
+						},
+						{
+							"key": "roleId",
+							"value": "role_123",
+							"type": "text"
+						},
+						{
+							"key": "fatherName",
+							"value": "James Doe",
+							"type": "text"
+						},
+						{
+							"key": "designation",
+							"value": "Software Engineer",
+							"type": "text"
+						},
+						{
+							"key": "joiningDate",
+							"value": "2024-03-20T00:00:00.000Z",
+							"type": "text"
+						},
+						{
+							"key": "dateOfBirth",
+							"value": "1990-05-15T00:00:00.000Z",
+							"type": "text"
+						},
+						{
+							"key": "shiftId",
+							"value": "shift_123",
+							"type": "text"
+						},
+						{
+							"key": "departmentId",
+							"value": "dept_123",
+							"type": "text"
+						},
+						{
+							"key": "subDepartmentId",
+							"value": "subdept_123",
+							"type": "text"
+						},
+						{
+							"key": "managerId",
+							"value": "emp_123",
+							"type": "text"
+						},
+						{
+							"key": "skills",
+							"value": "JavaScript,TypeScript,Node.js,React",
+							"type": "text"
+						},
+						{
+							"key": "workLocation",
+							"value": "Hybrid",
+							"type": "text"
+						},
+						{
+							"key": "gender",
+							"value": "Male",
+							"type": "text"
+						},
+						{
+							"key": "address",
+							"value": "123 Main Street, City, Country",
+							"type": "text"
+						},
+						{
+							"key": "emergencyContactName",
+							"value": "Jane Doe",
+							"type": "text"
+						},
+						{
+							"key": "emergencyContactPhone",
+							"value": "+1234567890",
+							"type": "text"
+						},
+						{
+							"key": "salary",
+							"value": "75000",
+							"type": "text"
+						},
+						{
+							"key": "profileImage",
+							"type": "file",
+							"src": "/path/to/profile-image.jpg"
+						},
+						{
+							"key": "documents",
+							"type": "file",
+							"src": "/path/to/document1.pdf"
+						},
+						{
+							"key": "documents",
+							"type": "file",
+							"src": "/path/to/document2.pdf"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/api/employees",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"api",
+						"employees"
+					]
+				},
+				"description": "Create a new employee with all required fields and optional file uploads"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": []
+						},
+						"url": {
+							"raw": "{{base_url}}/api/employees"
+						}
+					},
+					"status": "Created",
+					"code": 201,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": {
+						"success": true,
+						"data": {
+							"employee": {
+								"id": "emp_123",
+								"employeeNumber": "EMP240001",
+								"fullName": "John Doe",
+								"email": "john.doe@company.com",
+								"designation": "Software Engineer",
+								"department": "dept_123",
+								"manager": "emp_123",
+								"status": "active",
+								"profileImage": "uploads/profiles/profile-image.jpg",
+								"documents": [
+									{
+										"name": "document1.pdf",
+										"url": "uploads/documents/document1.pdf",
+										"type": "application/pdf"
+									},
+									{
+										"name": "document2.pdf",
+										"url": "uploads/documents/document2.pdf",
+										"type": "application/pdf"
+									}
+								],
+								"skills": ["JavaScript", "TypeScript", "Node.js", "React"],
+								"workLocation": "Hybrid",
+								"gender": "Male",
+								"address": "123 Main Street, City, Country",
+								"emergencyContact": {
+									"name": "Jane Doe",
+									"phone": "+1234567890"
+								},
+								"salary": 75000
+							}
+						}
+					}
+				},
+				{
+					"name": "Error Response - Missing Fields",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": []
+						},
+						"url": {
+							"raw": "{{base_url}}/api/employees"
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": {
+						"success": false,
+						"message": "Missing required fields"
+					}
+				},
+				{
+					"name": "Error Response - Email Exists",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": []
+						},
+						"url": {
+							"raw": "{{base_url}}/api/employees"
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": {
+						"success": false,
+						"message": "Email already exists"
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		}
+	]
+} 

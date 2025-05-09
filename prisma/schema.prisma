@@ -62,6 +62,12 @@ model Employee {
   dateOfBirth     DateTime
   hireDate        DateTime
   status          String
+  workLocation    String    // Onsite, Remote, Hybrid
+  gender          String
+  address         String
+  emergencyContactName String
+  emergencyContactPhone String
+  salary          Decimal   @db.Decimal(10, 2)
   profileImage    String?
   documents       String?   // JSON string of documents array
   skills          String?   // JSON string of skills array

@@ -4,6 +4,10 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import roleRoutes from './routes/roleRoutes';
 import employeeRoutes from './routes/employeeRoutes';
+import shiftRoutes from './routes/shift.routes';
+import departmentRoutes from './routes/department.routes';
+import subDepartmentRoutes from './routes/subDepartment.routes';
+import testRoutes from './routes/test.routes';
 
 // Load environment variables
 dotenv.config();
@@ -19,6 +23,10 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/employees', employeeRoutes);
+app.use('/api/shifts', shiftRoutes);
+app.use('/api/departments', departmentRoutes);
+app.use('/api/sub-departments', subDepartmentRoutes);
+app.use('/api/test', testRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
