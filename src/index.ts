@@ -8,6 +8,7 @@ import shiftRoutes from './routes/shift.routes';
 import departmentRoutes from './routes/department.routes';
 import subDepartmentRoutes from './routes/subDepartment.routes';
 import testRoutes from './routes/test.routes';
+import userRoutes from './routes/userRoutes'
 
 // Load environment variables
 dotenv.config();
@@ -26,6 +27,7 @@ app.use('/api/shifts', shiftRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/sub-departments', subDepartmentRoutes);
 app.use('/api/test', testRoutes);
+app.use('/api/user', userRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
