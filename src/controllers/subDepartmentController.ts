@@ -46,10 +46,12 @@ export const createSubDepartment = async (req: Request, res: Response) => {
         departmentId
       }
     });
+    const getAllSubDepartments = await prisma.subDepartment.findMany({});
+    console.log("All sub dept:",  getAllSubDepartments);
 
     res.status(201).json({
       success: true,
-      data: subDepartment
+      data: getAllSubDepartments
     });
   } catch (error) {
     console.error('Error creating sub-department:', error);

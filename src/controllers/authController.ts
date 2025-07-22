@@ -11,7 +11,7 @@ interface LoginRequest {
 }
 
 interface RegisterRequest {
-  username: string;
+  username?: string; // optional
   password: string;
   email: string;
   fullName: string;
@@ -20,10 +20,10 @@ interface RegisterRequest {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { username, password, email, fullName, roleId }: RegisterRequest = req.body;
+    const { username = '', password, email, fullName, roleId }: RegisterRequest = req.body;
 
     // Validate input
-    if (!username || !password || !email || !fullName || !roleId) {
+    if (!password || !email || !fullName || !roleId) {
       return res.status(400).json({
         success: false,
         message: 'All fields are required'
@@ -34,7 +34,7 @@ export const register = async (req: Request, res: Response) => {
     const existingUser = await prisma.user.findFirst({
       where: {
         OR: [
-          { username },
+          { username: username || undefined }, // only check if username is provided
           { email }
         ]
       }
@@ -54,7 +54,7 @@ export const register = async (req: Request, res: Response) => {
     // Create user
     const user = await prisma.user.create({
       data: {
-        username,
+        username: username || '', // default to empty string
         passwordHash,
         email,
         fullName,
@@ -69,7 +69,7 @@ export const register = async (req: Request, res: Response) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { 
+      {
         userId: user.id,
         username: user.username,
         role: user.role.name
@@ -142,7 +142,7 @@ export const login = async (req: Request, res: Response) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { 
+      {
         userId: user.id,
         email: user.email,
         role: user.role.name

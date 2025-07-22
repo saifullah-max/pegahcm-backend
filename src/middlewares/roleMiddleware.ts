@@ -8,7 +8,8 @@ export const isAdmin = (req: Request, res: Response, next: NextFunction) => {
     });
   }
 
-  if (req.user.role !== 'admin') {
+  if (req.user.role !== 'Admin') {
+    // console.log("req.user.role", req.user.role);
     return res.status(403).json({
       success: false,
       message: 'Admin access required'

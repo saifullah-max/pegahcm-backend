@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createEmployee, listEmployees } from '../controllers/employeeController';
+import { createEmployee, deleteEmployee, listEmployees, ListSingleEmployee, updateEmployee } from '../controllers/employeeController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { isAdmin } from '../middlewares/roleMiddleware';
 import { uploadMiddleware } from '../middlewares/uploadMiddleware';
@@ -15,5 +15,13 @@ router.post('/', uploadMiddleware, createEmployee as any);
 
 // List employees
 router.get('/', listEmployees as any);
+
+router.get('/:id', ListSingleEmployee as any); // Assuming this is for getting a specific employee by ID
+
+// Update employee
+router.put('/:id', uploadMiddleware, updateEmployee as any); // Reusing createEmployee for updates, adjust as needed
+
+// Delete employee
+router.delete('/:id', deleteEmployee as any);
 
 export default router; 

@@ -57,8 +57,11 @@ model Employee {
   departmentId    String
   subDepartment   SubDepartment? @relation(fields: [subDepartmentId], references: [id])
   subDepartmentId String?
+  phoneNumber     String?
+  shiftId         String?
+  shift           Shift?   @relation(fields: [shiftId], references: [id])
   position        String
-  fatherName      String
+  fatherName      String?
   dateOfBirth     DateTime
   hireDate        DateTime
   status          String
@@ -121,6 +124,7 @@ model Shift {
   endTime     DateTime
   description String?
   attendanceRecords AttendanceRecord[]
+  employees         Employee[]  
 }
 
 model LeaveRequest {
