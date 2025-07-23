@@ -339,3 +339,32 @@ export const getAllLeaveRequestsForAdmin = async (req: Request, res: Response) =
         });
     }
 };
+
+// approve - reject leave request
+export const updateLeaveStatus = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!['Approved', 'Rejected'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'Invalid status value.' });
+        }
+
+        const updated = await prisma.leaveRequest.update({
+            where: { id },
+            data: {
+                status,
+                approvedAt: status === 'Approved' ? new Date() : null,
+                approvedById: (req.user as unknown as CustomJwtPayload).userId, // assuming JWT contains admin userId
+            },
+        });
+
+        return res.status(200).json({ success: true, data: updated });
+    } catch (error) {
+        console.error('Error updating leave request:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error while updating leave request',
+        });
+    }
+};
