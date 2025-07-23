@@ -14,83 +14,104 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  username      String    @unique
-  passwordHash  String
-  email         String    @unique
-  fullName      String
-  role          Role      @relation(fields: [roleId], references: [id])
-  roleId        String
-  status        String
-  dateJoined    DateTime  @default(now())
-  lastLogin     DateTime?
-  employee      Employee?
-  approvedLeaves LeaveRequest[] @relation("ApprovedBy")
-  approvedVacations Vacation[] @relation("ApprovedBy")
-  assignedOnboarding OnboardingProcess[] @relation("AssignedHR")
-  processedResignations Resignation[] @relation("ProcessedBy")
-  initiatedHRProcesses HRProcess[] @relation("InitiatedBy")
+  id                    String              @id @default(uuid())
+  username              String              @unique
+  passwordHash          String
+  email                 String              @unique
+  fullName              String
+  role                  Role                @relation(fields: [roleId], references: [id])
+  roleId                String
+  status                String
+  dateJoined            DateTime            @default(now())
+  lastLogin             DateTime?
+  employee              Employee?
+  approvedLeaves        LeaveRequest[]      @relation("ApprovedBy")
+  approvedVacations     Vacation[]          @relation("ApprovedBy")
+  assignedOnboarding    OnboardingProcess[] @relation("AssignedHR")
+  processedResignations Resignation[]       @relation("ProcessedBy")
+  initiatedHRProcesses  HRProcess[]         @relation("InitiatedBy")
 }
 
 model Role {
-  id          String    @id @default(uuid())
-  name        String    @unique
+  id          String  @id @default(uuid())
+  name        String  @unique
   description String?
   users       User[]
 }
 
 model SubDepartment {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  description String?
-  department  Department @relation(fields: [departmentId], references: [id])
+  id           String     @id @default(uuid())
+  name         String     @unique
+  description  String?
+  department   Department @relation(fields: [departmentId], references: [id])
   departmentId String
-  employees   Employee[]
+  employees    Employee[]
 }
 
 model Employee {
-  id              String    @id @default(uuid())
-  user            User      @relation(fields: [userId], references: [id])
-  userId          String    @unique
-  employeeNumber  String    @unique
-  department      Department @relation(fields: [departmentId], references: [id])
-  departmentId    String
-  subDepartment   SubDepartment? @relation(fields: [subDepartmentId], references: [id])
-  subDepartmentId String?
-  phoneNumber     String?
-  shiftId         String?
-  shift           Shift?   @relation(fields: [shiftId], references: [id])
-  position        String
-  fatherName      String?
-  dateOfBirth     DateTime
-  hireDate        DateTime
-  status          String
-  workLocation    String    // Onsite, Remote, Hybrid
-  gender          String
-  address         String
-  emergencyContactName String
+  id                    String              @id @default(uuid())
+  user                  User                @relation(fields: [userId], references: [id])
+  userId                String              @unique
+  employeeNumber        String              @unique
+  department            Department          @relation(fields: [departmentId], references: [id])
+  departmentId          String
+  subDepartment         SubDepartment?      @relation(fields: [subDepartmentId], references: [id])
+  subDepartmentId       String?
+  phoneNumber           String?
+  shiftId               String?
+  shift                 Shift?              @relation(fields: [shiftId], references: [id])
+  position              String
+  fatherName            String?
+  dateOfBirth           DateTime
+  hireDate              DateTime
+  status                String
+  workLocation          String // Onsite, Remote, Hybrid
+  gender                String
+  address               String
+  emergencyContactName  String
   emergencyContactPhone String
-  salary          Decimal   @db.Decimal(10, 2)
-  profileImage    String?
-  documents       String?   // JSON string of documents array
-  skills          String?   // JSON string of skills array
-  manager         Employee? @relation("EmployeeManager", fields: [managerId], references: [id])
-  managerId       String?
-  managedEmployees Employee[] @relation("EmployeeManager")
-  attendanceRecords AttendanceRecord[]
-  leaveRequests   LeaveRequest[]
-  vacations       Vacation[]
-  onboardingProcesses OnboardingProcess[]
-  resignations    Resignation[]
-  assets          Asset[]
-  hrProcesses     HRProcess[]
+  salary                Decimal             @db.Decimal(10, 2)
+  employeeImages        employeeImage[]
+  employeeDocuments     employeeDocument[]
+  skills                String? // JSON string of skills array
+  manager               Employee?           @relation("EmployeeManager", fields: [managerId], references: [id])
+  managerId             String?
+  managedEmployees      Employee[]          @relation("EmployeeManager")
+  attendanceRecords     AttendanceRecord[]
+  leaveRequests         LeaveRequest[]
+  vacations             Vacation[]
+  onboardingProcesses   OnboardingProcess[]
+  resignations          Resignation[]
+  assets                Asset[]
+  hrProcesses           HRProcess[]
+}
+
+model employeeImage {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId String
+  name       String
+  url        String // File path or external link (Cloudinary, S3, etc.)
+  mimeType   String
+  uploadedAt DateTime @default(now())
+}
+
+model employeeDocument {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId String
+  name       String
+  url        String // File path or external link
+  mimeType   String
+  uploadedAt DateTime @default(now())
+  type       String // e.g. "resume", "certificate", etc.
 }
 
 model Department {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  description String?
-  employees   Employee[]
+  id             String          @id @default(uuid())
+  name           String          @unique
+  description    String?
+  employees      Employee[]
   subDepartments SubDepartment[]
 }
 
@@ -109,119 +130,119 @@ model AttendanceRecord {
 }
 
 model Break {
-  id                String    @id @default(uuid())
-  attendanceRecord  AttendanceRecord @relation(fields: [attendanceRecordId], references: [id])
+  id                 String           @id @default(uuid())
+  attendanceRecord   AttendanceRecord @relation(fields: [attendanceRecordId], references: [id])
   attendanceRecordId String
-  breakStart        DateTime
-  breakEnd          DateTime?
-  breakType         String
+  breakStart         DateTime
+  breakEnd           DateTime?
+  breakType          String
 }
 
 model Shift {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  startTime   DateTime
-  endTime     DateTime
-  description String?
+  id                String             @id @default(uuid())
+  name              String             @unique
+  startTime         DateTime
+  endTime           DateTime
+  description       String?
   attendanceRecords AttendanceRecord[]
-  employees         Employee[]  
+  employees         Employee[]
 }
 
 model LeaveRequest {
-  id          String    @id @default(uuid())
-  employee    Employee  @relation(fields: [employeeId], references: [id])
-  employeeId  String
-  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
-  leaveTypeId String
-  startDate   DateTime
-  endDate     DateTime
-  reason      String
-  status      String
-  requestedAt DateTime  @default(now())
-  approvedBy  User?      @relation("ApprovedBy", fields: [approvedById], references: [id])
+  id           String    @id @default(uuid())
+  employee     Employee  @relation(fields: [employeeId], references: [id])
+  employeeId   String
+  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id])
+  leaveTypeId  String
+  startDate    DateTime
+  endDate      DateTime
+  reason       String
+  status       String
+  requestedAt  DateTime  @default(now())
+  approvedBy   User?     @relation("ApprovedBy", fields: [approvedById], references: [id])
   approvedById String?
-  approvedAt  DateTime?
+  approvedAt   DateTime?
 }
 
 model LeaveType {
-  id          String    @id @default(uuid())
-  name        String    @unique
-  description String?
-  isPaid      Boolean   @default(true)
+  id            String         @id @default(uuid())
+  name          String         @unique
+  description   String?
+  isPaid        Boolean        @default(true)
   leaveRequests LeaveRequest[]
 }
 
 model Vacation {
-  id          String    @id @default(uuid())
-  employee    Employee  @relation(fields: [employeeId], references: [id])
-  employeeId  String
-  startDate   DateTime
-  endDate     DateTime
+  id           String    @id @default(uuid())
+  employee     Employee  @relation(fields: [employeeId], references: [id])
+  employeeId   String
+  startDate    DateTime
+  endDate      DateTime
   vacationType String
-  status      String
-  approvedBy  User      @relation("ApprovedBy", fields: [approvedById], references: [id])
+  status       String
+  approvedBy   User      @relation("ApprovedBy", fields: [approvedById], references: [id])
   approvedById String
-  approvedAt  DateTime?
+  approvedAt   DateTime?
 }
 
 model OnboardingProcess {
-  id          String    @id @default(uuid())
-  employee    Employee  @relation(fields: [employeeId], references: [id])
-  employeeId  String
-  startDate   DateTime
-  endDate     DateTime?
-  status      String
-  assignedHR  User      @relation("AssignedHR", fields: [assignedHRId], references: [id])
+  id           String    @id @default(uuid())
+  employee     Employee  @relation(fields: [employeeId], references: [id])
+  employeeId   String
+  startDate    DateTime
+  endDate      DateTime?
+  status       String
+  assignedHR   User      @relation("AssignedHR", fields: [assignedHRId], references: [id])
   assignedHRId String
-  notes       String?
+  notes        String?
 }
 
 model Resignation {
-  id              String    @id @default(uuid())
-  employee        Employee  @relation(fields: [employeeId], references: [id])
-  employeeId      String
-  resignationDate DateTime
-  lastWorkingDay  DateTime
-  reason          String
-  status          String
-  clearanceStatus String
+  id                String             @id @default(uuid())
+  employee          Employee           @relation(fields: [employeeId], references: [id])
+  employeeId        String
+  resignationDate   DateTime
+  lastWorkingDay    DateTime
+  reason            String
+  status            String
+  clearanceStatus   String
   assetReturnStatus String
-  processedBy     User      @relation("ProcessedBy", fields: [processedById], references: [id])
-  processedById   String
-  processedAt     DateTime?
-  assets          ResignationAsset[]
+  processedBy       User               @relation("ProcessedBy", fields: [processedById], references: [id])
+  processedById     String
+  processedAt       DateTime?
+  assets            ResignationAsset[]
 }
 
 model Asset {
-  id          String    @id @default(uuid())
-  name        String
-  description String?
-  serialNumber String   @unique
-  assignedTo  Employee  @relation(fields: [assignedToId], references: [id])
-  assignedToId String
-  status      String
+  id                String             @id @default(uuid())
+  name              String
+  description       String?
+  serialNumber      String             @unique
+  assignedTo        Employee           @relation(fields: [assignedToId], references: [id])
+  assignedToId      String
+  status            String
   resignationAssets ResignationAsset[]
 }
 
 model ResignationAsset {
-  id            String    @id @default(uuid())
+  id            String      @id @default(uuid())
   resignation   Resignation @relation(fields: [resignationId], references: [id])
   resignationId String
-  asset         Asset     @relation(fields: [assetId], references: [id])
+  asset         Asset       @relation(fields: [assetId], references: [id])
   assetId       String
   returnStatus  String
   returnDate    DateTime?
 }
 
 model HRProcess {
-  id          String    @id @default(uuid())
-  processType String
-  employee    Employee  @relation(fields: [employeeId], references: [id])
-  employeeId  String
-  initiatedBy User      @relation("InitiatedBy", fields: [initiatedById], references: [id])
+  id            String    @id @default(uuid())
+  processType   String
+  employee      Employee  @relation(fields: [employeeId], references: [id])
+  employeeId    String
+  initiatedBy   User      @relation("InitiatedBy", fields: [initiatedById], references: [id])
   initiatedById String
-  startDate   DateTime
-  endDate     DateTime?
-  status      String
-  notes       String?
+  startDate     DateTime
+  endDate       DateTime?
+  status        String
+  notes         String?
 }

@@ -2,7 +2,7 @@ import e, { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import path from 'path';
-import { equal } from 'assert';
+import { v4 as uuidv4 } from 'uuid';
 
 // Add multer type definitions
 declare global {
@@ -170,8 +170,8 @@ export const createEmployee = async (req: Request, res: Response) => {
           dateOfBirth: new Date(dateOfBirth),
           hireDate: new Date(joiningDate),
           status,
-          profileImage,
-          documents: documents ? JSON.stringify(documents) : null,
+          // profileImage,
+          // documents: documents ? JSON.stringify(documents) : null,
           skills: processedSkills.length > 0 ? processedSkills.join(',') : null,
           workLocation,
           gender,
@@ -200,8 +200,8 @@ export const createEmployee = async (req: Request, res: Response) => {
           designation: result.employee.position,
           department: departmentId,
           status: result.employee.status,
-          profileImage: result.employee.profileImage,
-          documents: result.employee.documents ? JSON.parse(result.employee.documents) : [],
+          // profileImage: result.employee.profileImage,
+          // documents: result.employee.documents ? JSON.parse(result.employee.documents) : [],
           skills: result.employee.skills
             ? result.employee.skills.split(',').map(skill => skill.trim())
             : [],
@@ -317,7 +317,7 @@ export const listEmployees = async (req: Request, res: Response) => {
       subDepartment: emp.subDepartment?.name,
       manager: emp.manager?.user.fullName,
       status: emp.status,
-      profileImage: emp.profileImage,
+      // profileImage: emp.profileImage,
       workLocation: emp.workLocation,
       gender: emp.gender,
       address: emp.address,
@@ -327,7 +327,7 @@ export const listEmployees = async (req: Request, res: Response) => {
       },
       salary: emp.salary,
       skills: emp.skills ? emp.skills.split(',').map(skill => skill.trim()) : [],
-      documents: emp.documents ? JSON.parse(emp.documents) : []
+      // documents: emp.documents ? JSON.parse(emp.documents) : []
     }));
 
     // console.log("Data:", employees);
@@ -355,27 +355,29 @@ export const listEmployees = async (req: Request, res: Response) => {
 };
 
 export const ListSingleEmployee = async (req: Request, res: Response) => {
-  const { id } = req.params; // this is the EMPLOYEE ID
+  const { id } = req.params;
 
   try {
-    const employee = await prisma.employee.findUnique({
-      where: { userId: id },
+    const employee = await prisma.employee.findFirst({
+      where: {
+        OR: [
+          { id },
+          { userId: id }
+        ]
+      },
       include: {
         user: true,
         shift: true,
       }
     });
 
-    console.log("Employee:", employee, "employee.user:", employee?.user);
-
     if (!employee || !employee.user) {
       return res.status(404).json({
         success: false,
-        message: 'Employee or related user not found'
+        message: 'Employee or related user not found',
       });
     }
-    console.log("Status:", employee.user.status);
-    console.log("Shift:", employee.shift);
+
     return res.status(200).json({
       success: true,
       data: {
@@ -385,7 +387,7 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
           email: employee.user.email,
           roleId: employee.user.roleId,
           status: employee.user.status,
-          dateJoined: employee.user.dateJoined
+          dateJoined: employee.user.dateJoined,
         },
         employee: {
           id: employee.id,
@@ -402,26 +404,23 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
           status: employee.status,
           dateOfBirth: employee.dateOfBirth,
           hireDate: employee.hireDate,
-          profileImage: employee.profileImage,
           skills: employee.skills?.split(',').map(s => s.trim()) || [],
           workLocation: employee.workLocation,
           emergencyContactName: employee.emergencyContactName,
           emergencyContactPhone: employee.emergencyContactPhone,
-          documents: employee.documents
-            ? JSON.parse(employee.documents)
-            : []
-        }
-      }
+        },
+      },
     });
   } catch (error: any) {
     console.error('ListSingleEmployee error:', error);
     return res.status(500).json({
       success: false,
       message: 'Internal server error',
-      error: error.message || error
+      error: error.message || error,
     });
   }
 };
+
 
 export const updateEmployee = async (req: Request, res: Response) => {
   try {
@@ -497,8 +496,8 @@ export const updateEmployee = async (req: Request, res: Response) => {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
         hireDate: joiningDate ? new Date(joiningDate) : undefined,
         status: status || undefined,
-        profileImage: profileImage || undefined,
-        documents: documents ? JSON.stringify(documents) : undefined,
+        // profileImage: profileImage || undefined,
+        // documents: documents ? JSON.stringify(documents) : undefined,
         skills: processedSkills.length > 0 ? processedSkills.join(',') : undefined,
         workLocation: workLocation || undefined,
         gender: gender || undefined,
@@ -535,8 +534,8 @@ export const updateEmployee = async (req: Request, res: Response) => {
           designation: updatedEmployee.position,
           department: departmentId,
           status: updatedEmployee.status,
-          profileImage: updatedEmployee.profileImage,
-          documents: updatedEmployee.documents ? JSON.parse(updatedEmployee.documents) : [],
+          // profileImage: updatedEmployee.profileImage,
+          // documents: updatedEmployee.documents ? JSON.parse(updatedEmployee.documents) : [],
           skills: updatedEmployee.skills
             ? updatedEmployee.skills.split(',').map(skill => skill.trim())
             : [],
@@ -598,3 +597,34 @@ export const deleteEmployee = async (req: Request, res: Response) => {
     });
   }
 }
+
+// upload image
+export const uploadImage = async (req: Request, res: Response) => {
+  try {
+    const file = (req.files as any)?.profileImage?.[0];
+    const { employeeId } = req.body;
+
+    if (!file) return res.status(400).json({ message: 'No image provided' });
+    if (!employeeId) return res.status(400).json({ message: 'Employee ID is required' });
+
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+    if (!employee) return res.status(404).json({ message: 'Employee not found' });
+
+    const saved = await prisma.employeeImage.create({
+      data: {
+        id: uuidv4(),
+        employeeId: employee.id,
+        name: file.originalname,
+        mimeType: file.mimetype,
+        url: `/uploads/${file.filename}`,
+        uploadedAt: new Date(),
+      },
+    });
+
+    res.status(200).json({ message: 'Image uploaded successfully', saved });
+  } catch (err) {
+    console.error('Image upload failed:', err);
+    res.status(500).json({ message: 'Image upload failed', error: err });
+  }
+};
+
