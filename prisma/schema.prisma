@@ -138,8 +138,8 @@ model LeaveRequest {
   reason      String
   status      String
   requestedAt DateTime  @default(now())
-  approvedBy  User      @relation("ApprovedBy", fields: [approvedById], references: [id])
-  approvedById String
+  approvedBy  User?      @relation("ApprovedBy", fields: [approvedById], references: [id])
+  approvedById String?
   approvedAt  DateTime?
 }
 

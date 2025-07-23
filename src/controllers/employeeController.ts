@@ -359,12 +359,14 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
 
   try {
     const employee = await prisma.employee.findUnique({
-      where: { id },
+      where: { userId: id },
       include: {
         user: true,
         shift: true,
       }
     });
+
+    console.log("Employee:", employee, "employee.user:", employee?.user);
 
     if (!employee || !employee.user) {
       return res.status(404).json({

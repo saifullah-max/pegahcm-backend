@@ -9,6 +9,8 @@ import departmentRoutes from './routes/department.routes';
 import subDepartmentRoutes from './routes/subDepartment.routes';
 import testRoutes from './routes/test.routes';
 import userRoutes from './routes/userRoutes'
+import attendanceRoutes from './routes/attendanceRoutes'
+import adminAttendanceRoutes from './routes/adminAttendanceRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -28,6 +30,8 @@ app.use('/api/departments', departmentRoutes);
 app.use('/api/sub-departments', subDepartmentRoutes);
 app.use('/api/test', testRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/attendance', attendanceRoutes)
+app.use('/api/admin', adminAttendanceRoutes)
 
 // Basic route
 app.get('/', (req, res) => {
