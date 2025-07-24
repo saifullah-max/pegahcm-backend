@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createEmployee, deleteEmployee, listEmployees, ListSingleEmployee, updateEmployee, uploadImage } from '../controllers/employeeController';
+import { createEmployee, deleteEmployee, listEmployees, ListSingleEmployee, updateEmployee, uploadEmployeeDocuments, uploadImage } from '../controllers/employeeController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { isAdmin } from '../middlewares/roleMiddleware';
 import { uploadMiddleware } from '../middlewares/uploadMiddleware';
@@ -27,4 +27,7 @@ router.delete('/:id', deleteEmployee as any);
 // upload employee image
 router.post('/image', uploadMiddleware, uploadImage as any); // Endpoint to upload an employee image
 
-export default router; 
+// upload docs
+router.post('/documents', uploadMiddleware, uploadEmployeeDocuments as any);
+
+export default router;

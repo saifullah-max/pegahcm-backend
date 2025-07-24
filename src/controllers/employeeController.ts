@@ -628,3 +628,37 @@ export const uploadImage = async (req: Request, res: Response) => {
   }
 };
 
+// upload docs
+export const uploadEmployeeDocuments = async (req: Request, res: Response) => {
+  try {
+    const files = (req.files as any)?.documents;
+    const { employeeId } = req.body;
+
+    if (!files || files.length === 0) return res.status(400).json({ message: 'No documents uploaded' });
+    if (!employeeId) return res.status(400).json({ message: 'Employee ID is required' });
+
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+    if (!employee) return res.status(404).json({ message: 'Employee not found' });
+
+    const savedDocuments = await Promise.all(
+      files.map((file: Express.Multer.File) =>
+        prisma.employeeDocument.create({
+          data: {
+            id: uuidv4(),
+            employeeId,
+            name: file.originalname,
+            url: `/uploads/documents/${file.filename}`,
+            mimeType: file.mimetype,
+            type: 'other', // optionally allow client to send actual type
+            uploadedAt: new Date()
+          }
+        })
+      )
+    );
+
+    res.status(200).json({ message: 'Documents uploaded successfully', savedDocuments });
+  } catch (err) {
+    console.error('Document upload failed:', err);
+    res.status(500).json({ message: 'Document upload failed', error: err });
+  }
+};
