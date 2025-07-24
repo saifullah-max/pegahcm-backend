@@ -368,3 +368,20 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         });
     }
 };
+
+// all attendance
+export const getAllAttendance = async (req: Request, res: Response) => {
+    try {
+        const allAttendance = await prisma.attendanceRecord.findMany({
+            include: {
+                employee: true,
+                shift: true,
+                breaks: true,
+            },
+        });
+        res.status(200).json(allAttendance);
+    } catch (error) {
+        console.error("Failed to fetch attendance:", error);
+        res.status(500).json({ message: "Failed to fetch attendance" });
+    }
+};
