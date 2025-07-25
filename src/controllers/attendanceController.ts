@@ -170,6 +170,46 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
     }
 };
 
+// GET /api/attendance/employee/all
+export const getAllAttendanceRecords = async (req: Request, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized: userId not found in token." });
+        }
+
+        // Step 1: Get employeeId using userId
+        const employee = await prisma.employee.findUnique({
+            where: { userId },
+        });
+
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found." });
+        }
+
+        // Step 2: Get all attendance records for this employee
+        const attendanceRecords = await prisma.attendanceRecord.findMany({
+            where: {
+                employeeId: employee.id,
+            },
+            orderBy: {
+                clockIn: 'desc', // Optional: latest first
+            },
+        });
+
+        return res.status(200).json({
+            employeeId: employee.id,
+            totalRecords: attendanceRecords.length,
+            records: attendanceRecords,
+        });
+
+    } catch (error) {
+        console.error("Error fetching attendance records:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 // Leave request controller
 export const leaveRequest = async (req: Request, res: Response) => {
     try {

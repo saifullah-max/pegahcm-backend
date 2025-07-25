@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { checkIn, checkOut, checkTodayAttendance, createLeaveType, getAllAttendance, getAllLeaveTypes, getEmployeeLeaves, leaveRequest } from "../controllers/attendanceController";
+import { checkIn, checkOut, checkTodayAttendance, createLeaveType, getAllAttendance, getAllAttendanceRecords, getAllLeaveTypes, getEmployeeLeaves, leaveRequest } from "../controllers/attendanceController";
 import { authenticateToken } from "../middlewares/authMiddleware";
 import { isAdmin } from "../middlewares/roleMiddleware";
 
@@ -8,6 +8,8 @@ const router = Router();
 router.use(authenticateToken as any);
 
 router.get('/today', checkTodayAttendance as any)
+
+router.get('/employee/all', getAllAttendanceRecords as any)
 
 router.post('/check-in', checkIn as any);
 

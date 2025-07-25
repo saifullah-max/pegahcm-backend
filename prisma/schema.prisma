@@ -129,15 +129,6 @@ model AttendanceRecord {
   breaks        Break[]
 }
 
-model Break {
-  id                 String           @id @default(uuid())
-  attendanceRecord   AttendanceRecord @relation(fields: [attendanceRecordId], references: [id])
-  attendanceRecordId String
-  breakStart         DateTime
-  breakEnd           DateTime?
-  breakType          String
-}
-
 model Shift {
   id                String             @id @default(uuid())
   name              String             @unique
@@ -170,6 +161,15 @@ model LeaveType {
   description   String?
   isPaid        Boolean        @default(true)
   leaveRequests LeaveRequest[]
+}
+
+model Break {
+  id                 String           @id @default(uuid())
+  attendanceRecord   AttendanceRecord @relation(fields: [attendanceRecordId], references: [id])
+  attendanceRecordId String
+  breakStart         DateTime
+  breakEnd           DateTime?
+  breakType          String
 }
 
 model Vacation {

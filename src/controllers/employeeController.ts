@@ -327,6 +327,7 @@ export const listEmployees = async (req: Request, res: Response) => {
       },
       salary: emp.salary,
       skills: emp.skills ? emp.skills.split(',').map(skill => skill.trim()) : [],
+      hireDate: emp.hireDate
       // documents: emp.documents ? JSON.parse(emp.documents) : []
     }));
 
@@ -420,7 +421,6 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 export const updateEmployee = async (req: Request, res: Response) => {
   try {
