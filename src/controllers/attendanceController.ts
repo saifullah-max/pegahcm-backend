@@ -425,3 +425,41 @@ export const getAllAttendance = async (req: Request, res: Response) => {
         res.status(500).json({ message: "Failed to fetch attendance" });
     }
 };
+
+// GET total hours clocked per employee this week & month
+export const getEmployeeHoursSummary = async (req: Request, res: Response) => {
+    try {
+        const attendanceData = await prisma.attendanceRecord.findMany({
+            include: { employee: true },
+        });
+
+        const result: Record<string, { weekly: number; monthly: number }> = {};
+
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        for (const record of attendanceData) {
+            const { employeeId, clockIn, clockOut, date } = record;
+            if (!clockOut) continue; // incomplete record
+
+            const hoursWorked = (new Date(clockOut).getTime() - new Date(clockIn).getTime()) / (1000 * 60 * 60); // in hours
+
+            if (!result[employeeId]) {
+                result[employeeId] = { weekly: 0, monthly: 0 };
+            }
+
+            const recordDate = new Date(date);
+            if (recordDate >= startOfWeek) result[employeeId].weekly += hoursWorked;
+            if (recordDate >= startOfMonth) result[employeeId].monthly += hoursWorked;
+        }
+
+        res.status(200).json(result);
+    } catch (error) {
+        console.error("Error calculating employee hours:", error);
+        res.status(500).json({ message: "Failed to calculate employee hours" });
+    }
+};

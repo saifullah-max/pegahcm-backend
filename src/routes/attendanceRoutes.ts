@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { checkIn, checkOut, checkTodayAttendance, createLeaveType, getAllAttendance, getAllAttendanceRecords, getAllLeaveTypes, getEmployeeLeaves, leaveRequest } from "../controllers/attendanceController";
+import { checkIn, checkOut, checkTodayAttendance, createLeaveType, getAllAttendance, getAllAttendanceRecords, getAllLeaveTypes, getEmployeeHoursSummary, getEmployeeLeaves, leaveRequest } from "../controllers/attendanceController";
 import { authenticateToken } from "../middlewares/authMiddleware";
 import { isAdmin } from "../middlewares/roleMiddleware";
 
@@ -25,4 +25,6 @@ router.post('/leave-type', createLeaveType as any);
 router.get('/leave-type', getAllLeaveTypes as any);
 
 router.get('/all', getAllAttendance as any);
+
+router.get('/hours-lock', getEmployeeHoursSummary as any)
 export default router;
