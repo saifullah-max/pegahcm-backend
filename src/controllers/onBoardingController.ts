@@ -10,6 +10,17 @@ export const createOnboarding = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Missing required fields' });
         }
 
+        // ✅ Check for existing onboarding
+        const existing = await prisma.onboardingProcess.findUnique({
+            where: {
+                id: employeeId as string,
+            },
+        });
+
+        if (existing) {
+            return res.status(400).json({ message: 'This employee is already assigned to an onboarding process.' });
+        }
+
         const onboarding = await prisma.onboardingProcess.create({
             data: {
                 employeeId,
@@ -22,9 +33,13 @@ export const createOnboarding = async (req: Request, res: Response) => {
 
         return res.status(201).json(onboarding);
     } catch (error: any) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError) {
-            console.error('Prisma error code:', error.code);
-            return res.status(500).json({ message: `Database error: ${error.code}` });
+        if (
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === 'P2002' &&
+            Array.isArray(error.meta?.target) &&
+            error.meta.target.includes('employeeId')
+        ) {
+            return res.status(400).json({ message: 'This employee is already onboarded.' });
         }
 
         console.error('Error creating onboarding:', error);

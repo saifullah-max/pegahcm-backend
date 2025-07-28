@@ -189,7 +189,7 @@ model Vacation {
 model OnboardingProcess {
   id           String    @id @default(uuid())
   employee     Employee  @relation(fields: [employeeId], references: [id])
-  employeeId   String
+  employeeId   String  @unique
   startDate    DateTime
   endDate      DateTime?
   status       String
