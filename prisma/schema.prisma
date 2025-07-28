@@ -125,6 +125,7 @@ model AttendanceRecord {
   shift         Shift     @relation(fields: [shiftId], references: [id])
   shiftId       String
   absenceReason String?
+  netWorkingMinutes  Int?       // <-- Add this
   status        String
   breaks        Break[]
 }

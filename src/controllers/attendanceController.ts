@@ -29,6 +29,21 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
         const todayEnd = new Date();
         todayEnd.setHours(23, 59, 59, 999);
 
+        const isOnLeaveToday = await prisma.leaveRequest.findFirst({
+            where: {
+                employeeId,
+                status: "Approved",
+                startDate: { lte: todayStart },
+                endDate: { gte: todayEnd },
+            },
+        });
+
+        if (isOnLeaveToday) {
+            res.status(403).json({ message: "Cannot check-in while on leave." });
+            return;
+        }
+
+
         const existing = await prisma.attendanceRecord.findFirst({
             where: {
                 employeeId,
@@ -95,7 +110,7 @@ export const checkOut = async (req: Request, res: Response, next: NextFunction):
             },
         });
 
-        if (!attendance) {
+        if (!attendance || !attendance.clockIn) {
             res.status(400).json({ message: "No check-in record found for today." });
             return;
         }
@@ -105,10 +120,31 @@ export const checkOut = async (req: Request, res: Response, next: NextFunction):
             return;
         }
 
+        const clockIn = new Date(attendance.clockIn);
+        const clockOut = new Date();
+
+        // Fetch all breaks for this attendance
+        const breaks = await prisma.break.findMany({
+            where: { attendanceRecordId: attendance.id },
+        });
+
+        let totalBreakMs = 0;
+        for (const brk of breaks) {
+            if (brk.breakStart && brk.breakEnd) {
+                const start = new Date(brk.breakStart).getTime();
+                const end = new Date(brk.breakEnd).getTime();
+                totalBreakMs += end - start;
+            }
+        }
+
+        const totalWorkMs = clockOut.getTime() - clockIn.getTime();
+        const netWorkingMinutes = Math.floor((totalWorkMs - totalBreakMs) / (1000 * 60));
+
         const updatedRecord = await prisma.attendanceRecord.update({
             where: { id: attendance.id },
             data: {
-                clockOut: new Date(),
+                clockOut,
+                netWorkingMinutes,
             },
         });
 
@@ -118,6 +154,7 @@ export const checkOut = async (req: Request, res: Response, next: NextFunction):
         next(err);
     }
 };
+
 
 // GET /api/attendance/today
 export const checkTodayAttendance = async (req: Request, res: Response) => {
@@ -437,16 +474,20 @@ export const getEmployeeHoursSummary = async (req: Request, res: Response) => {
 
         const now = new Date();
         const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - now.getDay()); // Sunday
-        startOfWeek.setHours(0, 0, 0, 0);
-
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1); // adjust when Sunday
+        startOfWeek.setDate(diff);
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        startOfWeek.setHours(0, 0, 0, 0);
+        startOfMonth.setHours(0, 0, 0, 0);
+
 
         for (const record of attendanceData) {
             const { employeeId, clockIn, clockOut, date } = record;
             if (!clockOut) continue; // incomplete record
 
-            const hoursWorked = (new Date(clockOut).getTime() - new Date(clockIn).getTime()) / (1000 * 60 * 60); // in hours
+            const hoursWorked = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+
 
             if (!result[employeeId]) {
                 result[employeeId] = { weekly: 0, monthly: 0 };
@@ -461,5 +502,156 @@ export const getEmployeeHoursSummary = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Error calculating employee hours:", error);
         res.status(500).json({ message: "Failed to calculate employee hours" });
+    }
+};
+
+// POST add break
+export const createBreak = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const user = req.user as unknown as CustomJwtPayload;
+
+        // 1. Find Employee
+        const employee = await prisma.employee.findUnique({
+            where: { userId: user.userId },
+        });
+
+        if (!employee) {
+            return res.status(404).json({ message: "Employee not found." });
+        }
+
+        // 2. Get today's AttendanceRecord
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const todayAttendance = await prisma.attendanceRecord.findFirst({
+            where: {
+                employeeId: employee.id,
+                date: {
+                    gte: startOfDay,
+                    lte: endOfDay,
+                },
+            },
+        });
+
+        if (!todayAttendance) {
+            return res.status(404).json({ message: "No attendance record found for today." });
+        }
+
+        // 3. Check for existing active break
+        const existingBreak = await prisma.break.findFirst({
+            where: {
+                attendanceRecordId: todayAttendance.id,
+                breakEnd: null,
+            },
+        });
+
+        if (existingBreak) {
+            return res.status(400).json({ message: "You are already on a break." });
+        }
+
+        // 4. Create new break
+        const { breakType } = req.body;
+
+        const newBreak = await prisma.break.create({
+            data: {
+                breakStart: new Date(),
+                breakType,
+                attendanceRecordId: todayAttendance.id,
+            },
+        });
+
+        return res.status(200).json({ message: "Break started.", break: newBreak });
+    } catch (error) {
+        console.error("Error creating break:", error);
+        next(error);
+    }
+};
+
+// POST end break
+export const endBreak = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const user = req.user as unknown as CustomJwtPayload;
+
+        // 1. Get employee by userId
+        const employee = await prisma.employee.findUnique({
+            where: { userId: user.userId },
+        });
+
+        if (!employee) {
+            res.status(404).json({ message: "Employee not found." });
+            return;
+        }
+
+        // 2. Get today's AttendanceRecord
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const attendance = await prisma.attendanceRecord.findFirst({
+            where: {
+                employeeId: employee.id,
+                date: {
+                    gte: todayStart,
+                    lte: todayEnd,
+                },
+            },
+        });
+
+        if (!attendance) {
+            res.status(400).json({ message: "No attendance record found for today." });
+            return;
+        }
+
+        // 3. Find active break (no breakEnd yet)
+        const activeBreak = await prisma.break.findFirst({
+            where: {
+                attendanceRecordId: attendance.id,
+                breakEnd: null,
+            },
+        });
+
+        if (!activeBreak) {
+            res.status(400).json({ message: "No active break found to end." });
+            return;
+        }
+
+        // 4. End the break
+        const endedBreak = await prisma.break.update({
+            where: { id: activeBreak.id },
+            data: {
+                breakEnd: new Date(),
+            },
+        });
+
+        res.status(200).json({ message: "Break ended successfully.", break: endedBreak });
+    } catch (err) {
+        console.error("Error ending break:", err);
+        next(err);
+    }
+};
+
+// GET - all breaks by attendance Recordac
+export const getBreaksByAttendanceRecord = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { attendanceRecordId } = req.query;
+
+        if (!attendanceRecordId || typeof attendanceRecordId !== "string") {
+            return res.status(400).json({ message: "Missing or invalid attendanceRecordId." });
+        }
+
+        const breaks = await prisma.break.findMany({
+            where: { attendanceRecordId },
+            orderBy: { breakStart: 'asc' },
+        });
+
+        res.status(200).json({ breaks });
+    } catch (error) {
+        console.error("Error fetching breaks:", error);
+        next(error);
     }
 };
