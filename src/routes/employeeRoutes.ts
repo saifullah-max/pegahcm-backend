@@ -1,20 +1,22 @@
 import { Router } from 'express';
 import { createEmployee, deleteEmployee, listEmployees, ListSingleEmployee, updateEmployee, uploadEmployeeDocuments, uploadImage } from '../controllers/employeeController';
 import { authenticateToken } from '../middlewares/authMiddleware';
-import { isAdmin } from '../middlewares/roleMiddleware';
+import { isAdmin, isAdminOrHR } from '../middlewares/roleMiddleware';
 import { uploadMiddleware } from '../middlewares/uploadMiddleware';
 
 const router = Router();
 
 // Protected routes - require authentication and admin role
 router.use(authenticateToken as any);
+router.get('/', isAdminOrHR as any,listEmployees as any);
+
+
 router.use(isAdmin as any);
 
 // Create employee with file uploads and image processing
 router.post('/', uploadMiddleware, createEmployee as any);
 
 // List employees
-router.get('/', listEmployees as any);
 
 router.get('/:id', ListSingleEmployee as any); // Assuming this is for getting a specific employee by ID
 
