@@ -105,7 +105,6 @@ function convertTimeToDate(timeStr: string): Date {
   return date;
 }
 
-
 export const updateShift = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -132,7 +131,6 @@ export const updateShift = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to update shift' });
   }
 };
-
 
 export const deleteShift = async (req: Request, res: Response) => {
   try {
