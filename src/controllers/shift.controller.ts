@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 export const createShift = async (req: Request, res: Response) => {
   try {
     console.log('Request body:', req.body);
-    
+
     if (!req.body) {
       return res.status(400).json({ error: 'Request body is required' });
     }
@@ -15,7 +15,7 @@ export const createShift = async (req: Request, res: Response) => {
     const { name, startTime, endTime, description } = req.body;
 
     if (!name || !startTime || !endTime) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Missing required fields',
         required: ['name', 'startTime', 'endTime'],
         received: { name, startTime, endTime, description }
@@ -40,17 +40,17 @@ export const createShift = async (req: Request, res: Response) => {
     res.status(201).json(shift);
   } catch (error) {
     console.error('Error creating shift:', error);
-    
+
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: 'A shift with this name already exists',
           field: error.meta?.target
         });
       }
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: 'Failed to create shift',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
@@ -85,12 +85,32 @@ export const getShiftById = async (req: Request, res: Response) => {
   }
 };
 
+function convertTimeToDate(timeStr: string): Date {
+  const today = new Date();
+  const [time, modifier] = timeStr.split(' '); // e.g., "03:00 PM"
+  const [hoursStr, minutesStr] = time.split(':');
+
+  let hours = parseInt(hoursStr, 10);
+  const minutes = parseInt(minutesStr, 10);
+
+  if (modifier === 'PM' && hours !== 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+
+  const date = new Date(today);
+  date.setHours(hours);
+  date.setMinutes(minutes);
+  date.setSeconds(0);
+  date.setMilliseconds(0);
+
+  return date;
+}
+
+
 export const updateShift = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { name, startTime, endTime, description } = req.body;
 
-    // Validate shift data
     const validationError = validateShift(req.body);
     if (validationError) {
       return res.status(400).json({ error: validationError });
@@ -100,10 +120,10 @@ export const updateShift = async (req: Request, res: Response) => {
       where: { id },
       data: {
         name,
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
-        description
-      }
+        startTime: convertTimeToDate(startTime),
+        endTime: convertTimeToDate(endTime),
+        description,
+      },
     });
 
     res.json(shift);
@@ -112,6 +132,7 @@ export const updateShift = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to update shift' });
   }
 };
+
 
 export const deleteShift = async (req: Request, res: Response) => {
   try {
@@ -123,8 +144,8 @@ export const deleteShift = async (req: Request, res: Response) => {
     });
 
     if (attendanceRecords.length > 0) {
-      return res.status(400).json({ 
-        error: 'Cannot delete shift as it is being used in attendance records' 
+      return res.status(400).json({
+        error: 'Cannot delete shift as it is being used in attendance records'
       });
     }
 
