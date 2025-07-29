@@ -1,43 +1,31 @@
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
-
 const prisma = new PrismaClient();
 
 async function main() {
-    // Create Admin Role if not exists
-    const userRole = await prisma.role.upsert({
+    await prisma.role.upsert({
         where: { name: 'user' },
         update: {},
         create: {
             name: 'user',
-            description: 'User with limited access',
+            description: 'Regular user with limited permissions',
         },
     });
 
-    // Hash password
-    const password = 'admin123'; // 🔐 change this later
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Create Admin User
-    const User = await prisma.user.upsert({
-        where: { username: 'user' },
+    await prisma.role.upsert({
+        where: { name: 'hr' },
         update: {},
         create: {
-            username: 'user',
-            passwordHash,
-            email: 'user@example.com',
-            fullName: 'user 1',
-            roleId: userRole.id,
-            status: 'active',
+            name: 'hr',
+            description: 'Human Resources staff with specific permissions',
         },
     });
 
-    console.log(`✅ User user created: ${User.username}`);
+    console.log('Roles seeded successfully.');
 }
 
 main()
-    .catch(e => {
-        console.error('❌ Seed failed:', e);
+    .catch((e) => {
+        console.error(e);
         process.exit(1);
     })
     .finally(() => {

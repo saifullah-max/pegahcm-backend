@@ -3,12 +3,16 @@ import { createEmployee, deleteEmployee, listEmployees, ListSingleEmployee, upda
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { isAdmin, isAdminOrHR } from '../middlewares/roleMiddleware';
 import { uploadMiddleware } from '../middlewares/uploadMiddleware';
+import { submitResignation } from '../controllers/resignationController';
 
 const router = Router();
 
 // Protected routes - require authentication and admin role
 router.use(authenticateToken as any);
-router.get('/', isAdminOrHR as any,listEmployees as any);
+// submit resignation
+router.post('/resignation/apply', submitResignation as any);
+
+router.get('/', isAdminOrHR as any, listEmployees as any);
 
 
 router.use(isAdmin as any);

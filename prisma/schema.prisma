@@ -205,14 +205,16 @@ model Resignation {
   resignationDate   DateTime
   lastWorkingDay    DateTime
   reason            String
-  status            String
-  clearanceStatus   String
-  assetReturnStatus String
-  processedBy       User               @relation("ProcessedBy", fields: [processedById], references: [id])
-  processedById     String
+  reviewComments    String?            // <-- NEW
+  status            String             // e.g. Pending, Approved, Rejected
+  clearanceStatus   String             // e.g. NotStarted, InProgress, Cleared
+  assetReturnStatus String             // e.g. NotReturned, Returned
+  processedBy       User?               @relation("ProcessedBy", fields: [processedById], references: [id])
+  processedById     String?
   processedAt       DateTime?
   assets            ResignationAsset[]
 }
+
 
 model Asset {
   id                String             @id @default(uuid())
