@@ -13,6 +13,123 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model SubRole {
+  id          String              @id @default(cuid())
+  name        String              @unique
+  description String?
+  users       User[]              @relation("UserSubRole")
+  permissions SubRolePermission[] // 👈 This is the join relation
+}
+
+model Permission {
+  id          String              @id @default(uuid())
+  module      String
+  action      String
+  description String?
+  roles       RolePermission[]
+  users       UserPermission[]
+  subRoles    SubRolePermission[] // 👈 Join relation only
+
+  @@unique([module, action], name: "module_action")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  role         Role       @relation(fields: [roleId], references: [id])
+  roleId       String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  permissionId String
+
+  @@unique([roleId, permissionId], name: "roleId_permissionId")
+}
+
+model SubRolePermission {
+  id           String @id @default(cuid())
+  subRoleId    String
+  permissionId String
+
+  subRole    SubRole    @relation(fields: [subRoleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([subRoleId, permissionId], name: "subRole_permission")
+}
+
+model UserPermission {
+  id           String     @id @default(uuid())
+  user         User       @relation(fields: [userId], references: [id])
+  userId       String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  permissionId String
+
+  @@unique([userId, permissionId], name: "userId_permissionId")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String // store as string or JSON
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model Holiday {
+  id          String   @id @default(uuid())
+  title       String
+  date        DateTime
+  description String?
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  action    String // e.g., "Updated Shift", "Approved Leave"
+  module    String // e.g., "Attendance"
+  metadata  String? // optional JSON (e.g. { recordId: "xyz" })
+  timestamp DateTime @default(now())
+}
+
+model DocumentCategory {
+  id          String             @id @default(uuid())
+  name        String             @unique
+  description String?
+  documents   employeeDocument[]
+}
+
+model employeeDocument {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  employeeId String
+  name       String
+  url        String // File path or external link
+  mimeType   String
+  uploadedAt DateTime @default(now())
+  type       String // e.g. "resume", "certificate", etc.
+
+  categoryId String?
+  category   DocumentCategory? @relation(fields: [categoryId], references: [id])
+}
+
+model LeaveBalance {
+  id          String    @id @default(uuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id])
+  employeeId  String
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+  leaveTypeId String
+  balance     Int
+  updatedAt   DateTime  @updatedAt
+}
+
+model BulkUpload {
+  id           String   @id @default(uuid())
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+  fileUrl      String
+  type         String // e.g., "attendance"
+  status       String // Processed, Failed, Pending
+  uploadedAt   DateTime @default(now())
+}
+
 model User {
   id                    String              @id @default(uuid())
   username              String              @unique
@@ -30,13 +147,20 @@ model User {
   assignedOnboarding    OnboardingProcess[] @relation("AssignedHR")
   processedResignations Resignation[]       @relation("ProcessedBy")
   initiatedHRProcesses  HRProcess[]         @relation("InitiatedBy")
+  UserPermission        UserPermission[]
+  SystemLog             SystemLog[]
+  BulkUpload            BulkUpload[]
+  Resignation           Resignation[]
+  subRoleId             String?
+  subRole               SubRole?            @relation("UserSubRole", fields: [subRoleId], references: [id])
 }
 
 model Role {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  description String?
-  users       User[]
+  id             String           @id @default(uuid())
+  name           String           @unique
+  description    String?
+  users          User[]
+  RolePermission RolePermission[]
 }
 
 model SubDepartment {
@@ -84,6 +208,7 @@ model Employee {
   resignations          Resignation[]
   assets                Asset[]
   hrProcesses           HRProcess[]
+  LeaveBalance          LeaveBalance[]
 }
 
 model employeeImage {
@@ -96,17 +221,6 @@ model employeeImage {
   uploadedAt DateTime @default(now())
 }
 
-model employeeDocument {
-  id         String   @id @default(uuid())
-  employee   Employee @relation(fields: [employeeId], references: [id])
-  employeeId String
-  name       String
-  url        String // File path or external link
-  mimeType   String
-  uploadedAt DateTime @default(now())
-  type       String // e.g. "resume", "certificate", etc.
-}
-
 model Department {
   id             String          @id @default(uuid())
   name           String          @unique
@@ -116,18 +230,18 @@ model Department {
 }
 
 model AttendanceRecord {
-  id            String    @id @default(uuid())
-  employee      Employee  @relation(fields: [employeeId], references: [id])
-  employeeId    String
-  date          DateTime
-  clockIn       DateTime
-  clockOut      DateTime?
-  shift         Shift     @relation(fields: [shiftId], references: [id])
-  shiftId       String
-  absenceReason String?
-  netWorkingMinutes  Int?       // <-- Add this
-  status        String
-  breaks        Break[]
+  id                String    @id @default(uuid())
+  employee          Employee  @relation(fields: [employeeId], references: [id])
+  employeeId        String
+  date              DateTime
+  clockIn           DateTime
+  clockOut          DateTime?
+  shift             Shift     @relation(fields: [shiftId], references: [id])
+  shiftId           String
+  absenceReason     String?
+  netWorkingMinutes Int? // <-- Add this
+  status            String
+  breaks            Break[]
 }
 
 model Shift {
@@ -162,6 +276,15 @@ model LeaveType {
   description   String?
   isPaid        Boolean        @default(true)
   leaveRequests LeaveRequest[]
+  LeaveBalance  LeaveBalance[]
+}
+
+model BreakType {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  duration    Int // duration in minutes (optional for fixed-length breaks)
+  description String?
+  breaks      Break[]
 }
 
 model Break {
@@ -170,7 +293,8 @@ model Break {
   attendanceRecordId String
   breakStart         DateTime
   breakEnd           DateTime?
-  breakType          String
+  breakTypeId        String?
+  breakType          BreakType?       @relation(fields: [breakTypeId], references: [id])
 }
 
 model Vacation {
@@ -189,7 +313,7 @@ model Vacation {
 model OnboardingProcess {
   id           String    @id @default(uuid())
   employee     Employee  @relation(fields: [employeeId], references: [id])
-  employeeId   String  @unique
+  employeeId   String    @unique
   startDate    DateTime
   endDate      DateTime?
   status       String
@@ -199,22 +323,23 @@ model OnboardingProcess {
 }
 
 model Resignation {
-  id                String             @id @default(uuid())
-  employee          Employee           @relation(fields: [employeeId], references: [id])
-  employeeId        String
-  resignationDate   DateTime
-  lastWorkingDay    DateTime
-  reason            String
-  reviewComments    String?            // <-- NEW
-  status            String             // e.g. Pending, Approved, Rejected
-  clearanceStatus   String             // e.g. NotStarted, InProgress, Cleared
-  assetReturnStatus String             // e.g. NotReturned, Returned
-  processedBy       User?               @relation("ProcessedBy", fields: [processedById], references: [id])
-  processedById     String?
-  processedAt       DateTime?
-  assets            ResignationAsset[]
+  id                     String             @id @default(uuid())
+  employee               Employee           @relation(fields: [employeeId], references: [id])
+  employeeId             String
+  resignationDate        DateTime
+  lastWorkingDay         DateTime
+  reason                 String
+  reviewComments         String?
+  status                 String
+  clearanceStatus        String
+  assetReturnStatus      String
+  processedBy            User?              @relation("ProcessedBy", fields: [processedById], references: [id])
+  processedById          String?
+  processedAt            DateTime?
+  clearanceResponsible   User?              @relation(fields: [clearanceResponsibleId], references: [id])
+  clearanceResponsibleId String?
+  assets                 ResignationAsset[]
 }
-
 
 model Asset {
   id                String             @id @default(uuid())

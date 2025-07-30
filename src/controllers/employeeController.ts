@@ -30,6 +30,7 @@ interface CreateEmployeeRequest {
   address: string;
 
   roleId: string;
+  subRoleId?: string;
 
   // Employee details
   departmentId: string;
@@ -89,6 +90,7 @@ export const createEmployee = async (req: Request, res: Response) => {
       emergencyContactPhone,
       address,
       roleId,
+      subRoleId,
       departmentId,
       subDepartmentId,
       designation,
@@ -152,10 +154,29 @@ export const createEmployee = async (req: Request, res: Response) => {
           passwordHash,
           fullName,
           roleId,
+          subRoleId,
           status,
           dateJoined: new Date()
         }
       });
+
+      // ✅ Copy subRole permissions
+      if (subRoleId) {
+        const subRolePermissions = await prismaTx.subRolePermission.findMany({
+          where: { subRoleId },
+          select: { permissionId: true }
+        });
+
+        if (subRolePermissions.length > 0) {
+          await prismaTx.userPermission.createMany({
+            data: subRolePermissions.map((sp) => ({
+              userId: newUser.id,
+              permissionId: sp.permissionId
+            })),
+            skipDuplicates: true
+          });
+        }
+      }
 
       const newEmployee = await prismaTx.employee.create({
         data: {
@@ -170,8 +191,6 @@ export const createEmployee = async (req: Request, res: Response) => {
           dateOfBirth: new Date(dateOfBirth),
           hireDate: new Date(joiningDate),
           status,
-          // profileImage,
-          // documents: documents ? JSON.stringify(documents) : null,
           skills: processedSkills.length > 0 ? processedSkills.join(',') : null,
           workLocation,
           gender,
@@ -182,11 +201,13 @@ export const createEmployee = async (req: Request, res: Response) => {
         }
       });
 
+
       return {
         user: newUser,
         employee: newEmployee
       };
     });
+
 
     return res.status(201).json({
       success: true,
@@ -437,6 +458,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
       emergencyContactPhone,
       address,
       roleId,
+      subRoleId,
       departmentId,
       subDepartmentId,
       designation,
@@ -514,6 +536,8 @@ export const updateEmployee = async (req: Request, res: Response) => {
     if (email) updateUserData.email = email;
     if (fullName) updateUserData.fullName = fullName;
     if (roleId) updateUserData.roleId = roleId;
+    if (subRoleId) updateUserData.subRoleId = subRoleId;
+
 
     if (Object.keys(updateUserData).length > 0) {
       await prisma.user.update({

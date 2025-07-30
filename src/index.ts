@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import roleRoutes from './routes/roleRoutes';
+import subRoleRoutes from './routes/subRolesRoutes'
 import employeeRoutes from './routes/employeeRoutes';
 import shiftRoutes from './routes/shift.routes';
 import departmentRoutes from './routes/department.routes';
@@ -12,6 +13,7 @@ import userRoutes from './routes/userRoutes'
 import attendanceRoutes from './routes/attendanceRoutes'
 import adminAttendanceRoutes from './routes/adminAttendanceRoutes';
 import hrRoutes from './routes/hrRoutes';
+import permissionRoutes from './routes/permissionRoutes'
 
 // Load environment variables
 dotenv.config();
@@ -25,6 +27,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/sub-roles', subRoleRoutes)
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shifts', shiftRoutes);
 app.use('/api/departments', departmentRoutes);
@@ -34,6 +37,7 @@ app.use('/api/user', userRoutes);
 app.use('/api/attendance', attendanceRoutes)
 app.use('/api/admin', adminAttendanceRoutes)
 app.use('/api/hr', hrRoutes)
+app.use('/api/permissions', permissionRoutes)
 
 // Basic route
 app.get('/', (req, res) => {
