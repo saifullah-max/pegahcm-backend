@@ -1,3 +1,5 @@
+// controllers/authController.ts
+
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -20,74 +22,79 @@ interface RegisterRequest {
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { username = '', password, email, fullName, roleId }: RegisterRequest = req.body;
+    const {
+      username = '',
+      password,
+      email,
+      fullName,
+      roleName = 'user', // <- Use roleName instead of role
+      subRoleId
+    } = req.body;
 
-    // Validate input
-    if (!password || !email || !fullName || !roleId) {
-      return res.status(400).json({
-        success: false,
-        message: 'All fields are required'
-      });
+    if (!password || !email || !fullName || !roleName) {
+      return res.status(400).json({ success: false, message: 'Required fields missing' });
     }
 
-    // Check if user already exists
     const existingUser = await prisma.user.findFirst({
       where: {
         OR: [
-          { username: username || undefined }, // only check if username is provided
+          { username: username || undefined },
           { email }
         ]
       }
     });
 
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'Username or email already exists'
-      });
+      return res.status(400).json({ success: false, message: 'Username or email already exists' });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    const role = await prisma.role.findUnique({
+      where: { name: roleName }
+    });
 
-    // Create user
+    if (!role) {
+      return res.status(400).json({ success: false, message: `Role '${roleName}' not found` });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
     const user = await prisma.user.create({
       data: {
-        username: username || '', // default to empty string
+        username,
         passwordHash,
         email,
         fullName,
-        roleId,
+        roleId: role.id, // Use roleId from fetched role
+        subRoleId: subRoleId || null,
         status: 'active',
         dateJoined: new Date()
       },
       include: {
-        role: true
+        subRole: true,
+        role: true // 👈 include role.name for JWT and response
       }
     });
 
-    // Generate JWT token
     const token = jwt.sign(
       {
         userId: user.id,
-        username: user.username,
-        role: user.role.name
+        role: user.role.name,
+        subRoleId: user.subRoleId
       },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
     );
 
-    // Return user data and token
     return res.status(201).json({
       success: true,
       data: {
         user: {
           id: user.id,
-          username: user.username,
           email: user.email,
+          username: user.username,
           fullName: user.fullName,
           role: user.role.name,
+          subRole: user.subRole,
           status: user.status
         },
         token
@@ -96,77 +103,57 @@ export const register = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Registration error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password }: LoginRequest = req.body;
+    const { email, password } = req.body;
 
-    // Validate input
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required'
-      });
+      return res.status(400).json({ success: false, message: 'Email and password required' });
     }
 
-    // Find user
     const user = await prisma.user.findUnique({
       where: { email },
       include: {
-        role: true,
+        role: true,     // 👈 include full role
+        subRole: true,
         employee: true
       }
     });
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-    if (!isValidPassword) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    // Generate JWT token
     const token = jwt.sign(
       {
         userId: user.id,
+        role: user.role.name,
         email: user.email,
-        role: user.role.name
+        subRoleId: user.subRoleId
       },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
     );
 
-    // Update last login
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLogin: new Date() }
     });
 
-    // Return user data and token
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       data: {
         user: {
           id: user.id,
-          username: user.username,
           email: user.email,
+          username: user.username,
           fullName: user.fullName,
           role: user.role.name,
+          subRole: user.subRole,
           status: user.status,
           employee: user.employee
         },
@@ -176,9 +163,6 @@ export const login = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Login error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

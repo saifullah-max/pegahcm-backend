@@ -33,8 +33,10 @@ export const checkPermission = (module: string, action: string) => {
                 ...(user?.role?.RolePermission?.map(rp => `${rp.permission.module}:${rp.permission.action}`) || []),
                 ...(user?.UserPermission?.map(up => `${up.permission.module}:${up.permission.action}`) || []),
             ];
+            console.log("permission:", permissions);
 
             const hasPerm = permissions.includes(`${module}:${action}`);
+            console.log("Has permission?", hasPerm);
 
             if (!hasPerm) {
                 res.status(403).json({ message: 'Forbidden: Missing permission' });

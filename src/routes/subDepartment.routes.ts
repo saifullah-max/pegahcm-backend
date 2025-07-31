@@ -7,6 +7,7 @@ import {
   updateSubDepartment,
   deleteSubDepartment
 } from '../controllers/subDepartmentController';
+import { checkPermission } from '../middlewares/checkPermissions';
 
 const router = express.Router();
 
@@ -14,10 +15,10 @@ const router = express.Router();
 router.use(authenticateToken as any);
 
 // Sub-department routes
-router.post('/', createSubDepartment as any);
-router.get('/', getAllSubDepartments as any);
-router.get('/:id', getSubDepartmentById as any);
-router.put('/:id', updateSubDepartment as any);
-router.delete('/:id', deleteSubDepartment as any);
+router.post('/', checkPermission("SubDepartment", "create"), createSubDepartment as any);
+router.get('/', checkPermission("SubDepartment", "view"), getAllSubDepartments as any);
+router.get('/:id', checkPermission("SubDepartment", "view"), getSubDepartmentById as any);
+router.put('/:id', checkPermission("SubDepartment", "update"), updateSubDepartment as any);
+router.delete('/:id', checkPermission("SubDepartment", "delete"), deleteSubDepartment as any);
 
 export default router; 

@@ -32,8 +32,8 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/shifts', shiftRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/sub-departments', subDepartmentRoutes);
-app.use('/api/test', testRoutes);
-app.use('/api/user', userRoutes);
+// app.use('/api/test', testRoutes);
+// app.use('/api/user', userRoutes);
 app.use('/api/attendance', attendanceRoutes)
 app.use('/api/admin', adminAttendanceRoutes)
 app.use('/api/hr', hrRoutes)

@@ -122,23 +122,50 @@ export const assignPermissionsToSubRole = async (req: Request, res: Response) =>
             return res.status(400).json({ message: 'Invalid data' });
         }
 
-        // Delete existing first
-        await prisma.subRolePermission.deleteMany({ where: { subRoleId } });
+        // Start transaction
+        await prisma.$transaction(async (tx) => {
+            // Step 1: Delete existing SubRolePermissions
+            await tx.subRolePermission.deleteMany({ where: { subRoleId } });
 
-        // Create new assignments
-        const data = permissionIds.map((permissionId: string) => ({
-            subRoleId,
-            permissionId,
-        }));
+            // Step 2: Re-assign new permissions to SubRole
+            const data = permissionIds.map((permissionId: string) => ({
+                subRoleId,
+                permissionId,
+            }));
+            await tx.subRolePermission.createMany({ data, skipDuplicates: true });
 
-        await prisma.subRolePermission.createMany({
-            data,
-            skipDuplicates: true,
+            // Step 3: Get all users with this subRole
+            const users = await tx.user.findMany({
+                where: { subRoleId },
+                select: { id: true },
+            });
+
+            const userIds = users.map((u) => u.id);
+            if (userIds.length > 0) {
+                // Step 4: Delete all UserPermissions for those users
+                await tx.userPermission.deleteMany({
+                    where: { userId: { in: userIds } },
+                });
+
+                // Step 5: Add new permissions to those users
+                const userPermissionData = userIds.flatMap((userId) =>
+                    permissionIds.map((permissionId: string) => ({
+                        userId,
+                        permissionId,
+                    }))
+                );
+
+                await tx.userPermission.createMany({
+                    data: userPermissionData,
+                    skipDuplicates: true,
+                });
+            }
         });
 
-        res.status(200).json({ message: 'Permissions assigned to SubRole successfully' });
+        res.status(200).json({ message: 'SubRole and user permissions updated successfully' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Failed to assign permissions to SubRole' });
     }
 };
+
