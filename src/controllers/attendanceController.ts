@@ -190,17 +190,38 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
                     lte: endOfDay,
                 },
             },
+            include: {
+                breaks: {
+                    orderBy: { breakStart: 'asc' },
+                    include: { breakType: true },
+                },
+            },
         });
 
         if (!attendance) {
             return res.status(200).json({ checkedIn: false, checkedOut: false });
         }
 
+        let activeBreak = null;
+
+        if (attendance) {
+            const ongoing = attendance.breaks.find(b => b.breakEnd === null);
+            if (ongoing) {
+                activeBreak = {
+                    id: ongoing.id,
+                    breakStart: ongoing.breakStart,
+                    breakType: ongoing.breakType, // includes name
+                };
+            }
+        }
+
         return res.status(200).json({
             checkedIn: true,
             checkedOut: attendance.clockOut !== null,
             attendance,
+            activeBreak, // ✅ Now included in response
         });
+
     } catch (error) {
         console.error("Error checking today’s attendance:", error);
         return res.status(500).json({ message: "Internal server error" });
@@ -509,6 +530,7 @@ export const getEmployeeHoursSummary = async (req: Request, res: Response) => {
 export const createBreak = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const user = req.user as unknown as CustomJwtPayload;
+        const { breakType } = req.body;
 
         // 1. Find Employee
         const employee = await prisma.employee.findUnique({
@@ -522,7 +544,6 @@ export const createBreak = async (req: Request, res: Response, next: NextFunctio
         // 2. Get today's AttendanceRecord
         const startOfDay = new Date();
         startOfDay.setHours(0, 0, 0, 0);
-
         const endOfDay = new Date();
         endOfDay.setHours(23, 59, 59, 999);
 
@@ -552,13 +573,24 @@ export const createBreak = async (req: Request, res: Response, next: NextFunctio
             return res.status(400).json({ message: "You are already on a break." });
         }
 
-        // 4. Create new break
-        const { breakType } = req.body;
+        // ✅ 4. Find BreakType by name
+        const breakTypeRecord = await prisma.breakType.findUnique({
+            where: { name: breakType },
+        });
 
+        if (!breakTypeRecord) {
+            const existingTypes = await prisma.breakType.findMany({ select: { name: true } });
+            return res.status(400).json({
+                message: `Invalid break type. Available types: ${existingTypes.map(b => b.name).join(", ")}`,
+            });
+        }
+
+
+        // ✅ 5. Create new break using breakTypeId
         const newBreak = await prisma.break.create({
             data: {
                 breakStart: new Date(),
-                breakType,
+                breakTypeId: breakTypeRecord.id,
                 attendanceRecordId: todayAttendance.id,
             },
         });
