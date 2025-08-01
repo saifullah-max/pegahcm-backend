@@ -83,10 +83,13 @@ export const assignPermissionsToUser = async (req: Request, res: Response) => {
       permissionId,
     }));
 
+    await prisma.userPermission.deleteMany({ where: { userId } });
+
     await prisma.userPermission.createMany({
       data,
       skipDuplicates: true,
     });
+
 
     res.status(200).json({ message: 'Permissions assigned successfully' });
   } catch (error) {
@@ -130,5 +133,24 @@ export const updateSubRolePermissions = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Failed to update' });
+  }
+};
+
+// GET /permissions/user/:userId
+export const getPermissionsOfUser = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    const permissions = await prisma.userPermission.findMany({
+      where: { userId },
+      include: { permission: true },
+    });
+
+    const permissionIds = permissions.map((p) => p.permissionId);
+
+    res.status(200).json(permissionIds);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to fetch user permissions" });
   }
 };

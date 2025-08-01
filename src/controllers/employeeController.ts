@@ -297,6 +297,7 @@ export const listEmployees = async (req: Request, res: Response) => {
       include: {
         user: {
           select: {
+            id: true,
             fullName: true,
             email: true,
             status: true
@@ -338,7 +339,6 @@ export const listEmployees = async (req: Request, res: Response) => {
       subDepartment: emp.subDepartment?.name,
       manager: emp.manager?.user.fullName,
       status: emp.status,
-      // profileImage: emp.profileImage,
       workLocation: emp.workLocation,
       gender: emp.gender,
       address: emp.address,
@@ -348,12 +348,17 @@ export const listEmployees = async (req: Request, res: Response) => {
       },
       salary: emp.salary,
       skills: emp.skills ? emp.skills.split(',').map(skill => skill.trim()) : [],
-      hireDate: emp.hireDate
-      // documents: emp.documents ? JSON.parse(emp.documents) : []
+      hireDate: emp.hireDate,
+
+      // ✅ ADD THIS LINE
+      userId: emp.user.id
+
+      // profileImage and documents skipped
     }));
 
+
     // console.log("Data:", employees);
-    console.log("DATA", formattedEmployees);
+    // console.log("DATA", formattedEmployees);
     return res.json({
       success: true,
       data: {

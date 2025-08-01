@@ -1,5 +1,5 @@
 import express from 'express';
-import { assignPermissionsToUser, createPermission, getAllPermissions, getPermissionsOfSubRole, updateSubRolePermissions } from '../controllers/permissionController';
+import { assignPermissionsToUser, createPermission, getAllPermissions, getPermissionsOfSubRole, getPermissionsOfUser, updateSubRolePermissions } from '../controllers/permissionController';
 import { checkPermission } from '../middlewares/checkPermissions';
 import { authenticateToken } from '../middlewares/authMiddleware';
 
@@ -16,5 +16,7 @@ router.get('/:subRoleId', checkPermission("Permission", "view"), getPermissionsO
 router.put('/sub-role/:subRoleId', checkPermission("Permission", "update"), updateSubRolePermissions as any)
 
 router.post('/user', checkPermission("Permission", "create"), assignPermissionsToUser as any)
+
+router.get('/user/:userId', checkPermission("Permission", "view",), getPermissionsOfUser as any)
 
 export default router;
