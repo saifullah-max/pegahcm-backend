@@ -42,25 +42,8 @@ export const getResignations = async (req: Request, res: Response) => {
         if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
 
         const user = req.user;
-        const isHR = user.role === 'hr' || user.role === 'admin';
 
         let whereClause = {};
-
-        if (!isHR) {
-            // Fetch employeeId using the logged-in userId
-            const employee = await prisma.employee.findUnique({
-                where: {
-                    userId: user.userId,
-                },
-            });
-
-            if (!employee) return res.status(404).json({ message: 'Employee not found' });
-
-            whereClause = { employeeId: employee.id };
-            console.log(`Non-HR user: filtering resignations by employeeId: ${employee.id}`);
-        } else {
-            console.log('HR/Admin: fetching all resignations without filtering by employeeId');
-        }
 
         const resignations = await prisma.resignation.findMany({
             where: whereClause,
@@ -216,12 +199,28 @@ export const updateResignation = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'Cannot update resignation that is already processed.' });
         }
 
+        // Build update object dynamically to avoid sending invalid values
+        const updateData: {
+            reason?: string;
+            lastWorkingDay?: Date;
+        } = {};
+
+        if (typeof reason === 'string') {
+            updateData.reason = reason.trim();
+        }
+
+        if (lastWorkingDay) {
+            const parsedDate = new Date(lastWorkingDay);
+            if (!isNaN(parsedDate.getTime())) {
+                updateData.lastWorkingDay = parsedDate;
+            } else {
+                console.warn('Invalid lastWorkingDay provided. Skipping update for lastWorkingDay.');
+            }
+        }
+
         const updatedResignation = await prisma.resignation.update({
             where: { id },
-            data: {
-                reason,
-                lastWorkingDay: new Date(lastWorkingDay),
-            },
+            data: updateData,
         });
 
         return res.status(200).json({ message: 'Resignation updated successfully', data: updatedResignation });
@@ -271,7 +270,7 @@ export const deleteResignation = async (req: Request, res: Response) => {
 export const updateClearanceStatus = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { clearanceStatus, assetReturnStatus, status, reviewComments  } = req.body;
+        const { clearanceStatus, assetReturnStatus, status, reviewComments } = req.body;
 
         const validClearance = ['NotStarted', 'InProgress', 'Cleared'];
         const validAsset = ['NotReturned', 'PartiallyReturned', 'Returned'];

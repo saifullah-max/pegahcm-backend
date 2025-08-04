@@ -8,7 +8,7 @@ const router = Router();
 
 router.use(authenticateToken as any);
 
-router.get('/today',checkPermission("Attendance", "view"), checkTodayAttendance as any)
+router.get('/today', checkPermission("Attendance", "view"), checkTodayAttendance as any)
 
 router.get('/employee/all', checkPermission("Attendance", "view"), getAllAttendanceRecords as any)
 
@@ -34,4 +34,5 @@ router.post('/break/create', checkPermission("Attendance", "create"), createBrea
 router.post('/break/end', checkPermission("Attendance", "create"), endBreak as any);
 
 router.get('/break/all/:attendanceRecordId', checkPermission("Attendance", "create"), getBreaksByAttendanceRecord as any);
+
 export default router;

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getAllLeaveRequestsForAdmin, updateLeaveStatus } from "../controllers/attendanceController";
+import { getAllLeaveRequestsForAdmin, getEmployeesAttendanceSummary, updateLeaveStatus } from "../controllers/attendanceController";
 import { authenticateToken } from "../middlewares/authMiddleware";
 import { isAdminOrHR } from "../middlewares/roleMiddleware";
 import { checkPermission } from "../middlewares/checkPermissions";
@@ -12,5 +12,7 @@ router.use(authenticateToken as any);
 router.get('/leave-requests', checkPermission("Attendance", "view-all"), getAllLeaveRequestsForAdmin as any);
 
 router.patch('/leave-requests/:id', checkPermission("Attendance", "approve"), updateLeaveStatus as any);
+
+router.get('/employee-summary', checkPermission("Attendance", "approve"), getEmployeesAttendanceSummary as any)
 
 export default router;

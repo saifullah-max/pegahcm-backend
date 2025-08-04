@@ -688,3 +688,76 @@ export const getBreaksByAttendanceRecord = async (req: Request, res: Response, n
         next(error);
     }
 };
+
+// Employee summary
+export const getEmployeesAttendanceSummary = async (req: Request, res: Response) => {
+    try {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const employees = await prisma.employee.findMany({
+            include: {
+                user: { select: { fullName: true, email: true } },
+                department: true,
+            },
+        });
+
+        const summary = await Promise.all(employees.map(async (emp) => {
+            const todayAttendance = await prisma.attendanceRecord.findFirst({
+                where: {
+                    employeeId: emp.id,
+                    date: { gte: todayStart, lte: todayEnd },
+                },
+            });
+
+            const onLeaveToday = await prisma.leaveRequest.findFirst({
+                where: {
+                    employeeId: emp.id,
+                    status: 'Approved',
+                    startDate: { lte: todayStart },
+                    endDate: { gte: todayEnd },
+                },
+            });
+
+            let todayStatus = 'Absent';
+            if (onLeaveToday) {
+                todayStatus = 'On Leave';
+            } else if (todayAttendance?.status === 'Late Arrival') {
+                todayStatus = 'Late Arrival';
+            } else if (todayAttendance?.status === 'Present') {
+                todayStatus = 'Present';
+            }
+
+            const totalLeaves = await prisma.leaveRequest.count({
+                where: {
+                    employeeId: emp.id,
+                    status: 'Approved',
+                },
+            });
+
+            const lateArrivals = await prisma.attendanceRecord.count({
+                where: {
+                    employeeId: emp.id,
+                    status: 'Late Arrival',
+                },
+            });
+
+            return {
+                employeeId: emp.id,
+                fullName: emp.user.fullName,
+                email: emp.user.email,
+                department: emp.department?.name || 'N/A',
+                todayStatus,
+                totalLeaves,
+                lateArrivals,
+            };
+        }));
+
+        return res.status(200).json({ success: true, data: summary });
+    } catch (error) {
+        console.error("Failed to fetch employee summary:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+    }
+};

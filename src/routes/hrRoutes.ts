@@ -9,7 +9,7 @@ const router = Router();
 
 router.use(authenticateToken as any);
 
-router.get('/resignation/all',checkPermission("Resignation", "view"), getResignations as any);
+router.get('/resignation/all',checkPermission("Resignation", "approve"), getResignations as any);
 router.get('/resignation/:id', checkPermission("Resignation", "view"), getResignationById as any);
 router.put('/resignation/:id', checkPermission("Resignation", "update"), updateResignation as any);
 router.delete('/resignation/:id', checkPermission("Resignation", "delete"), deleteResignation as any);
