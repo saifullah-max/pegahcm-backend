@@ -120,7 +120,12 @@ export const login = async (req: Request, res: Response) => {
         userId: user.id,
         role: user.role.name,
         email: user.email,
-        subRoleId: user.subRoleId
+        fullName: user.fullName,
+        employee: user.employee,
+        subRole: {
+          id: user.subRoleId,
+          name: user.subRole?.name || null
+        }
       },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }

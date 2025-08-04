@@ -146,9 +146,30 @@ export const getPermissionsOfUser = async (req: Request, res: Response) => {
       include: { permission: true },
     });
 
-    const permissionIds = permissions.map((p) => p.permissionId);
+    const permissionStrings = permissions.map(
+      (p) => `${p.permission.module}:${p.permission.action}`
+    );
 
+    res.status(200).json(permissionStrings);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to fetch user permissions" });
+  }
+};
+
+// GET /permissions/user/:userId
+export const getPermissionIdOfUser = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+
+    const permissions = await prisma.userPermission.findMany({
+      where: { userId },
+      include: { permission: true },
+    });
+
+    const permissionIds = permissions.map((p) => p.permissionId);
     res.status(200).json(permissionIds);
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to fetch user permissions" });

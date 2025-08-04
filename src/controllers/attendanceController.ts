@@ -394,6 +394,7 @@ export const createLeaveType = async (req: Request, res: Response) => {
 export const getAllLeaveTypes = async (req: Request, res: Response) => {
     try {
         const leaveTypes = await prisma.leaveType.findMany();
+        console.log("LEAVE API hit: ", leaveTypes);
         return res.status(200).json({ success: true, data: leaveTypes });
     } catch (error) {
         console.error('Error fetching leave types:', error);

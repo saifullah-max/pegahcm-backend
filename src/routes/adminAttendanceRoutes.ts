@@ -9,7 +9,7 @@ const router = Router();
 router.use(authenticateToken as any);
 // router.use(isAdminOrHR as any);
 
-router.get('/leave-requests', checkPermission("Attendance", "view"), getAllLeaveRequestsForAdmin as any);
+router.get('/leave-requests', checkPermission("Attendance", "view-all"), getAllLeaveRequestsForAdmin as any);
 
 router.patch('/leave-requests/:id', checkPermission("Attendance", "approve"), updateLeaveStatus as any);
 
