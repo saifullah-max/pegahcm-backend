@@ -1,5 +1,5 @@
 import e, { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, RoleTag } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -31,6 +31,7 @@ interface CreateEmployeeRequest {
 
   roleId: string;
   subRoleId?: string;
+  roleTag?: string;
 
   // Employee details
   departmentId: string;
@@ -91,6 +92,7 @@ export const createEmployee = async (req: Request, res: Response) => {
       address,
       roleId,
       subRoleId,
+      roleTag,
       departmentId,
       subDepartmentId,
       designation,
@@ -145,6 +147,7 @@ export const createEmployee = async (req: Request, res: Response) => {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
+    const roleTagName: RoleTag = RoleTag.HR;
     // Transaction: create user and employee
     const result = await prisma.$transaction(async (prismaTx) => {
       const newUser = await prismaTx.user.create({
@@ -155,6 +158,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           fullName,
           roleId,
           subRoleId,
+          roleTag: roleTagName,
           status,
           dateJoined: new Date()
         }
@@ -597,27 +601,38 @@ export const deleteEmployee = async (req: Request, res: Response) => {
     // Check if employee exists
     const employee = await prisma.employee.findUnique({
       where: { id },
-      include: { user: true }
+      include: { user: true }, // Fetch associated user
     });
 
     if (!employee) {
       return res.status(404).json({
         success: false,
-        message: 'Employee not found'
+        message: 'Employee not found',
       });
     }
 
-    // Delete employee and user in a transaction
-    await prisma.$transaction(async (prismaTx) => {
-      await prismaTx.employee.delete({ where: { id } });
-      await prismaTx.user.delete({ where: { id: employee.userId } });
+    // Transactional delete
+    await prisma.$transaction(async (tx) => {
+      // Delete employee record
+      await tx.employee.delete({
+        where: { id },
+      });
+
+      // Soft delete: mark user as inactive
+      if (employee.userId) {
+        await tx.user.update({
+          where: { id: employee.userId },
+          data: {
+            status: 'inactive', // or 'deleted', based on your convention
+          },
+        });
+      }
     });
 
     return res.json({
       success: true,
-      message: 'Employee deleted successfully'
+      message: 'Employee deleted and user marked as inactive successfully',
     });
-
   } catch (error) {
     console.error('Delete employee error:', error);
     return res.status(500).json({
@@ -625,7 +640,8 @@ export const deleteEmployee = async (req: Request, res: Response) => {
       message: 'Internal server error',
     });
   }
-}
+};
+
 
 // upload image
 export const uploadImage = async (req: Request, res: Response) => {

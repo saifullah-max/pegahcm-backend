@@ -52,10 +52,8 @@ export const getAllHREmployees = async (req: Request, res: Response) => {
         const hrEmployees = await prisma.employee.findMany({
             where: {
                 user: {
-                    role: {
-                        name: {
-                            equals: 'hr', // Case-sensitive match
-                        },
+                    roleTag: {
+                        equals: 'HR'
                     },
                 },
             },
@@ -77,16 +75,10 @@ export const getAllHREmployees = async (req: Request, res: Response) => {
             },
         });
 
-        if (!hrEmployees || hrEmployees.length === 0) {
-            console.warn('[getAllHREmployees] No HR employees found.');
-        } else {
-            console.log('[getAllHREmployees] Found HR Employees:', hrEmployees.length);
-        }
-
-        // ✅ SEND response
+        console.log(`[getAllHREmployees] Found ${hrEmployees.length} HR employees`);
         return res.status(200).json(hrEmployees);
     } catch (error) {
-        console.error('[getAllHREmployees] Error fetching HR employees:', error);
+        console.error('[getAllHREmployees] Error:', error);
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
