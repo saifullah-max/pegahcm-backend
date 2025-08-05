@@ -449,16 +449,87 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Invalid status value.' });
         }
 
+        const currentUserId = (req.user as unknown as CustomJwtPayload).userId;
+
+        // Fetch current user (includes both Admin and User roles)
+        const user = await prisma.user.findUnique({
+            where: { id: currentUserId },
+            include: {
+                role: true,
+                subRole: true,
+            },
+        });
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found.' });
+        }
+
+        const roleName = user.role?.name;
+
+        if (!roleName) {
+            return res.status(403).json({ success: false, message: 'User has no role assigned.' });
+        }
+
+        // Only perform sub-role comparison for non-admin users
+        if (roleName !== 'admin') {
+            if (!user.subRole || typeof user.subRole.level !== 'number') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Approver sub-role level not found. Ensure approver has valid subRole assigned.',
+                });
+            }
+
+            const approverLevel = user.subRole.level;
+
+            // Get requester level
+            const leaveRequest = await prisma.leaveRequest.findUnique({
+                where: { id },
+                include: {
+                    employee: {
+                        include: {
+                            user: {
+                                include: {
+                                    subRole: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+
+            if (!leaveRequest) {
+                return res.status(404).json({ success: false, message: 'Leave request not found.' });
+            }
+
+            const requesterLevel = leaveRequest.employee?.user?.subRole?.level;
+
+            if (requesterLevel === undefined || requesterLevel === null) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Requester sub-role level not found.',
+                });
+            }
+
+            if (approverLevel >= requesterLevel) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You cannot approve/reject requests of equal or higher-level employees.',
+                });
+            }
+        }
+
+        // Update leave request
         const updated = await prisma.leaveRequest.update({
             where: { id },
             data: {
                 status,
                 approvedAt: status === 'Approved' ? new Date() : null,
-                approvedById: (req.user as unknown as CustomJwtPayload).userId, // assuming JWT contains admin userId
+                approvedById: currentUserId,
             },
         });
 
         return res.status(200).json({ success: true, data: updated });
+
     } catch (error) {
         console.error('Error updating leave request:', error);
         return res.status(500).json({
@@ -467,6 +538,7 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         });
     }
 };
+
 
 // all attendance
 export const getAllAttendance = async (req: Request, res: Response) => {

@@ -1,7 +1,12 @@
 import { Request, Response } from 'express';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
+import { JwtPayload } from "jsonwebtoken";
 const prisma = new PrismaClient();
 
+
+interface CustomJwtPayload extends JwtPayload {
+    id: string;
+}
 
 // apply for resignation
 export const submitResignation = async (req: Request, res: Response) => {
@@ -81,16 +86,51 @@ export const getResignations = async (req: Request, res: Response) => {
 
 // approve or reject resignation
 export const processResignation = async (req: Request, res: Response) => {
-    console.log("Body: ", req.body);
     try {
         const { id } = req.params;
-        const { status, processedById, remarks, lastWorkingDay } = req.body;
+        const { status, remarks, lastWorkingDay } = req.body;
 
         if (!['Approved', 'Rejected'].includes(status)) {
-            return res.status(400).json({ message: 'Invalid status value. Must be "Approved" or "Rejected".' });
+            return res.status(400).json({ message: 'Invalid status. Use "Approved" or "Rejected".' });
         }
 
-        const existingResignation = await prisma.resignation.findUnique({ where: { id } });
+        const currentUserId = (req.user as unknown as CustomJwtPayload).userId;
+
+        // Step 1: Get the approver's role and sub-role level
+        const approver = await prisma.user.findUnique({
+            where: { id: currentUserId },
+            include: {
+                role: true,
+                subRole: true,
+            },
+        });
+
+        if (!approver) {
+            return res.status(404).json({ message: 'Approver not found.' });
+        }
+
+        const roleName = approver.role?.name;
+
+        if (!roleName) {
+            return res.status(403).json({ message: 'Role not assigned to approver.' });
+        }
+
+        // Step 2: Get the resignation request and requester's level
+        const existingResignation = await prisma.resignation.findUnique({
+            where: { id },
+            include: {
+                employee: {
+                    include: {
+                        user: {
+                            include: {
+                                subRole: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+
         if (!existingResignation) {
             return res.status(404).json({ message: 'Resignation not found.' });
         }
@@ -99,7 +139,24 @@ export const processResignation = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'This resignation has already been processed.' });
         }
 
-        // ✅ Build update object from scratch
+        // If not admin, enforce hierarchy level check
+        if (roleName !== 'admin') {
+            const approverLevel = approver.subRole?.level;
+            const requesterLevel = existingResignation.employee?.user?.subRole?.level;
+
+            if (approverLevel === undefined || requesterLevel === undefined) {
+                return res.status(403).json({ message: 'Sub-role level missing for either approver or requester.' });
+            }
+
+            if (approverLevel >= requesterLevel) {
+                return res.status(403).json({
+                    message: 'You cannot approve/reject resignations of users at equal or higher sub-role level.',
+                });
+            }
+
+        }
+
+        // ✅ Prepare update data
         const dataToUpdate: {
             status: string;
             processedById: string;
@@ -108,31 +165,18 @@ export const processResignation = async (req: Request, res: Response) => {
             lastWorkingDay?: Date;
         } = {
             status,
-            processedById,
+            processedById: currentUserId,
             processedAt: new Date(),
             reviewComments: remarks,
         };
 
-        // ✅ Only add lastWorkingDay if it's a valid ISO date string
+        // ✅ Optional: Parse and validate lastWorkingDay
         if (typeof lastWorkingDay === 'string') {
             const parsed = new Date(lastWorkingDay);
             if (!isNaN(parsed.getTime())) {
                 dataToUpdate.lastWorkingDay = parsed;
-            } else {
-                console.warn('Skipping invalid lastWorkingDay:', lastWorkingDay);
             }
         }
-
-        // ✅ Double-check (optional)
-        if (
-            dataToUpdate.lastWorkingDay &&
-            isNaN(dataToUpdate.lastWorkingDay.getTime())
-        ) {
-            delete dataToUpdate.lastWorkingDay;
-        }
-
-        console.log('Final dataToUpdate:', dataToUpdate);
-
 
         const updatedResignation = await prisma.resignation.update({
             where: { id },
@@ -143,6 +187,7 @@ export const processResignation = async (req: Request, res: Response) => {
             message: `Resignation ${status.toLowerCase()} successfully.`,
             data: updatedResignation,
         });
+
     } catch (err) {
         console.error('Error processing resignation:', err);
         return res.status(500).json({ message: 'Error processing resignation.' });
@@ -304,5 +349,45 @@ export const updateClearanceStatus = async (req: Request, res: Response) => {
     } catch (err) {
         console.error('Error updating statuses:', err);
         return res.status(500).json({ message: 'Server error while updating status' });
+    }
+};
+
+// GET MY Resignation
+export const getMyResignation = async (req: Request, res: Response) => {
+    try {
+        const userId = (req.user as unknown as CustomJwtPayload).userId;
+
+        // Fetch resignation of the employee linked to this user
+        const employee = await prisma.employee.findUnique({
+            where: { userId },
+            select: { id: true },
+        });
+
+        if (!employee) {
+            return res.status(404).json({ message: 'Employee record not found.' });
+        }
+
+        const resignation = await prisma.resignation.findFirst({
+            where: { employeeId: employee.id },
+            include: {
+                employee: {
+                    include: {
+                        user: { select: { fullName: true, email: true } },
+                    },
+                },
+                processedBy: {
+                    select: { fullName: true, email: true },
+                },
+            },
+        });
+
+        if (!resignation) {
+            return res.status(404).json({ message: 'No resignation submitted.' });
+        }
+
+        return res.status(200).json({ data: resignation });
+    } catch (err) {
+        console.error('Error fetching resignation:', err);
+        return res.status(500).json({ message: 'Internal server error' });
     }
 };

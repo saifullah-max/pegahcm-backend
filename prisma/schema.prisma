@@ -18,6 +18,7 @@ model SubRole {
   name        String              @unique
   description String?
   users       User[]              @relation("UserSubRole")
+  level       Int
   permissions SubRolePermission[] // 👈 This is the join relation
 }
 

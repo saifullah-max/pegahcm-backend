@@ -7,12 +7,17 @@ const router = express.Router();
 // CREATE SubRole
 export const createSubRole = async (req: Request, res: Response) => {
     try {
-        const { name, description, permissionIds } = req.body;
+        const { name, description, level, permissionIds } = req.body;
+
+        if (!level) {
+            return res.status(400).json({ success: false, message: 'Level is required.' });
+        }
 
         const subRole = await prisma.subRole.create({
             data: {
                 name,
                 description,
+                level,
                 permissions: {
                     create: permissionIds?.map((permissionId: string) => ({
                         permission: { connect: { id: permissionId } },
