@@ -16,6 +16,7 @@ import hrRoutes from './routes/hrRoutes';
 import permissionRoutes from './routes/permissionRoutes'
 import impersonateRoutes from './routes/impersonateRoutes'
 import fixAttendanceRoutes from './routes/fixAttendanceRoutes'
+import notificationRoutes from './routes/notificationRoutes'
 
 // Load environment variables
 dotenv.config();
@@ -34,7 +35,6 @@ app.use('/api/employees', employeeRoutes);
 app.use('/api/shifts', shiftRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/sub-departments', subDepartmentRoutes);
-// app.use('/api/test', testRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/attendance', attendanceRoutes)
 app.use('/api/fix-attendance', fixAttendanceRoutes)
@@ -42,6 +42,7 @@ app.use('/api/admin', adminAttendanceRoutes)
 app.use('/api/hr', hrRoutes)
 app.use('/api/permissions', permissionRoutes)
 app.use('/api/impersonate', impersonateRoutes)
+app.use('/api/notifications', notificationRoutes)
 
 // Basic route
 app.get('/', (req, res) => {

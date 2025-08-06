@@ -3,6 +3,7 @@ import { Prisma, PrismaClient, RoleTag } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { createScopedNotification } from '../utils/notificationUtils';
 
 // Add multer type definitions
 declare global {
@@ -211,6 +212,62 @@ export const createEmployee = async (req: Request, res: Response) => {
         employee: newEmployee
       };
     });
+
+    try {
+      await Promise.all([
+        // Notify Admins, Directors, Managers with HR roleTag
+        createScopedNotification({
+          scope: 'DIRECTORS_HR',
+          data: {
+            title: 'New Employee Joined',
+            message: `${fullName} has joined the company.`,
+            type: 'Employee'
+          },
+          visibilityLevel: 2 // <= 2 means Directors and HRs
+        }),
+
+        // Notify Managers of the same department
+        departmentId && createScopedNotification({
+          scope: 'MANAGERS_DEPT',
+          data: {
+            title: 'New Department Member',
+            message: `${fullName} has joined your department.`,
+            type: 'Employee'
+          },
+          targetIds: {
+            departmentId
+          }
+        }),
+
+        // Notify TeamLeads of the same sub-department
+        subDepartmentId && createScopedNotification({
+          scope: 'TEAMLEADS_SUBDEPT',
+          data: {
+            title: 'New Team Member',
+            message: `${fullName} has joined your sub-department.`,
+            type: 'Employee'
+          },
+          targetIds: {
+            subDepartmentId
+          }
+        }),
+
+        // Notify the new employee
+        createScopedNotification({
+          scope: 'ASSIGNED_USER',
+          data: {
+            title: 'Welcome to the Team 🎉',
+            message: `Hey ${fullName}, we're excited to have you onboard!`,
+            type: 'Employee'
+          },
+          targetIds: {
+            userId: result.user.id
+          }
+        })
+      ]);
+    } catch (error) {
+      console.error("Some error occured while notifying user")
+    }
 
 
     return res.status(201).json({
@@ -629,7 +686,8 @@ export const deleteEmployee = async (req: Request, res: Response) => {
       }
     });
 
-    return res.json({
+
+    return res.status(200).json({
       success: true,
       message: 'Employee deleted and user marked as inactive successfully',
     });
@@ -641,7 +699,6 @@ export const deleteEmployee = async (req: Request, res: Response) => {
     });
   }
 };
-
 
 // upload image
 export const uploadImage = async (req: Request, res: Response) => {

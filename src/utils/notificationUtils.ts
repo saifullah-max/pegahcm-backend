@@ -1,77 +1,76 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 // utils/notificationUtils.ts
 const prisma = new PrismaClient();
 
-export async function notifyUsersWithPermission(
-    module: string,
-    action: string,
-    notificationData: { title: string; message: string; type: string }
-) {
-    // Find users with sub-roles that have this permission
-    const users = await prisma.user.findMany({
-        where: {
-            subRole: {
-                permissions: {
-                    some: {
-                        permission: {
-                            module,
-                            action
-                        }
-                    }
+type VisibilityScope = 'ADMIN_ONLY' | 'DIRECTORS_HR' | 'MANAGERS_DEPT' | 'TEAMLEADS_SUBDEPT' | 'EMPLOYEE_ONLY' | 'ASSIGNED_USER';
+
+interface NotifyOptions {
+    scope: VisibilityScope;
+    data: { title: string; message: string; type: string };
+    targetIds?: {
+        userId?: string;
+        employeeId?: string;
+        departmentId?: string;
+        subDepartmentId?: string;
+    };
+    visibilityLevel?: number; // Optional override
+}
+
+export async function createScopedNotification(opts: NotifyOptions) {
+    const { scope, data, targetIds, visibilityLevel } = opts;
+
+    switch (scope) {
+        case 'ADMIN_ONLY':
+            return prisma.notification.create({
+                data: {
+                    ...data,
+                    visibilityLevel: 0
                 }
-            }
-        },
-        select: { id: true }
-    });
+            });
 
-    // Send notification to each user
-    await prisma.notification.createMany({
-        data: users.map((user) => ({
-            userId: user.id,
-            ...notificationData
-        }))
-    });
+        case 'DIRECTORS_HR':
+            return prisma.notification.create({
+                data: {
+                    ...data,
+                    visibilityLevel: 2 // directors or HRs with level <= 2
+                }
+            });
+
+        case 'MANAGERS_DEPT':
+            return prisma.notification.create({
+                data: {
+                    ...data,
+                    departmentId: targetIds?.departmentId
+                }
+            });
+
+        case 'TEAMLEADS_SUBDEPT':
+            return prisma.notification.create({
+                data: {
+                    ...data,
+                    subDepartmentId: targetIds?.subDepartmentId
+                }
+            });
+
+        case 'EMPLOYEE_ONLY':
+            return prisma.notification.create({
+                data: {
+                    ...data,
+                    employeeId: targetIds?.employeeId
+                }
+            });
+
+        case 'ASSIGNED_USER':
+            return prisma.notification.create({
+                data: {
+                    ...data,
+                    userId: targetIds?.userId
+                }
+            });
+
+        default:
+            throw new Error('Unknown notification scope');
+    }
 }
 
-export async function notifyAdmins(data: { title: string; message: string; type: string }) {
-    const admins = await prisma.user.findMany({
-        where: { role: { name: 'Admin' } },
-        select: { id: true }
-    });
-
-    await prisma.notification.createMany({
-        data: admins.map(admin => ({ userId: admin.id, ...data }))
-    });
-}
-
-export async function notifyHigherSubRoles(
-    currentUserId: string,
-    notification: { title: string; message: string; type: string }
-) {
-    const user = await prisma.user.findUnique({
-        where: { id: currentUserId },
-        include: { subRole: true }
-    });
-
-    if (!user?.subRole?.level) return;
-
-    const higherSubRoles = await prisma.subRole.findMany({
-        where: { level: { gt: user.subRole.level } },
-        select: { id: true }
-    });
-
-    const higherUsers = await prisma.user.findMany({
-        where: {
-            subRoleId: { in: higherSubRoles.map(sr => sr.id) }
-        },
-        select: { id: true }
-    });
-
-    await prisma.notification.createMany({
-        data: higherUsers.map(u => ({
-            userId: u.id,
-            ...notification
-        }))
-    });
-}

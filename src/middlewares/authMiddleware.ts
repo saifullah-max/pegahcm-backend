@@ -32,7 +32,7 @@ export const authenticateToken = (
   }
 
   const token = authHeader.split(' ')[1];
-  console.log('[Auth Middleware] Incoming token:', token);
+  // console.log('[Auth Middleware] Incoming token:', token);
 
   try {
     const decoded = jwt.verify(
@@ -40,7 +40,7 @@ export const authenticateToken = (
       process.env.JWT_SECRET!
     ) as JwtPayload;
 
-    console.log('[Auth Middleware] Decoded payload:', decoded);
+    // console.log('[Auth Middleware] Decoded payload:', decoded);
     if (decoded.impersonatedBy) {
       console.log(
         `[IMPERSONATION] This request is impersonated by admin ID: ${decoded.impersonatedBy}`
