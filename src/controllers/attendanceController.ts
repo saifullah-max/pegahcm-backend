@@ -155,7 +155,6 @@ export const checkOut = async (req: Request, res: Response, next: NextFunction):
     }
 };
 
-
 // GET /api/attendance/today
 export const checkTodayAttendance = async (req: Request, res: Response) => {
     try {
@@ -538,7 +537,6 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         });
     }
 };
-
 
 // all attendance
 export const getAllAttendance = async (req: Request, res: Response) => {

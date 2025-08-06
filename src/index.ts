@@ -15,6 +15,7 @@ import adminAttendanceRoutes from './routes/adminAttendanceRoutes';
 import hrRoutes from './routes/hrRoutes';
 import permissionRoutes from './routes/permissionRoutes'
 import impersonateRoutes from './routes/impersonateRoutes'
+import fixAttendanceRoutes from './routes/fixAttendanceRoutes'
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +37,7 @@ app.use('/api/sub-departments', subDepartmentRoutes);
 // app.use('/api/test', testRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/attendance', attendanceRoutes)
+app.use('/api/fix-attendance', fixAttendanceRoutes)
 app.use('/api/admin', adminAttendanceRoutes)
 app.use('/api/hr', hrRoutes)
 app.use('/api/permissions', permissionRoutes)

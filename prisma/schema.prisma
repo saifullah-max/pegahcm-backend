@@ -139,30 +139,31 @@ model BulkUpload {
 }
 
 model User {
-  id                    String              @id @default(uuid())
-  username              String              @unique
+  id                    String                 @id @default(uuid())
+  username              String                 @unique
   passwordHash          String
-  email                 String              @unique
+  email                 String                 @unique
   fullName              String
-  role                  Role                @relation(fields: [roleId], references: [id])
+  role                  Role                   @relation(fields: [roleId], references: [id])
   roleId                String
   status                String
-  dateJoined            DateTime            @default(now())
+  dateJoined            DateTime               @default(now())
   lastLogin             DateTime?
   employee              Employee?
-  approvedLeaves        LeaveRequest[]      @relation("ApprovedBy")
-  approvedVacations     Vacation[]          @relation("ApprovedBy")
-  assignedOnboarding    OnboardingProcess[] @relation("AssignedHR")
-  processedResignations Resignation[]       @relation("ProcessedBy")
-  initiatedHRProcesses  HRProcess[]         @relation("InitiatedBy")
+  approvedLeaves        LeaveRequest[]         @relation("ApprovedBy")
+  approvedVacations     Vacation[]             @relation("ApprovedBy")
+  assignedOnboarding    OnboardingProcess[]    @relation("AssignedHR")
+  processedResignations Resignation[]          @relation("ProcessedBy")
+  initiatedHRProcesses  HRProcess[]            @relation("InitiatedBy")
   UserPermission        UserPermission[]
   SystemLog             SystemLog[]
   BulkUpload            BulkUpload[]
   Resignation           Resignation[]
   subRoleId             String?
-  subRole               SubRole?            @relation("UserSubRole", fields: [subRoleId], references: [id])
+  subRole               SubRole?               @relation("UserSubRole", fields: [subRoleId], references: [id])
   roleTag               RoleTag?
   Notification          Notification[]
+  AttendanceFixRequest  AttendanceFixRequest[]
 }
 
 model Role {
@@ -183,17 +184,17 @@ model SubDepartment {
 }
 
 model Employee {
-  id                    String              @id @default(uuid())
-  user                  User                @relation(fields: [userId], references: [id])
-  userId                String              @unique
-  employeeNumber        String              @unique
-  department            Department          @relation(fields: [departmentId], references: [id])
+  id                    String                 @id @default(uuid())
+  user                  User                   @relation(fields: [userId], references: [id])
+  userId                String                 @unique
+  employeeNumber        String                 @unique
+  department            Department             @relation(fields: [departmentId], references: [id])
   departmentId          String
-  subDepartment         SubDepartment?      @relation(fields: [subDepartmentId], references: [id])
+  subDepartment         SubDepartment?         @relation(fields: [subDepartmentId], references: [id])
   subDepartmentId       String?
   phoneNumber           String?
   shiftId               String?
-  shift                 Shift?              @relation(fields: [shiftId], references: [id])
+  shift                 Shift?                 @relation(fields: [shiftId], references: [id])
   position              String
   fatherName            String?
   dateOfBirth           DateTime
@@ -204,13 +205,13 @@ model Employee {
   address               String
   emergencyContactName  String
   emergencyContactPhone String
-  salary                Decimal             @db.Decimal(10, 2)
+  salary                Decimal                @db.Decimal(10, 2)
   employeeImages        employeeImage[]
   employeeDocuments     employeeDocument[]
   skills                String? // JSON string of skills array
-  manager               Employee?           @relation("EmployeeManager", fields: [managerId], references: [id])
+  manager               Employee?              @relation("EmployeeManager", fields: [managerId], references: [id])
   managerId             String?
-  managedEmployees      Employee[]          @relation("EmployeeManager")
+  managedEmployees      Employee[]             @relation("EmployeeManager")
   attendanceRecords     AttendanceRecord[]
   leaveRequests         LeaveRequest[]
   vacations             Vacation[]
@@ -219,6 +220,7 @@ model Employee {
   assets                Asset[]
   hrProcesses           HRProcess[]
   LeaveBalance          LeaveBalance[]
+  AttendanceFixRequest  AttendanceFixRequest[]
 }
 
 model employeeImage {
@@ -240,18 +242,19 @@ model Department {
 }
 
 model AttendanceRecord {
-  id                String    @id @default(uuid())
-  employee          Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId        String
-  date              DateTime
-  clockIn           DateTime
-  clockOut          DateTime?
-  shift             Shift     @relation(fields: [shiftId], references: [id])
-  shiftId           String
-  absenceReason     String?
-  netWorkingMinutes Int? // <-- Add this
-  status            String
-  breaks            Break[]
+  id                   String                 @id @default(uuid())
+  employee             Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId           String
+  date                 DateTime
+  clockIn              DateTime
+  clockOut             DateTime?
+  shift                Shift                  @relation(fields: [shiftId], references: [id])
+  shiftId              String
+  absenceReason        String?
+  netWorkingMinutes    Int? // <-- Add this
+  status               String
+  breaks               Break[]
+  AttendanceFixRequest AttendanceFixRequest[]
 }
 
 model Shift {
@@ -394,4 +397,27 @@ model Notification {
   type      String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+model AttendanceFixRequest {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+
+  requestType       String // "CheckIn", "CheckOut", "Both", etc.
+  requestedCheckIn  DateTime? // Optional: requested fixed clockIn
+  requestedCheckOut DateTime? // Optional: requested fixed clockOut
+  requestedBreaks   Json? // Optional JSON for break updates if needed
+
+  reason      String
+  status      String // "Pending", "Approved", "Rejected"
+  requestedAt DateTime @default(now())
+
+  reviewedBy   User?     @relation(fields: [reviewedById], references: [id])
+  reviewedById String?
+  reviewedAt   DateTime?
+
+  remarks            String? // Optional comment from reviewer
+  AttendanceRecord   AttendanceRecord? @relation(fields: [attendanceRecordId], references: [id])
+  attendanceRecordId String?
 }
