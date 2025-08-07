@@ -164,6 +164,7 @@ model User {
   roleTag               RoleTag?
   Notification          Notification[]
   AttendanceFixRequest  AttendanceFixRequest[]
+  UserNotification      UserNotification[]
 }
 
 model Role {
@@ -396,22 +397,30 @@ enum NotificationScope {
 }
 
 model Notification {
-  id     String  @id @default(uuid())
-  user   User?   @relation(fields: [userId], references: [id])
-  userId String? // For personal (targeted) notifications
-
-  title     String
-  message   String
-  type      String
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  // NEW FIELDS
-  visibilityLevel Int? // Level required to view (e.g., 0 for admin-only, 1+ for others)
-  departmentId    String? // For department-scoped notifs
-  subDepartmentId String? // For teamLead-specific notifs
-  employeeId      String? // For personal notifs (like leave approval)
+  id              String             @id @default(uuid())
+  title           String
+  message         String
+  type            String
+  createdAt       DateTime           @default(now())
+  visibilityLevel Int?
+  departmentId    String?
+  subDepartmentId String?
+  employeeId      String?
   scope           NotificationScope?
+
+  userNotifications UserNotification[] // 👈 new relation
+  User              User?              @relation(fields: [userId], references: [id])
+  userId            String?
+}
+
+model UserNotification {
+  id             String       @id @default(uuid())
+  user           User         @relation(fields: [userId], references: [id])
+  userId         String
+  notification   Notification @relation(fields: [notificationId], references: [id])
+  notificationId String
+  read           Boolean      @default(false)
+  readAt         DateTime?
 }
 
 model AttendanceFixRequest {

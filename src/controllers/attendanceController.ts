@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
-import { PrismaClient } from '@prisma/client';
+import { NotificationScope, PrismaClient } from '@prisma/client';
 import { JwtPayload } from "jsonwebtoken";
+import { createScopedNotification } from "../utils/notificationUtils";
 const prisma = new PrismaClient();
 
 interface CustomJwtPayload extends JwtPayload {
@@ -15,21 +16,27 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 
         const employee = await prisma.employee.findUnique({
             where: { userId },
+            include: {
+                user: {
+                    include: { role: true, subRole: true },
+                },
+            },
         });
 
         if (!employee) {
-            res.status(404).json({ message: "Employee not found for this user." });
+            res.status(404).json({ message: "Employee not found." });
             return;
         }
 
-        const employeeId = employee.id;
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
+        const { id: employeeId, subDepartmentId, departmentId, user: userMeta } = employee;
+        const roleName = userMeta.role.name.toLowerCase();
+        const roleTag = userMeta.roleTag;
 
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+        const today = new Date();
+        const todayStart = new Date(today.setHours(0, 0, 0, 0));
+        const todayEnd = new Date(today.setHours(23, 59, 59, 999));
 
-        const isOnLeaveToday = await prisma.leaveRequest.findFirst({
+        const onLeave = await prisma.leaveRequest.findFirst({
             where: {
                 employeeId,
                 status: "Approved",
@@ -38,38 +45,91 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
             },
         });
 
-        if (isOnLeaveToday) {
+        if (onLeave) {
             res.status(403).json({ message: "Cannot check-in while on leave." });
             return;
         }
 
-
-        const existing = await prisma.attendanceRecord.findFirst({
+        const alreadyCheckedIn = await prisma.attendanceRecord.findFirst({
             where: {
                 employeeId,
-                date: {
-                    gte: todayStart,
-                    lte: todayEnd,
-                },
+                date: { gte: todayStart, lte: todayEnd },
             },
         });
 
-        if (existing) {
+        if (alreadyCheckedIn) {
             res.status(400).json({ message: "Already checked in today." });
             return;
         }
 
         const { shiftId } = req.body;
+        const now = new Date();
 
         const newRecord = await prisma.attendanceRecord.create({
             data: {
                 employeeId,
-                date: new Date(),
-                clockIn: new Date(),
                 shiftId,
+                date: now,
+                clockIn: now,
                 status: "Present",
             },
         });
+
+        const clockInTime = now.toLocaleTimeString();
+        const baseNotification = {
+            title: "Clock In",
+            message: `${userMeta.fullName} clocked in at ${clockInTime}`,
+            type: "ClockIn" as const,
+            employeeId,
+        };
+
+        const promises = [];
+
+        // Notification logic based on role
+        if (roleName === "user" && subDepartmentId) {
+            promises.push(
+                createScopedNotification({
+                    scope: "TEAMLEADS_SUBDEPT",
+                    data: baseNotification,
+                    targetIds: { subDepartmentId },
+                    visibilityLevel: 3,
+                    excludeUserId: userId,
+                })
+            );
+        } else if (roleName === "teamlead" && departmentId) {
+            promises.push(
+                createScopedNotification({
+                    scope: "MANAGERS_DEPT",
+                    data: baseNotification,
+                    targetIds: { departmentId },
+                    visibilityLevel: 2,
+                    excludeUserId: userId,
+
+                })
+            );
+        } else if (roleName === "manager" && roleTag === "HR") {
+            promises.push(
+                createScopedNotification({
+                    scope: "DIRECTORS_HR",
+                    data: baseNotification,
+                    visibilityLevel: 1,
+                    excludeUserId: userId,
+
+                })
+            );
+        } else if (roleName === "director") {
+            promises.push(
+                createScopedNotification({
+                    scope: "ADMIN_ONLY",
+                    data: baseNotification,
+                    visibilityLevel: 0,
+                    excludeUserId: userId,
+
+                })
+            );
+        }
+
+        await Promise.all(promises);
 
         res.status(200).json({ message: "Check-in successful", attendance: newRecord });
     } catch (err) {
@@ -86,32 +146,35 @@ export const checkOut = async (req: Request, res: Response, next: NextFunction):
 
         const employee = await prisma.employee.findUnique({
             where: { userId },
-        });
-
-        if (!employee) {
-            res.status(404).json({ message: "Employee not found for this user." });
-            return;
-        }
-
-        const employeeId = employee.id;
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
-
-        const attendance = await prisma.attendanceRecord.findFirst({
-            where: {
-                employeeId,
-                date: {
-                    gte: todayStart,
-                    lte: todayEnd,
+            include: {
+                user: {
+                    include: { role: true, subRole: true },
                 },
             },
         });
 
+        if (!employee) {
+            res.status(404).json({ message: "Employee not found." });
+            return;
+        }
+
+        const { id: employeeId, subDepartmentId, departmentId, user: userMeta } = employee;
+        const roleName = userMeta.role.name.toLowerCase();
+        const roleTag = userMeta.roleTag;
+
+        const today = new Date();
+        const todayStart = new Date(today.setHours(0, 0, 0, 0));
+        const todayEnd = new Date(today.setHours(23, 59, 59, 999));
+
+        const attendance = await prisma.attendanceRecord.findFirst({
+            where: {
+                employeeId,
+                date: { gte: todayStart, lte: todayEnd },
+            },
+        });
+
         if (!attendance || !attendance.clockIn) {
-            res.status(400).json({ message: "No check-in record found for today." });
+            res.status(400).json({ message: "No check-in record found." });
             return;
         }
 
@@ -120,10 +183,7 @@ export const checkOut = async (req: Request, res: Response, next: NextFunction):
             return;
         }
 
-        const clockIn = new Date(attendance.clockIn);
-        const clockOut = new Date();
-
-        // Fetch all breaks for this attendance
+        const now = new Date();
         const breaks = await prisma.break.findMany({
             where: { attendanceRecordId: attendance.id },
         });
@@ -131,22 +191,74 @@ export const checkOut = async (req: Request, res: Response, next: NextFunction):
         let totalBreakMs = 0;
         for (const brk of breaks) {
             if (brk.breakStart && brk.breakEnd) {
-                const start = new Date(brk.breakStart).getTime();
-                const end = new Date(brk.breakEnd).getTime();
-                totalBreakMs += end - start;
+                totalBreakMs += new Date(brk.breakEnd).getTime() - new Date(brk.breakStart).getTime();
             }
         }
 
-        const totalWorkMs = clockOut.getTime() - clockIn.getTime();
-        const netWorkingMinutes = Math.floor((totalWorkMs - totalBreakMs) / (1000 * 60));
+        const netWorkingMinutes = Math.floor(
+            (now.getTime() - new Date(attendance.clockIn).getTime() - totalBreakMs) / (1000 * 60)
+        );
 
         const updatedRecord = await prisma.attendanceRecord.update({
             where: { id: attendance.id },
-            data: {
-                clockOut,
-                netWorkingMinutes,
-            },
+            data: { clockOut: now, netWorkingMinutes },
         });
+
+        const clockOutTime = now.toLocaleTimeString();
+        const baseNotification = {
+            title: "Clock Out",
+            message: `${userMeta.fullName} clocked out at ${clockOutTime}`,
+            type: "ClockOut" as const,
+            employeeId,
+        };
+
+        const promises = [];
+
+        if (roleName === "user" && subDepartmentId) {
+            promises.push(
+                createScopedNotification({
+                    scope: "TEAMLEADS_SUBDEPT",
+                    data: baseNotification,
+                    targetIds: { subDepartmentId },
+                    visibilityLevel: 3,
+                    excludeUserId: userId,
+
+                })
+            );
+        } else if (roleName === "teamlead" && departmentId) {
+            promises.push(
+                createScopedNotification({
+                    scope: "MANAGERS_DEPT",
+                    data: baseNotification,
+                    targetIds: { departmentId },
+                    visibilityLevel: 2,
+                    excludeUserId: userId,
+
+                })
+            );
+        } else if (roleName === "manager" && roleTag === "HR") {
+            promises.push(
+                createScopedNotification({
+                    scope: "DIRECTORS_HR",
+                    data: baseNotification,
+                    visibilityLevel: 1,
+                    excludeUserId: userId,
+
+                })
+            );
+        } else if (roleName === "director") {
+            promises.push(
+                createScopedNotification({
+                    scope: "ADMIN_ONLY",
+                    data: baseNotification,
+                    visibilityLevel: 0,
+                    excludeUserId: userId,
+
+                })
+            );
+        }
+
+        await Promise.all(promises);
 
         res.status(200).json({ message: "Check-out successful", attendance: updatedRecord });
     } catch (err) {

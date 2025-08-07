@@ -4,6 +4,8 @@ import bcrypt from 'bcryptjs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { createScopedNotification } from '../utils/notificationUtils';
+import { JwtPayload } from "jsonwebtoken";
+
 
 // Add multer type definitions
 declare global {
@@ -49,6 +51,10 @@ interface CreateEmployeeRequest {
 
   fatherName: string;
   // managerId?: string;
+}
+
+interface CustomJwtPayload extends JwtPayload {
+  id: string;
 }
 
 // Function to generate employee number
@@ -213,60 +219,67 @@ export const createEmployee = async (req: Request, res: Response) => {
       };
     });
 
+    // In createEmployee controller, replace the notification creation with:
     try {
       await Promise.all([
-        // Notify Admins, Directors, Managers with HR roleTag
-        createScopedNotification({
-          scope: 'DIRECTORS_HR',
+        // Notify Admins only (visibilityLevel 0)
+        prisma.notification.create({
           data: {
             title: 'New Employee Joined',
             message: `${fullName} has joined the company.`,
-            type: 'Employee'
-          },
-          visibilityLevel: 2 // <= 2 means Directors and HRs
+            type: 'Employee',
+            visibilityLevel: 0, // Admin only
+            employeeId: result.employee.id // This will be excluded for the new employee
+          }
         }),
 
-        // Notify Managers of the same department
-        departmentId && createScopedNotification({
-          scope: 'MANAGERS_DEPT',
+        // Notify Directors/Managers (visibilityLevel 1)
+        prisma.notification.create({
+          data: {
+            title: 'New Employee Joined',
+            message: `${fullName} has joined the company.`,
+            type: 'Employee',
+            visibilityLevel: 1, // Directors, Managers, TeamLeads
+            employeeId: result.employee.id // This will be excluded for the new employee
+          }
+        }),
+
+        // Notify Department (visibilityLevel 2)
+        departmentId && prisma.notification.create({
           data: {
             title: 'New Department Member',
             message: `${fullName} has joined your department.`,
-            type: 'Employee'
-          },
-          targetIds: {
-            departmentId
+            type: 'Employee',
+            visibilityLevel: 2,
+            departmentId,
+            employeeId: result.employee.id // This will be excluded for the new employee
           }
         }),
 
-        // Notify TeamLeads of the same sub-department
-        subDepartmentId && createScopedNotification({
-          scope: 'TEAMLEADS_SUBDEPT',
+        // Notify Sub-department (visibilityLevel 3)
+        subDepartmentId && prisma.notification.create({
           data: {
             title: 'New Team Member',
             message: `${fullName} has joined your sub-department.`,
-            type: 'Employee'
-          },
-          targetIds: {
-            subDepartmentId
+            type: 'Employee',
+            visibilityLevel: 3,
+            subDepartmentId,
+            employeeId: result.employee.id // This will be excluded for the new employee
           }
         }),
 
-        // Notify the new employee
-        createScopedNotification({
-          scope: 'ASSIGNED_USER',
+        // Direct notification to the new employee
+        prisma.notification.create({
           data: {
             title: 'Welcome to the Team 🎉',
             message: `Hey ${fullName}, we're excited to have you onboard!`,
-            type: 'Employee'
-          },
-          targetIds: {
-            userId: result.user.id
+            type: 'Employee',
+            userId: result.user.id // Direct to user
           }
         })
       ]);
     } catch (error) {
-      console.error("Some error occured while notifying user")
+      console.error("Some error occurred while notifying user", error);
     }
 
 
@@ -612,6 +625,63 @@ export const updateEmployee = async (req: Request, res: Response) => {
       });
     }
 
+    // Notification after update
+    try {
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: updatedEmployee.userId },
+        include: {
+          role: true,
+          subRole: true,
+        }
+      });
+
+      const performedBy = req.user as unknown as CustomJwtPayload;
+
+      const performedByUser = await prisma.user.findUnique({
+        where: { id: performedBy.userId },
+      });
+
+      const performedByName = performedByUser?.fullName || 'Someone';
+      const employeeName = fullName || updatedUser?.fullName || 'An employee';
+
+      await Promise.all([
+        // Notify Admin with performer’s name
+        prisma.notification.create({
+          data: {
+            title: `Employee Info Updated`,
+            message: `${employeeName}'s info was updated by ${performedByName}.`,
+            type: 'Employee',
+            visibilityLevel: 0,
+            employeeId: updatedEmployee.id
+          }
+        }),
+
+        // Notify Manager, Director, TeamLead (visibilityLevel 1)
+        prisma.notification.create({
+          data: {
+            title: `Employee Info Updated`,
+            message: `${employeeName}'s profile was updated.`,
+            type: 'Employee',
+            visibilityLevel: 1,
+            employeeId: updatedEmployee.id
+          }
+        }),
+
+        // Notify specific employee
+        prisma.notification.create({
+          data: {
+            title: `Your Info Was Updated`,
+            message: `Your profile was updated. Please verify the changes.`,
+            type: 'Employee',
+            userId: updatedEmployee.userId
+          }
+        })
+      ]);
+    } catch (notifyErr) {
+      console.error('Notification error after updateEmployee:', notifyErr);
+    }
+
+
     return res.status(200).json({
       success: true,
       message: 'Employee updated successfully.',
@@ -685,6 +755,65 @@ export const deleteEmployee = async (req: Request, res: Response) => {
         });
       }
     });
+
+    // Notification after delete
+    try {
+      const performedBy = req.user as unknown as CustomJwtPayload;
+
+      const performedByUser = await prisma.user.findUnique({
+        where: { id: performedBy.userId },
+      });
+
+      const performedByName = performedByUser?.fullName || 'Someone';
+      const deletedEmployeeName = employee.user?.fullName || 'An employee';
+
+      await Promise.all([
+        // Notify Admin (visibilityLevel 0)
+        prisma.notification.create({
+          data: {
+            title: `Employee Deleted`,
+            message: `${deletedEmployeeName} was removed from the company by ${performedByName}.`,
+            type: 'Employee',
+            visibilityLevel: 0
+          }
+        }),
+
+        // Notify Managers, TLs, etc. (visibilityLevel 1)
+        prisma.notification.create({
+          data: {
+            title: `Employee Removed`,
+            message: `${deletedEmployeeName} was removed by ${performedByName}.`,
+            type: 'Employee',
+            visibilityLevel: 1
+          }
+        }),
+
+        // Notify Department (if available)
+        employee.departmentId && prisma.notification.create({
+          data: {
+            title: `Team Member Removed`,
+            message: `${deletedEmployeeName} was removed from your department by ${performedByName}.`,
+            type: 'Employee',
+            visibilityLevel: 2,
+            departmentId: employee.departmentId
+          }
+        }),
+
+        // Notify Sub-department (if available)
+        employee.subDepartmentId && prisma.notification.create({
+          data: {
+            title: `Team Member Removed`,
+            message: `${deletedEmployeeName} was removed from your sub-department by ${performedByName}.`,
+            type: 'Employee',
+            visibilityLevel: 3,
+            subDepartmentId: employee.subDepartmentId
+          }
+        })
+      ]);
+    } catch (notifyErr) {
+      console.error('Notification error after deleteEmployee:', notifyErr);
+    }
+
 
 
     return res.status(200).json({
