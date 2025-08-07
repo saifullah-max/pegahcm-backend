@@ -219,65 +219,74 @@ export const createEmployee = async (req: Request, res: Response) => {
       };
     });
 
-    // In createEmployee controller, replace the notification creation with:
     try {
+      // 👇 Use createScopedNotification
       await Promise.all([
-        // Notify Admins only (visibilityLevel 0)
-        prisma.notification.create({
+        createScopedNotification({
+          scope: "ADMIN_ONLY",
           data: {
-            title: 'New Employee Joined',
+            title: "New Employee Joined",
             message: `${fullName} has joined the company.`,
-            type: 'Employee',
-            visibilityLevel: 0, // Admin only
-            employeeId: result.employee.id // This will be excluded for the new employee
-          }
+            type: "Employee",
+          },
+          visibilityLevel: 0,
         }),
 
-        // Notify Directors/Managers (visibilityLevel 1)
-        prisma.notification.create({
+        createScopedNotification({
+          scope: "DIRECTORS_HR",
           data: {
-            title: 'New Employee Joined',
+            title: "New Employee Joined",
             message: `${fullName} has joined the company.`,
-            type: 'Employee',
-            visibilityLevel: 1, // Directors, Managers, TeamLeads
-            employeeId: result.employee.id // This will be excluded for the new employee
-          }
+            type: "Employee",
+          },
+          visibilityLevel: 1,
         }),
 
-        // Notify Department (visibilityLevel 2)
-        departmentId && prisma.notification.create({
+        departmentId &&
+        createScopedNotification({
+          scope: "MANAGERS_DEPT",
           data: {
-            title: 'New Department Member',
+            title: "New Department Member",
             message: `${fullName} has joined your department.`,
-            type: 'Employee',
-            visibilityLevel: 2,
+            type: "Employee",
+          },
+          targetIds: {
             departmentId,
-            employeeId: result.employee.id // This will be excluded for the new employee
-          }
+            employeeId: result.employee.id,
+          },
+          visibilityLevel: 2,
+          excludeUserId: result.user.id,
         }),
 
-        // Notify Sub-department (visibilityLevel 3)
-        subDepartmentId && prisma.notification.create({
+        subDepartmentId &&
+        createScopedNotification({
+          scope: "TEAMLEADS_SUBDEPT",
           data: {
-            title: 'New Team Member',
+            title: "New Team Member",
             message: `${fullName} has joined your sub-department.`,
-            type: 'Employee',
-            visibilityLevel: 3,
+            type: "Employee",
+          },
+          targetIds: {
             subDepartmentId,
-            employeeId: result.employee.id // This will be excluded for the new employee
-          }
+            employeeId: result.employee.id,
+          },
+          visibilityLevel: 3,
+          excludeUserId: result.user.id
         }),
 
-        // Direct notification to the new employee
-        prisma.notification.create({
+        // 👇 Direct notification to the user (no exclusion)
+        createScopedNotification({
+          scope: "EMPLOYEE_ONLY",
           data: {
-            title: 'Welcome to the Team 🎉',
+            title: "Welcome to the Team 🎉",
             message: `Hey ${fullName}, we're excited to have you onboard!`,
-            type: 'Employee',
-            userId: result.user.id // Direct to user
-          }
-        })
+            type: "Employee",
+          },
+          targetIds: { userId: result.user.id },
+          visibilityLevel: 3,
+        }),
       ]);
+
     } catch (error) {
       console.error("Some error occurred while notifying user", error);
     }
@@ -525,8 +534,6 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
 export const updateEmployee = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-
-    // Parse incoming fields
     const {
       fullName,
       email,
@@ -547,7 +554,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
       skills,
       workLocation,
       shift,
-      fatherName
+      fatherName,
     } = req.body;
 
     const files = (req.files || {}) as { [fieldname: string]: Express.Multer.File[] };
@@ -562,7 +569,6 @@ export const updateEmployee = async (req: Request, res: Response) => {
       type: file.mimetype
     }));
 
-    // Validate workLocation
     if (workLocation && !['Onsite', 'Remote', 'Hybrid'].includes(workLocation)) {
       return res.status(400).json({
         success: false,
@@ -577,7 +583,6 @@ export const updateEmployee = async (req: Request, res: Response) => {
         ? skills.split(',').map(s => s.trim())
         : [];
 
-    // Check if employee exists
     const existingEmployee = await prisma.employee.findUnique({ where: { id } });
     if (!existingEmployee) {
       return res.status(404).json({
@@ -589,34 +594,30 @@ export const updateEmployee = async (req: Request, res: Response) => {
     const updatedEmployee = await prisma.employee.update({
       where: { id },
       data: {
-        phoneNumber: phoneNumber || undefined,
-        departmentId: departmentId || undefined,
-        subDepartmentId: subDepartmentId || undefined,
-        position: designation || undefined,
-        fatherName: fatherName || undefined,
+        phoneNumber,
+        departmentId,
+        subDepartmentId,
+        position: designation,
+        fatherName,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
         hireDate: joiningDate ? new Date(joiningDate) : undefined,
-        status: status || undefined,
-        // profileImage: profileImage || undefined,
-        // documents: documents ? JSON.stringify(documents) : undefined,
-        skills: processedSkills.length > 0 ? processedSkills.join(',') : undefined,
-        workLocation: workLocation || undefined,
-        gender: gender || undefined,
-        address: address || undefined,
-        emergencyContactName: emergencyContactName || undefined,
-        emergencyContactPhone: emergencyContactPhone || undefined,
+        status,
+        skills: processedSkills.length > 0 ? processedSkills.join(',') : null,
+        workLocation,
+        gender,
+        address,
+        emergencyContactName,
+        emergencyContactPhone,
         salary: salary ? Number(salary) : undefined,
-        // shift: shift ? shift : undefined
       }
     });
 
-    // If roleId or email/fullName change is requested, update user too
+    // Update user
     const updateUserData: any = {};
     if (email) updateUserData.email = email;
     if (fullName) updateUserData.fullName = fullName;
     if (roleId) updateUserData.roleId = roleId;
     if (subRoleId) updateUserData.subRoleId = subRoleId;
-
 
     if (Object.keys(updateUserData).length > 0) {
       await prisma.user.update({
@@ -625,62 +626,50 @@ export const updateEmployee = async (req: Request, res: Response) => {
       });
     }
 
-    // Notification after update
+    // 👇 Notifications
     try {
-      const updatedUser = await prisma.user.findUnique({
-        where: { id: updatedEmployee.userId },
-        include: {
-          role: true,
-          subRole: true,
-        }
-      });
-
       const performedBy = req.user as unknown as CustomJwtPayload;
-
-      const performedByUser = await prisma.user.findUnique({
-        where: { id: performedBy.userId },
+      const performer = await prisma.user.findUnique({ where: { id: performedBy.userId } });
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: updatedEmployee.userId }
       });
 
-      const performedByName = performedByUser?.fullName || 'Someone';
+      const performerName = performer?.fullName ?? 'Someone';
       const employeeName = fullName || updatedUser?.fullName || 'An employee';
 
       await Promise.all([
-        // Notify Admin with performer’s name
-        prisma.notification.create({
+        createScopedNotification({
+          scope: 'ADMIN_ONLY',
           data: {
-            title: `Employee Info Updated`,
-            message: `${employeeName}'s info was updated by ${performedByName}.`,
-            type: 'Employee',
-            visibilityLevel: 0,
-            employeeId: updatedEmployee.id
-          }
+            title: 'Employee Info Updated',
+            message: `${employeeName}'s info was updated by ${performerName}.`,
+            type: 'Employee'
+          },
+          visibilityLevel: 0
         }),
-
-        // Notify Manager, Director, TeamLead (visibilityLevel 1)
-        prisma.notification.create({
+        createScopedNotification({
+          scope: 'DIRECTORS_HR',
           data: {
-            title: `Employee Info Updated`,
+            title: 'Employee Info Updated',
             message: `${employeeName}'s profile was updated.`,
-            type: 'Employee',
-            visibilityLevel: 1,
-            employeeId: updatedEmployee.id
-          }
+            type: 'Employee'
+          },
+          visibilityLevel: 1
         }),
-
-        // Notify specific employee
-        prisma.notification.create({
+        createScopedNotification({
+          scope: 'EMPLOYEE_ONLY',
           data: {
-            title: `Your Info Was Updated`,
+            title: 'Your Info Was Updated',
             message: `Your profile was updated. Please verify the changes.`,
-            type: 'Employee',
-            userId: updatedEmployee.userId
-          }
+            type: 'Employee'
+          },
+          targetIds: { userId: updatedEmployee.userId },
+          visibilityLevel: 3
         })
       ]);
-    } catch (notifyErr) {
-      console.error('Notification error after updateEmployee:', notifyErr);
+    } catch (err) {
+      console.error('Notification error after updateEmployee:', err);
     }
-
 
     return res.status(200).json({
       success: true,
@@ -694,11 +683,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
           designation: updatedEmployee.position,
           department: departmentId,
           status: updatedEmployee.status,
-          // profileImage: updatedEmployee.profileImage,
-          // documents: updatedEmployee.documents ? JSON.parse(updatedEmployee.documents) : [],
-          skills: updatedEmployee.skills
-            ? updatedEmployee.skills.split(',').map(skill => skill.trim())
-            : [],
+          skills: updatedEmployee.skills?.split(',').map(s => s.trim()) || [],
           workLocation: updatedEmployee.workLocation,
           gender: updatedEmployee.gender,
           address: updatedEmployee.address,
@@ -725,106 +710,95 @@ export const deleteEmployee = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    // Check if employee exists
     const employee = await prisma.employee.findUnique({
       where: { id },
-      include: { user: true }, // Fetch associated user
+      include: { user: true }
     });
 
     if (!employee) {
       return res.status(404).json({
         success: false,
-        message: 'Employee not found',
+        message: 'Employee not found'
       });
     }
 
-    // Transactional delete
     await prisma.$transaction(async (tx) => {
-      // Delete employee record
-      await tx.employee.delete({
-        where: { id },
-      });
+      await tx.employee.delete({ where: { id } });
 
-      // Soft delete: mark user as inactive
       if (employee.userId) {
         await tx.user.update({
           where: { id: employee.userId },
-          data: {
-            status: 'inactive', // or 'deleted', based on your convention
-          },
+          data: { status: 'inactive' }
         });
       }
     });
 
-    // Notification after delete
+    // 👇 Notifications
     try {
       const performedBy = req.user as unknown as CustomJwtPayload;
+      const performer = await prisma.user.findUnique({ where: { id: performedBy.userId } });
 
-      const performedByUser = await prisma.user.findUnique({
-        where: { id: performedBy.userId },
-      });
-
-      const performedByName = performedByUser?.fullName || 'Someone';
-      const deletedEmployeeName = employee.user?.fullName || 'An employee';
+      const performerName = performer?.fullName ?? 'Someone';
+      const employeeName = employee.user?.fullName || 'An employee';
 
       await Promise.all([
-        // Notify Admin (visibilityLevel 0)
-        prisma.notification.create({
+        createScopedNotification({
+          scope: 'ADMIN_ONLY',
           data: {
-            title: `Employee Deleted`,
-            message: `${deletedEmployeeName} was removed from the company by ${performedByName}.`,
-            type: 'Employee',
-            visibilityLevel: 0
-          }
+            title: 'Employee Deleted',
+            message: `${employeeName} was removed by ${performerName}.`,
+            type: 'Employee'
+          },
+          visibilityLevel: 0
         }),
-
-        // Notify Managers, TLs, etc. (visibilityLevel 1)
-        prisma.notification.create({
+        createScopedNotification({
+          scope: 'DIRECTORS_HR',
           data: {
-            title: `Employee Removed`,
-            message: `${deletedEmployeeName} was removed by ${performedByName}.`,
-            type: 'Employee',
-            visibilityLevel: 1
-          }
+            title: 'Employee Removed',
+            message: `${employeeName} was removed from the company.`,
+            type: 'Employee'
+          },
+          visibilityLevel: 1
         }),
-
-        // Notify Department (if available)
-        employee.departmentId && prisma.notification.create({
+        employee.departmentId &&
+        createScopedNotification({
+          scope: 'MANAGERS_DEPT',
           data: {
-            title: `Team Member Removed`,
-            message: `${deletedEmployeeName} was removed from your department by ${performedByName}.`,
-            type: 'Employee',
-            visibilityLevel: 2,
-            departmentId: employee.departmentId
-          }
+            title: 'Team Member Removed',
+            message: `${employeeName} was removed from your department.`,
+            type: 'Employee'
+          },
+          targetIds: { departmentId: employee.departmentId },
+          visibilityLevel: 2,
+          excludeUserId: employee.userId
         }),
-
-        // Notify Sub-department (if available)
-        employee.subDepartmentId && prisma.notification.create({
+        employee.subDepartmentId &&
+        createScopedNotification({
+          scope: 'TEAMLEADS_SUBDEPT',
           data: {
-            title: `Team Member Removed`,
-            message: `${deletedEmployeeName} was removed from your sub-department by ${performedByName}.`,
-            type: 'Employee',
-            visibilityLevel: 3,
-            subDepartmentId: employee.subDepartmentId
-          }
+            title: 'Team Member Removed',
+            message: `${employeeName} was removed from your sub-department.`,
+            type: 'Employee'
+          },
+          targetIds: { subDepartmentId: employee.subDepartmentId },
+          visibilityLevel: 3,
+          excludeUserId: employee.userId
         })
       ]);
-    } catch (notifyErr) {
-      console.error('Notification error after deleteEmployee:', notifyErr);
+    } catch (err) {
+      console.error('Notification error after deleteEmployee:', err);
     }
-
-
 
     return res.status(200).json({
       success: true,
-      message: 'Employee deleted and user marked as inactive successfully',
+      message: 'Employee deleted and user marked as inactive successfully'
     });
+
   } catch (error) {
     console.error('Delete employee error:', error);
     return res.status(500).json({
       success: false,
-      message: 'Internal server error',
+      message: 'Internal server error'
     });
   }
 };

@@ -181,4 +181,3 @@ export async function createScopedNotification(opts: NotifyOptions) {
 
     return notification;
 }
-
