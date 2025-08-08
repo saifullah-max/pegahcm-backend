@@ -189,8 +189,8 @@ model Employee {
   user                  User                   @relation(fields: [userId], references: [id])
   userId                String                 @unique
   employeeNumber        String                 @unique
-  department            Department             @relation(fields: [departmentId], references: [id])
-  departmentId          String
+  department            Department?            @relation(fields: [departmentId], references: [id])
+  departmentId          String?
   subDepartment         SubDepartment?         @relation(fields: [subDepartmentId], references: [id])
   subDepartmentId       String?
   phoneNumber           String?

@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import express, { Request, Response } from 'express';
+import { createScopedNotification } from '../utils/notificationUtils';
 const prisma = new PrismaClient();
 
 const router = express.Router();
@@ -122,6 +123,8 @@ export const deleteSubRole = async (req: Request, res: Response) => {
 export const assignPermissionsToSubRole = async (req: Request, res: Response) => {
     try {
         const { subRoleId, permissionIds } = req.body;
+        const performedByUserId = req.user?.userId;
+        const performedByName = req.user?.username || 'Admin';
 
         if (!subRoleId || !Array.isArray(permissionIds)) {
             return res.status(400).json({ message: 'Invalid data' });
@@ -167,10 +170,56 @@ export const assignPermissionsToSubRole = async (req: Request, res: Response) =>
             }
         });
 
+        // 🔔 Notify all users with that subRole
+        const targetUsers = await prisma.user.findMany({
+            where: {
+                subRoleId,
+                status: 'ACTIVE',
+            },
+            select: { id: true },
+        });
+
+
+        try {
+            const notifyUserPromises = targetUsers.map(user =>
+                createScopedNotification({
+                    scope: 'ASSIGNED_USER',
+                    targetIds: { userId: user.id },
+                    data: {
+                        title: 'Role Permissions Updated',
+                        message: `Permissions for your role have been updated by ${performedByName}.`,
+                        type: 'INFO',
+                    },
+                    visibilityLevel: 3,
+                    showPopup: true,
+                    excludeUserId: performedByUserId, // Don't notify admin again
+                })
+            );
+
+            // 🔔 Notify admin who updated
+            if (performedByUserId) {
+                notifyUserPromises.push(
+                    createScopedNotification({
+                        scope: 'ASSIGNED_USER',
+                        targetIds: { userId: performedByUserId },
+                        data: {
+                            title: 'Sub-role Permissions Updated',
+                            message: `You successfully updated permissions for sub-role users.`,
+                            type: 'INFO',
+                        },
+                        visibilityLevel: 0,
+                        showPopup: true,
+                    })
+                );
+            }
+            await Promise.all(notifyUserPromises);
+        } catch (error) {
+            console.error("Failed to notify subroles as their permissions updated: ", error)
+        }
+
         res.status(200).json({ message: 'SubRole and user permissions updated successfully' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Failed to assign permissions to SubRole' });
     }
 };
-

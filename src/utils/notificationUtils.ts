@@ -107,6 +107,8 @@ type VisibilityScope = 'ADMIN_ONLY' | 'DIRECTORS_HR' | 'MANAGERS_DEPT' | 'TEAMLE
 export async function createScopedNotification(opts: NotifyOptions) {
     const { scope, data, targetIds, visibilityLevel, excludeUserId } = opts;
 
+    console.log('📥 Incoming Notification Options:', opts);
+
     const notification = await prisma.notification.create({
         data: {
             ...data,
@@ -117,6 +119,8 @@ export async function createScopedNotification(opts: NotifyOptions) {
             visibilityLevel,
         }
     });
+
+    console.log('✅ Notification Created:', notification.id);
 
     let targetUserIds: string[] = [];
 
@@ -179,9 +183,11 @@ export async function createScopedNotification(opts: NotifyOptions) {
             }
             break;
     }
+    console.log('🎯 Target User IDs:', targetUserIds);
 
     if (excludeUserId) {
         targetUserIds = targetUserIds.filter(id => id !== excludeUserId);
+        console.log('🧹 After excluding:', targetUserIds);
     }
 
     await prisma.userNotification.createMany({

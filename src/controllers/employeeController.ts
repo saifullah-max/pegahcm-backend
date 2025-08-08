@@ -124,7 +124,6 @@ export const createEmployee = async (req: Request, res: Response) => {
       type: file.mimetype
     }));
 
-    // Validate workLocation
     if (!['Onsite', 'Remote', 'Hybrid'].includes(workLocation)) {
       return res.status(400).json({
         success: false,
@@ -139,7 +138,6 @@ export const createEmployee = async (req: Request, res: Response) => {
         ? skills.split(',').map(s => s.trim())
         : [];
 
-    // Check if user with same email already exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
 
     if (existingUser) {
@@ -150,12 +148,9 @@ export const createEmployee = async (req: Request, res: Response) => {
     }
 
     const employeeNumber = await generateEmployeeNumber();
-
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
-
     const roleTagName: RoleTag = RoleTag.HR;
-    // Transaction: create user and employee
+
     const result = await prisma.$transaction(async (prismaTx) => {
       const newUser = await prismaTx.user.create({
         data: {
@@ -171,7 +166,6 @@ export const createEmployee = async (req: Request, res: Response) => {
         }
       });
 
-      // ✅ Copy subRole permissions
       if (subRoleId) {
         const subRolePermissions = await prismaTx.subRolePermission.findMany({
           where: { subRoleId },
@@ -189,14 +183,23 @@ export const createEmployee = async (req: Request, res: Response) => {
         }
       }
 
+      const subRole = subRoleId
+        ? await prismaTx.subRole.findUnique({
+          where: { id: subRoleId },
+          select: { name: true },
+        })
+        : null;
+
+      const isDirector = subRole?.name?.toLowerCase() === 'director';
+
       const newEmployee = await prismaTx.employee.create({
         data: {
           userId: newUser.id,
           phoneNumber: String(phoneNumber),
           employeeNumber,
           shiftId,
-          departmentId,
-          subDepartmentId,
+          departmentId: !isDirector ? departmentId : null,
+          subDepartmentId: !isDirector ? subDepartmentId : null,
           position: designation,
           fatherName: fatherName ?? undefined,
           dateOfBirth: new Date(dateOfBirth),
@@ -215,12 +218,12 @@ export const createEmployee = async (req: Request, res: Response) => {
 
       return {
         user: newUser,
-        employee: newEmployee
+        employee: newEmployee,
+        isDirector
       };
     });
 
     try {
-      // 👇 Use createScopedNotification
       await Promise.all([
         createScopedNotification({
           scope: "ADMIN_ONLY",
@@ -242,6 +245,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           visibilityLevel: 1,
         }),
 
+        !result.isDirector &&
         departmentId &&
         createScopedNotification({
           scope: "MANAGERS_DEPT",
@@ -258,6 +262,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           excludeUserId: result.user.id,
         }),
 
+        !result.isDirector &&
         subDepartmentId &&
         createScopedNotification({
           scope: "TEAMLEADS_SUBDEPT",
@@ -274,7 +279,6 @@ export const createEmployee = async (req: Request, res: Response) => {
           excludeUserId: result.user.id
         }),
 
-        // 👇 Direct notification to the user (no exclusion)
         createScopedNotification({
           scope: "EMPLOYEE_ONLY",
           data: {
@@ -286,11 +290,9 @@ export const createEmployee = async (req: Request, res: Response) => {
           visibilityLevel: 3,
         }),
       ]);
-
     } catch (error) {
       console.error("Some error occurred while notifying user", error);
     }
-
 
     return res.status(201).json({
       success: true,
@@ -304,8 +306,6 @@ export const createEmployee = async (req: Request, res: Response) => {
           designation: result.employee.position,
           department: departmentId,
           status: result.employee.status,
-          // profileImage: result.employee.profileImage,
-          // documents: result.employee.documents ? JSON.parse(result.employee.documents) : [],
           skills: result.employee.skills
             ? result.employee.skills.split(',').map(skill => skill.trim())
             : [],
@@ -496,6 +496,7 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
           fullName: employee.user.fullName,
           email: employee.user.email,
           roleId: employee.user.roleId,
+          subRoleId: employee.user.subRoleId,
           status: employee.user.status,
           dateJoined: employee.user.dateJoined,
         },

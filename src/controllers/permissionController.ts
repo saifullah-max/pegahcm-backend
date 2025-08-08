@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { Request, Response } from 'express';
+import { createScopedNotification } from '../utils/notificationUtils';
 
 const prisma = new PrismaClient();
 
@@ -77,6 +78,8 @@ export const getAllPermissions = async (req: Request, res: Response) => {
 export const assignPermissionsToUser = async (req: Request, res: Response) => {
   try {
     const { userId, permissionIds } = req.body;
+    const performedByUserId = req.user?.userId;
+    const performedByName = req.user?.username || 'Admin';
 
     const data = permissionIds.map((permissionId: string) => ({
       userId,
@@ -84,12 +87,39 @@ export const assignPermissionsToUser = async (req: Request, res: Response) => {
     }));
 
     await prisma.userPermission.deleteMany({ where: { userId } });
+    await prisma.userPermission.createMany({ data, skipDuplicates: true });
 
-    await prisma.userPermission.createMany({
-      data,
-      skipDuplicates: true,
-    });
+    try {
+      // 🔔 Notify target user
+      await createScopedNotification({
+        scope: 'ASSIGNED_USER',
+        targetIds: { userId },
+        data: {
+          title: 'Permissions Updated',
+          message: `Your permissions have been updated by ${performedByName}.`,
+          type: 'INFO',
+        },
+        visibilityLevel: 3,
+        showPopup: true,
+      });
 
+      // 🔔 Notify admin himself
+      if (performedByUserId) {
+        await createScopedNotification({
+          scope: 'ADMIN_ONLY',
+          targetIds: { userId: performedByUserId },
+          data: {
+            title: 'Permission Update Executed',
+            message: `You successfully updated permissions for a user.`,
+            type: 'INFO',
+          },
+          visibilityLevel: 0,
+          showPopup: true,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send notification while updating user"/s" permission:', error)
+    }
 
     res.status(200).json({ message: 'Permissions assigned successfully' });
   } catch (error) {
