@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { initSocket } from './utils/socket';
+import http from 'http';
 import authRoutes from './routes/authRoutes';
 import roleRoutes from './routes/roleRoutes';
 import subRoleRoutes from './routes/subRolesRoutes'
@@ -23,6 +25,12 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3003;
+
+const server = http.createServer(app);
+
+// Initialize Socket.IO cleanly
+initSocket(server);
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -50,6 +58,6 @@ app.get('/', (req, res) => {
 });
 
 // Start server
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-}); 
+server.listen(port, () => {
+  console.log(`Server + Socket.IO running on port ${port}`);
+});

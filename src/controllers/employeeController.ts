@@ -749,7 +749,8 @@ export const deleteEmployee = async (req: Request, res: Response) => {
             message: `${employeeName} was removed by ${performerName}.`,
             type: 'Employee'
           },
-          visibilityLevel: 0
+          visibilityLevel: 0,
+          showPopup: true
         }),
         createScopedNotification({
           scope: 'DIRECTORS_HR',
@@ -758,7 +759,8 @@ export const deleteEmployee = async (req: Request, res: Response) => {
             message: `${employeeName} was removed from the company.`,
             type: 'Employee'
           },
-          visibilityLevel: 1
+          visibilityLevel: 1,
+          showPopup: true
         }),
         employee.departmentId &&
         createScopedNotification({
@@ -770,7 +772,8 @@ export const deleteEmployee = async (req: Request, res: Response) => {
           },
           targetIds: { departmentId: employee.departmentId },
           visibilityLevel: 2,
-          excludeUserId: employee.userId
+          excludeUserId: employee.userId,
+          showPopup: true
         }),
         employee.subDepartmentId &&
         createScopedNotification({
@@ -782,7 +785,8 @@ export const deleteEmployee = async (req: Request, res: Response) => {
           },
           targetIds: { subDepartmentId: employee.subDepartmentId },
           visibilityLevel: 3,
-          excludeUserId: employee.userId
+          excludeUserId: employee.userId,
+          showPopup: true
         })
       ]);
     } catch (err) {

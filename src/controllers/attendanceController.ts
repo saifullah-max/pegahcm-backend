@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { NotificationScope, PrismaClient } from '@prisma/client';
 import { JwtPayload } from "jsonwebtoken";
-import { createScopedNotification } from "../utils/notificationUtils";
+import { createScopedNotification, notifyLeaveApprovers } from "../utils/notificationUtils";
 const prisma = new PrismaClient();
 
 interface CustomJwtPayload extends JwtPayload {
@@ -420,6 +420,20 @@ export const leaveRequest = async (req: Request, res: Response) => {
 
         const newRequest = await prisma.leaveRequest.create({ data });
 
+        const leaveName = await prisma.leaveType.findUnique({
+            where: { id: leaveId }
+        })
+        const empName = await prisma.user.findUnique({
+            where: { id: employee.userId }
+        })
+
+        await notifyLeaveApprovers({
+            employeeId: employee.id,
+            title: "New Leave Request",
+            message: `${empName?.fullName} submitted a leave request from ${startDate} to ${endDate} for the ${leaveName?.name}`,
+        });
+
+
         return res.status(201).json({ success: true, data: newRequest });
     } catch (error) {
         console.error('Error creating leave request:', error);
@@ -562,7 +576,7 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
 
         const currentUserId = (req.user as unknown as CustomJwtPayload).userId;
 
-        // Fetch current user (includes both Admin and User roles)
+        // Fetch current user
         const user = await prisma.user.findUnique({
             where: { id: currentUserId },
             include: {
@@ -581,7 +595,29 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             return res.status(403).json({ success: false, message: 'User has no role assigned.' });
         }
 
-        // Only perform sub-role comparison for non-admin users
+        // 🔄 Fetch leave request (used in all branches)
+        const targetLeaveRequest = await prisma.leaveRequest.findUnique({
+            where: { id },
+            include: {
+                employee: {
+                    include: {
+                        user: {
+                            include: {
+                                subRole: true,
+                            },
+                        },
+                        department: true,
+                        subDepartment: true,
+                    },
+                },
+            },
+        });
+
+        if (!targetLeaveRequest) {
+            return res.status(404).json({ success: false, message: 'Leave request not found.' });
+        }
+
+        // 🔐 Sub-role level checks for non-admins
         if (roleName !== 'admin') {
             if (!user.subRole || typeof user.subRole.level !== 'number') {
                 return res.status(403).json({
@@ -591,28 +627,7 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             }
 
             const approverLevel = user.subRole.level;
-
-            // Get requester level
-            const leaveRequest = await prisma.leaveRequest.findUnique({
-                where: { id },
-                include: {
-                    employee: {
-                        include: {
-                            user: {
-                                include: {
-                                    subRole: true,
-                                },
-                            },
-                        },
-                    },
-                },
-            });
-
-            if (!leaveRequest) {
-                return res.status(404).json({ success: false, message: 'Leave request not found.' });
-            }
-
-            const requesterLevel = leaveRequest.employee?.user?.subRole?.level;
+            const requesterLevel = targetLeaveRequest.employee?.user?.subRole?.level;
 
             if (requesterLevel === undefined || requesterLevel === null) {
                 return res.status(403).json({
@@ -629,7 +644,7 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             }
         }
 
-        // Update leave request
+        // ✅ Update leave status
         const updated = await prisma.leaveRequest.update({
             where: { id },
             data: {
@@ -638,6 +653,64 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
                 approvedById: currentUserId,
             },
         });
+
+        const employeeUser = targetLeaveRequest.employee.user;
+        const fullName = `${employeeUser.fullName}`;
+        const fromDate = targetLeaveRequest.startDate.toLocaleDateString();
+        const toDate = targetLeaveRequest.endDate.toLocaleDateString();
+
+        // 🔔 1. Notify the employee who applied
+        await createScopedNotification({
+            scope: "EMPLOYEE_ONLY",
+            data: {
+                title: status === 'Approved' ? "🎉 Leave Approved" : "⛔ Leave Rejected",
+                message: status === 'Approved'
+                    ? `${user.fullName} approved your leave from ${fromDate} to ${toDate}.`
+                    : `Your leave request from ${fromDate} to ${toDate} was rejected.`,
+                type: "LeaveRequest",
+            },
+            targetIds: {
+                userId: employeeUser.id,
+            },
+            visibilityLevel: 0,
+            showPopup: true,
+        });
+
+        // 🔔 2. Notify department managers
+        if (targetLeaveRequest.employee.departmentId) {
+            await createScopedNotification({
+                scope: "MANAGERS_DEPT",
+                data: {
+                    title: "Leave Request Processed",
+                    message: `${user.fullName} ${status.toLowerCase()} the leave request of ${fullName}.`,
+                    type: "LeaveRequest",
+                },
+                targetIds: {
+                    departmentId: targetLeaveRequest.employee.departmentId,
+                },
+                visibilityLevel: 1,
+                excludeUserId: currentUserId,
+                showPopup: true,
+            });
+        }
+
+        // 🔔 3. Notify team leads of the same sub-department
+        if (targetLeaveRequest.employee.subDepartmentId) {
+            await createScopedNotification({
+                scope: "TEAMLEADS_SUBDEPT",
+                data: {
+                    title: "Leave Request Processed",
+                    message: `${user.fullName} ${status.toLowerCase()} the leave request of ${fullName}.`,
+                    type: "LeaveRequest",
+                },
+                targetIds: {
+                    subDepartmentId: targetLeaveRequest.employee.subDepartmentId,
+                },
+                visibilityLevel: 1,
+                excludeUserId: currentUserId,
+                showPopup: true,
+            });
+        }
 
         return res.status(200).json({ success: true, data: updated });
 

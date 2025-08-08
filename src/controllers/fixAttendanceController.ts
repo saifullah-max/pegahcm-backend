@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { PrismaClient } from '@prisma/client';
 import { JwtPayload } from "jsonwebtoken";
+import { createScopedNotification, notifyLeaveApprovers } from "../utils/notificationUtils";
 const prisma = new PrismaClient();
 
 interface CustomJwtPayload extends JwtPayload {
@@ -78,8 +79,19 @@ export const submitFixAttendanceRequest = async (req: Request, res: Response) =>
                 status: 'Pending',
             },
         });
+        const emp = await prisma.employee.findUnique({ where: { id: employeeId } })
 
+        const user = await prisma.user.findUnique({
+            where: { id: emp?.userId }
+        })
 
+        // ✅ Notify relevant users
+        await notifyLeaveApprovers({
+            employeeId,
+            title: `Attendance Fix Request (${requestType})`,
+            message: `An attendance fix request has been submitted by (${user?.fullName}). Reason: ${reason}`,
+            showPopup: true,
+        });
 
         return res.status(201).json({ message: 'Attendance fix request submitted.', data: attendanceFix });
 
@@ -168,6 +180,76 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
                     })),
                 });
             }
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: request.employee.userId } })
+
+        try {
+            // 🔔 Prepare notification title and message
+            const employeeName = `${user?.fullName}`;
+            const approverName = await prisma.user.findUnique({ where: { id: reviewerId } });
+            const isApproved = status === 'Approved';
+
+            const baseNotification = {
+                title: `Attendance Fix Request ${status}`,
+                message: isApproved
+                    ? `Your attendance fix request was approved by ${approverName?.fullName}. Your attendance has been updated.`
+                    : `Your attendance fix request was rejected.`,
+            };
+
+            // 🔔 Notify EMPLOYEE_ONLY
+            await createScopedNotification({
+                scope: 'EMPLOYEE_ONLY',
+                targetIds: { userId: request.employee.userId },
+                data: {
+                    title: baseNotification.title,
+                    message: baseNotification.message,
+                    type: 'INFO',
+                },
+                visibilityLevel: 3,
+                showPopup: true
+            });
+
+            // 🔔 Notify others (managers, directors, team leads, HR)
+            const commonData = {
+                title: `Attendance Fix Request ${status}`,
+                message: `${employeeName}'s attendance fix request was ${status.toLowerCase()}.`,
+                type: 'INFO',
+            };
+
+            // notify HR (DIRECTORS_HR)
+            await createScopedNotification({
+                scope: 'DIRECTORS_HR',
+                targetIds: {},
+                data: commonData,
+                visibilityLevel: 1,
+                excludeUserId: reviewerId, // reviewer shouldn’t get self-notification
+            });
+
+            // notify managers in same dept
+            if (request.employee.departmentId) {
+                await createScopedNotification({
+                    scope: 'MANAGERS_DEPT',
+                    targetIds: { departmentId: request.employee.departmentId },
+                    data: commonData,
+                    visibilityLevel: 2,
+                    excludeUserId: reviewerId,
+                });
+            }
+
+            // notify team leads in same sub-dept
+            if (request.employee.subDepartmentId) {
+                await createScopedNotification({
+                    scope: 'TEAMLEADS_SUBDEPT',
+                    targetIds: { subDepartmentId: request.employee.subDepartmentId },
+                    data: commonData,
+                    visibilityLevel: 2,
+                    excludeUserId: reviewerId,
+                });
+            }
+
+        } catch (error) {
+
         }
 
         // ✅ Update fix request status
@@ -308,6 +390,15 @@ export const editFixRequest = async (req: Request, res: Response) => {
     try {
         const existingRequest = await prisma.attendanceFixRequest.findUnique({
             where: { id: requestId },
+            include: {
+                employee: {
+                    include: {
+                        user: true,
+                        department: true,
+                        subDepartment: true
+                    }
+                }
+            }
         });
 
         if (!existingRequest) {
@@ -322,7 +413,6 @@ export const editFixRequest = async (req: Request, res: Response) => {
                 where: { id: existingRequest.attendanceRecordId },
             });
 
-            // Unlink attendanceRecord from fix request
             await prisma.attendanceFixRequest.update({
                 where: { id: requestId },
                 data: { attendanceRecordId: null },
