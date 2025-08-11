@@ -166,6 +166,9 @@ model User {
   Notification          Notification[]
   AttendanceFixRequest  AttendanceFixRequest[]
   UserNotification      UserNotification[]
+
+  resetPasswordToken   String?   @unique
+  resetPasswordExpires DateTime?
 }
 
 model Role {
