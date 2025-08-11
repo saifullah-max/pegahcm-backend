@@ -149,7 +149,10 @@ export const createEmployee = async (req: Request, res: Response) => {
 
     const employeeNumber = await generateEmployeeNumber();
     const passwordHash = await bcrypt.hash(password, 10);
-    const roleTagName: RoleTag = RoleTag.HR;
+
+    const prismaRoleTag: RoleTag | null = Object.values(RoleTag).includes(roleTag as RoleTag)
+      ? (roleTag as RoleTag)
+      : null;
 
     const result = await prisma.$transaction(async (prismaTx) => {
       const newUser = await prismaTx.user.create({
@@ -160,7 +163,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           fullName,
           roleId,
           subRoleId,
-          roleTag: roleTagName,
+          roleTag: prismaRoleTag,
           status,
           dateJoined: new Date()
         }

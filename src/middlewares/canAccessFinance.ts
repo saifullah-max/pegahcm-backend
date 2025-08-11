@@ -25,6 +25,10 @@ export const canAccessSalary = async (
     if (!dbUser) {
         return res.status(404).json({ message: 'User not found' });
     }
+    console.log('Role:', dbUser.role.name);
+    console.log('SubRole:', dbUser.subRole?.name);
+    console.log('RoleTag:', dbUser.roleTag);
+
 
     const isAdmin = dbUser.role.name.toLowerCase() === 'admin';
     const isFinanceManager =
