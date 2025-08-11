@@ -18,6 +18,7 @@ enum RoleTag {
   INTERVIEWER
   RECRUITER
   TRAINER
+  FINANCE
 }
 
 model SubRole {
@@ -222,6 +223,7 @@ model Employee {
   hrProcesses           HRProcess[]
   LeaveBalance          LeaveBalance[]
   AttendanceFixRequest  AttendanceFixRequest[]
+  salaryDetails         SalaryDetail[]
 }
 
 model employeeImage {
@@ -291,6 +293,7 @@ model LeaveType {
   isPaid        Boolean        @default(true)
   leaveRequests LeaveRequest[]
   LeaveBalance  LeaveBalance[]
+  totalDays     Int
 }
 
 model BreakType {
@@ -444,4 +447,37 @@ model AttendanceFixRequest {
   remarks            String? // Optional comment from reviewer
   AttendanceRecord   AttendanceRecord? @relation(fields: [attendanceRecordId], references: [id])
   attendanceRecordId String?
+}
+
+model SalaryDetail {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+
+  baseSalary Decimal @db.Decimal(10, 2)
+  deductions Decimal @default(0.00) @db.Decimal(10, 2)
+  bonuses    Decimal @default(0.00) @db.Decimal(10, 2)
+  totalPay   Decimal @db.Decimal(10, 2)
+
+  allowances Allowance[] // 👈 One-to-many
+
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+
+  createdBy String
+  updatedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Allowance {
+  id       String       @id @default(uuid())
+  salary   SalaryDetail @relation(fields: [salaryId], references: [id], onDelete: Cascade)
+  salaryId String
+
+  type   String
+  amount Decimal @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
 }

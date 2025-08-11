@@ -483,7 +483,7 @@ export const getEmployeeLeaves = async (req: Request, res: Response) => {
 };
 
 export const createLeaveType = async (req: Request, res: Response) => {
-    const { name, description, isPaid } = req.body;
+    const { name, description, isPaid, totalDays } = req.body;
 
     if (!name) {
         return res.status(400).json({ success: false, message: 'Name is required' });
@@ -495,6 +495,7 @@ export const createLeaveType = async (req: Request, res: Response) => {
                 name,
                 description,
                 isPaid: isPaid ?? true, // default true if not provided
+                totalDays: Number(totalDays)
             },
         });
 
