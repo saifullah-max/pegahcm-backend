@@ -1,44 +1,43 @@
-import multer from 'multer';
+// src/middleware/uploadMiddleware.ts
+import multer, { FileFilterCallback } from 'multer';
 import path from 'path';
 import { Request, Response, NextFunction } from 'express';
 import sharp from 'sharp';
 import fs from 'fs/promises';
 
+// Detect environment
+const isProd = process.env.NODE_ENV === 'production';
+
+// Base upload directory (relative to project root)
+const baseUploadPath = path.join(__dirname, '../../uploads');
+
 // Configure storage
 const storage = multer.diskStorage({
-  destination: async (req: Request, file: Express.Multer.File, cb) => {
-    let uploadPath = 'uploads/';
-    
-    // Determine upload path based on file type
-    if (file.fieldname === 'profileImage') {
-      uploadPath += 'profiles/';
-    } else if (file.fieldname === 'documents') {
-      uploadPath += 'documents/';
+  destination: async (req, file, cb) => {
+    let folder = file.fieldname === 'profileImage' ? 'profiles' : 'documents';
+    const uploadPath = path.join(baseUploadPath, folder);
+
+    try {
+      await fs.mkdir(uploadPath, { recursive: true });
+      cb(null, uploadPath);
+    } catch (err) {
+      cb(err as Error, uploadPath);
     }
-    
-    // Ensure directory exists
-    await fs.mkdir(uploadPath, { recursive: true });
-    cb(null, uploadPath);
   },
-  filename: (req: Request, file: Express.Multer.File, cb) => {
-    // Generate unique filename
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
   }
 });
 
 // File filter
-const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  // Accept images for profile
+const fileFilter = (req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
   if (file.fieldname === 'profileImage') {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed for profile picture'));
-    }
+    if (file.mimetype.startsWith('image/')) return cb(null, true);
+    return cb(new Error('Only images are allowed for profileImage'));
   }
-  // Accept documents
-  else if (file.fieldname === 'documents') {
+
+  if (file.fieldname === 'documents') {
     const allowedTypes = [
       'application/pdf',
       'application/msword',
@@ -46,61 +45,52 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
       'image/jpeg',
       'image/png'
     ];
-    if (allowedTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type for documents'));
-    }
+    if (allowedTypes.includes(file.mimetype)) return cb(null, true);
+    return cb(new Error('Invalid file type for documents'));
   }
+
+  cb(new Error('Unknown field'));
 };
 
-// Create multer instance
+// Multer instance
 const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  }
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5 MB
 });
 
-// Middleware to process profile images
+// Image processing middleware
 const processProfileImage = async (req: Request, res: Response, next: NextFunction) => {
-  if (!req.files || !req.files.profileImage) {
-    return next();
-  }
+  const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+
+  if (!files?.profileImage) return next();
 
   try {
-    const file = req.files.profileImage[0];
-    const originalPath = file.path;
-    const processedPath = path.join('uploads', 'profiles', 'processed-' + file.filename);
+    const file = files.profileImage[0];
+    const processedPath = path.join(path.dirname(file.path), `processed-${file.filename}`);
 
-    // Process image with Sharp
-    await sharp(originalPath)
-      .resize(300, 300, { // Resize to 300x300
-        fit: 'cover',
-        position: 'center'
-      })
-      .jpeg({ quality: 80 }) // Convert to JPEG with 80% quality
+    await sharp(file.path)
+      .resize(300, 300, { fit: 'cover' })
+      .jpeg({ quality: 80 })
       .toFile(processedPath);
 
-    // Delete the original file
-    await fs.unlink(originalPath);
+    await fs.unlink(file.path); // delete original
 
-    // Update the file path in the request
+    // Update file object to point to processed version
+    file.filename = `processed-${file.filename}`;
     file.path = processedPath;
-    file.filename = 'processed-' + file.filename;
+
     next();
-  } catch (error) {
-    console.error('Error processing profile image:', error);
-    next(error);
+  } catch (err) {
+    next(err);
   }
 };
 
-// Export the upload middleware with image processing
+// Final export
 export const uploadMiddleware = [
   upload.fields([
     { name: 'profileImage', maxCount: 1 },
     { name: 'documents', maxCount: 5 }
-  ]) as any,
-  processProfileImage as any
-]; 
+  ]),
+  processProfileImage
+];

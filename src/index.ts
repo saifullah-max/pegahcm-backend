@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { initSocket } from './utils/socket';
 import http from 'http';
+import path from 'path';
 import authRoutes from './routes/authRoutes';
 import roleRoutes from './routes/roleRoutes';
 import subRoleRoutes from './routes/subRolesRoutes'
@@ -35,6 +36,7 @@ initSocket(server);
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -227,6 +227,7 @@ model Employee {
   LeaveBalance          LeaveBalance[]
   AttendanceFixRequest  AttendanceFixRequest[]
   salaryDetails         SalaryDetail[]
+  profileImageUrl       String?
 }
 
 model employeeImage {
