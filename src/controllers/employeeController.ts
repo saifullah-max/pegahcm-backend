@@ -811,6 +811,80 @@ export const deleteEmployee = async (req: Request, res: Response) => {
   }
 };
 
+// GET /users/inactive
+export const listInactiveUsers = async (req: Request, res: Response) => {
+  try {
+    const inactiveUsers = await prisma.user.findMany({
+      where: { status: "inactive" },
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        email: true,
+        roleId: true,
+        status: true,
+        dateJoined: true,
+      },
+      orderBy: { fullName: 'asc' },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        users: inactiveUsers,
+      },
+    });
+  } catch (error) {
+    console.error('List inactive users error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+    });
+  }
+};
+
+// delete user only if linked employee is deleted
+export const deleteUser = async (req: Request, res: Response) => {
+  const userId = req.params.userId;
+
+  try {
+    // Check if employee linked to user exists
+    const employee = await prisma.employee.findUnique({ where: { userId } });
+
+    if (employee) {
+      return res.status(400).json({
+        message: "Cannot delete user while linked employee exists."
+      });
+    }
+
+    // Delete related data in dependent order
+
+    await prisma.userNotification.deleteMany({ where: { userId } });
+    await prisma.userPermission.deleteMany({ where: { userId } });
+    await prisma.systemLog.deleteMany({ where: { userId } });
+    await prisma.bulkUpload.deleteMany({ where: { uploadedById: userId } });
+    await prisma.leaveRequest.deleteMany({ where: { approvedById: userId } });
+    await prisma.vacation.deleteMany({ where: { approvedById: userId } });
+    await prisma.onboardingProcess.deleteMany({ where: { assignedHRId: userId } });
+    await prisma.hRProcess.deleteMany({ where: { initiatedById: userId } });
+
+    // Resignation has two fields referencing User, delete by both
+    await prisma.resignation.deleteMany({ where: { processedById: userId } });
+    await prisma.resignation.deleteMany({ where: { clearanceResponsibleId: userId } });
+
+    await prisma.notification.deleteMany({ where: { userId } });
+    await prisma.attendanceFixRequest.deleteMany({ where: { reviewedById: userId } });
+
+    // Finally, delete the user
+    await prisma.user.delete({ where: { id: userId } });
+
+    res.json({ message: "User and all related data deleted successfully." });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error while deleting user." });
+  }
+};
+
 // upload image
 export const uploadImage = async (req: Request, res: Response) => {
   try {
