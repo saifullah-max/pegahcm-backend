@@ -5,6 +5,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { createScopedNotification } from '../utils/notificationUtils';
 import { JwtPayload } from "jsonwebtoken";
+import { date } from 'zod';
 
 
 // Add multer type definitions
@@ -133,49 +134,71 @@ export const createEmployee = async (req: Request, res: Response) => {
       fatherName,
     }: CreateEmployeeRequest = req.body;
 
-    const files = (req.files || {}) as { [fieldname: string]: Express.Multer.File[] };
+    const files = (req.files || {}) as {
+      [fieldname: string]: Express.Multer.File[];
+    };
 
-    const profileImage = files.profileImage?.[0]
-      ? path.join('uploads', 'profiles', files.profileImage[0].filename)
-      : undefined;
+    // ✅ Build profile image object if uploaded
+    const profileImageObj = files.profileImage?.[0]
+      ? [
+        {
+          name: files.profileImage[0].originalname,
+          url: getFileUrl(req, "profiles", files.profileImage[0].filename),
+          mimeType: files.profileImage[0].mimetype,
+          uploadedAt: new Date(),
+        },
+      ]
+      : [];
 
-    const documents = files.documents?.map(file => ({
-      name: file.originalname,
-      url: path.join('uploads', 'documents', file.filename),
-      type: file.mimetype
-    }));
+    // ✅ Build documents object if uploaded
+    const documentsObj =
+      files.documents?.map((file) => ({
+        name: file.originalname,
+        url: getFileUrl(req, "documents", file.filename),
+        mimeType: file.mimetype,
+        type: file.mimetype,
+        uploadedAt: new Date(),
+      })) || [];
 
-    if (!['Onsite', 'Remote', 'Hybrid'].includes(workLocation)) {
+    // ✅ Validate work location
+    if (!["Onsite", "Remote", "Hybrid"].includes(workLocation)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid work location. Must be one of: Onsite, Remote, Hybrid',
-        received: workLocation
+        message:
+          "Invalid work location. Must be one of: Onsite, Remote, Hybrid",
+        received: workLocation,
       });
     }
 
+    // ✅ Convert skills from string (FormData sends arrays as strings)
     const processedSkills = Array.isArray(skills)
       ? skills
-      : typeof skills === 'string'
-        ? skills.split(',').map(s => s.trim())
+      : typeof skills === "string"
+        ? skills.split(",").map((s) => s.trim())
         : [];
 
+    // ✅ Check for existing user by email
     const existingUser = await prisma.user.findUnique({ where: { email } });
-
     if (existingUser) {
       return res.status(409).json({
         success: false,
-        message: 'A user with this email already exists.'
+        message: "A user with this email already exists.",
       });
     }
 
+    // ✅ Generate Employee Number & Hash Password
     const employeeNumber = await generateEmployeeNumber();
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const prismaRoleTag: RoleTag | null = Object.values(RoleTag).includes(roleTag as RoleTag)
+    const prismaRoleTag: RoleTag | null = Object.values(RoleTag).includes(
+      roleTag as RoleTag
+    )
       ? (roleTag as RoleTag)
       : null;
 
+    // ✅ Transaction: Create User & Employee
     const result = await prisma.$transaction(async (prismaTx) => {
+      // Create User
       const newUser = await prismaTx.user.create({
         data: {
           username: email,
@@ -186,40 +209,42 @@ export const createEmployee = async (req: Request, res: Response) => {
           subRoleId,
           roleTag: prismaRoleTag,
           status,
-          dateJoined: new Date()
-        }
+          dateJoined: new Date(),
+        },
       });
 
+      // ✅ Assign subRole permissions
       if (subRoleId) {
         const subRolePermissions = await prismaTx.subRolePermission.findMany({
           where: { subRoleId },
-          select: { permissionId: true }
+          select: { permissionId: true },
         });
 
         if (subRolePermissions.length > 0) {
           await prismaTx.userPermission.createMany({
             data: subRolePermissions.map((sp) => ({
               userId: newUser.id,
-              permissionId: sp.permissionId
+              permissionId: sp.permissionId,
             })),
-            skipDuplicates: true
+            skipDuplicates: true,
           });
         }
       }
 
+      // ✅ Check if Director
       const subRole = subRoleId
         ? await prismaTx.subRole.findUnique({
           where: { id: subRoleId },
           select: { name: true },
         })
         : null;
+      const isDirector = subRole?.name?.toLowerCase() === "director";
 
-      const isDirector = subRole?.name?.toLowerCase() === 'director';
-
+      // ✅ Create Employee
       const newEmployee = await prismaTx.employee.create({
         data: {
           userId: newUser.id,
-          phoneNumber: String(phoneNumber),
+          phoneNumber: phoneNumber ? String(phoneNumber) : undefined,
           employeeNumber,
           shiftId,
           departmentId: !isDirector ? departmentId : null,
@@ -229,24 +254,23 @@ export const createEmployee = async (req: Request, res: Response) => {
           dateOfBirth: new Date(dateOfBirth),
           hireDate: new Date(joiningDate),
           status,
-          skills: processedSkills.length > 0 ? processedSkills.join(',') : null,
+          skills: processedSkills.length > 0 ? processedSkills.join(",") : null,
           workLocation,
           gender,
           address,
           emergencyContactName,
           emergencyContactPhone,
-          salary
-        }
+          salary,
+          images: profileImageObj,
+          documents: documentsObj,
+          profileImageUrl: profileImageObj[0]?.url,
+        },
       });
 
-
-      return {
-        user: newUser,
-        employee: newEmployee,
-        isDirector
-      };
+      return { user: newUser, employee: newEmployee, isDirector };
     });
 
+    // ✅ Notifications (same logic)
     try {
       await Promise.all([
         createScopedNotification({
@@ -258,7 +282,6 @@ export const createEmployee = async (req: Request, res: Response) => {
           },
           visibilityLevel: 0,
         }),
-
         createScopedNotification({
           scope: "DIRECTORS_HR",
           data: {
@@ -268,7 +291,6 @@ export const createEmployee = async (req: Request, res: Response) => {
           },
           visibilityLevel: 1,
         }),
-
         !result.isDirector &&
         departmentId &&
         createScopedNotification({
@@ -278,14 +300,10 @@ export const createEmployee = async (req: Request, res: Response) => {
             message: `${fullName} has joined your department.`,
             type: "Employee",
           },
-          targetIds: {
-            departmentId,
-            employeeId: result.employee.id,
-          },
+          targetIds: { departmentId, employeeId: result.employee.id },
           visibilityLevel: 2,
           excludeUserId: result.user.id,
         }),
-
         !result.isDirector &&
         subDepartmentId &&
         createScopedNotification({
@@ -295,14 +313,10 @@ export const createEmployee = async (req: Request, res: Response) => {
             message: `${fullName} has joined your sub-department.`,
             type: "Employee",
           },
-          targetIds: {
-            subDepartmentId,
-            employeeId: result.employee.id,
-          },
+          targetIds: { subDepartmentId, employeeId: result.employee.id },
           visibilityLevel: 3,
-          excludeUserId: result.user.id
+          excludeUserId: result.user.id,
         }),
-
         createScopedNotification({
           scope: "EMPLOYEE_ONLY",
           data: {
@@ -314,13 +328,14 @@ export const createEmployee = async (req: Request, res: Response) => {
           visibilityLevel: 3,
         }),
       ]);
-    } catch (error) {
-      console.error("Some error occurred while notifying user", error);
+    } catch (err) {
+      console.error("Notification error:", err);
     }
 
+    // ✅ Final Response
     return res.status(201).json({
       success: true,
-      message: 'Employee and user created successfully.',
+      message: "Employee and user created successfully.",
       data: {
         employee: {
           id: result.employee.id,
@@ -330,27 +345,28 @@ export const createEmployee = async (req: Request, res: Response) => {
           designation: result.employee.position,
           department: departmentId,
           status: result.employee.status,
-          skills: result.employee.skills
-            ? result.employee.skills.split(',').map(skill => skill.trim())
-            : [],
+          skills:
+            result.employee.skills?.split(",").map((s) => s.trim()) || [],
           workLocation: result.employee.workLocation,
           gender: result.employee.gender,
           address: result.employee.address,
           emergencyContact: {
             name: result.employee.emergencyContactName,
-            phone: result.employee.emergencyContactPhone
+            phone: result.employee.emergencyContactPhone,
           },
-          salary: result.employee.salary
-        }
-      }
+          salary: result.employee.salary,
+          profileImageUrl: result.employee.profileImageUrl,
+          images: result.employee.images || [],
+          documents: result.employee.documents || [],
+        },
+      },
     });
-
   } catch (error: any) {
-    console.error('Create employee error:', error);
+    console.error("Create employee error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error?.message || error
+      message: "Internal server error",
+      error: error?.message || error,
     });
   }
 };
@@ -381,22 +397,12 @@ export const listEmployees = async (req: Request, res: Response) => {
       ];
     }
 
-    if (department) {
-      where.departmentId = department;
-    }
+    if (department) where.departmentId = department;
+    if (status) where.status = status;
+    if (workLocation) where.workLocation = workLocation;
 
-    if (status) {
-      where.status = status;
-    }
-
-    if (workLocation) {
-      where.workLocation = workLocation;
-    }
-
-    // Get total count for pagination
     const total = await prisma.employee.count({ where });
 
-    // Get employees with related data
     const employees = await prisma.employee.findMany({
       where,
       skip,
@@ -408,73 +414,56 @@ export const listEmployees = async (req: Request, res: Response) => {
             fullName: true,
             email: true,
             status: true,
-            role: true,
-            subRole: true
+            role: { select: { name: true } },
+            subRole: { select: { name: true } }
           }
         },
-        department: {
-          select: {
-            name: true
-          }
-        },
-        subDepartment: {
-          select: {
-            name: true
-          }
-        },
-        manager: {
-          select: {
-            user: {
-              select: {
-                fullName: true
-              }
-            }
-          }
-        },
-        employeeImages: true,   // Add this
-        employeeDocuments: true // Add this
+        department: { select: { name: true } },
+        subDepartment: { select: { name: true } },
+        manager: { select: { user: { select: { fullName: true } } } },
       },
-      orderBy: {
-        hireDate: 'desc'
-      }
+      orderBy: { hireDate: 'desc' }
     });
 
-    // Format the response
-    const formattedEmployees = employees.map(emp => ({
-      id: emp.id,
-      employeeNumber: emp.employeeNumber,
-      fullName: emp.user.fullName,
-      email: emp.user.email,
-      role: emp.user.role.name,
-      subRole: emp.user.subRole?.name,
-      designation: emp.position,
-      department: emp.department?.name,
-      subDepartment: emp.subDepartment?.name,
-      manager: emp.manager?.user.fullName,
-      status: emp.status,
-      workLocation: emp.workLocation,
-      gender: emp.gender,
-      address: emp.address,
-      emergencyContact: {
-        name: emp.emergencyContactName,
-        phone: emp.emergencyContactPhone
-      },
-      salary: emp.salary,
-      skills: emp.skills ? emp.skills.split(',').map(skill => skill.trim()) : [],
-      hireDate: emp.hireDate,
+    const formattedEmployees = employees.map(emp => {
+      // ✅ Parse JSON safely
+      const images = Array.isArray(emp.images) ? emp.images : [];
+      const documents = Array.isArray(emp.documents) ? emp.documents : [];
 
-      // ✅ ADD THIS LINE
-      userId: emp.user.id,
+      const profileImageUrl = images.length > 0 && typeof images[0] === 'object' && 'url' in images[0]!
+        ? (images[0] as { url: string }).url
+        : emp.profileImageUrl || null;
 
-      // profileImage and documents skipped
-      // Add these:
-      profileImageUrl: emp.employeeImages.length > 0 ? emp.employeeImages[0].url : null, // Use first image as profile
-      documents: emp.employeeDocuments
-    }));
+      return {
+        id: emp.id,
+        employeeNumber: emp.employeeNumber,
+        fullName: emp.user.fullName,
+        email: emp.user.email,
+        role: emp.user.role.name,
+        subRole: emp.user.subRole?.name,
+        designation: emp.position,
+        department: emp.department?.name,
+        subDepartment: emp.subDepartment?.name,
+        manager: emp.manager?.user.fullName,
+        status: emp.status,
+        workLocation: emp.workLocation,
+        gender: emp.gender,
+        address: emp.address,
+        emergencyContact: {
+          name: emp.emergencyContactName,
+          phone: emp.emergencyContactPhone
+        },
+        salary: emp.salary,
+        skills: emp.skills ? emp.skills.split(',').map(skill => skill.trim()) : [],
+        hireDate: emp.hireDate,
 
+        // ✅ New fields
+        profileImageUrl,
+        images,      // Full image objects
+        documents    // Full document objects
+      };
+    });
 
-    // console.log("Data:", employees);
-    // console.log("DATA", formattedEmployees);
     return res.json({
       success: true,
       data: {
@@ -490,10 +479,7 @@ export const listEmployees = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('List employees error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+    return res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
@@ -502,27 +488,28 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
 
   try {
     const employee = await prisma.employee.findFirst({
-      where: {
-        OR: [
-          { id },
-          { userId: id }
-        ]
-      },
+      where: { OR: [{ id }, { userId: id }] },
       include: {
         user: true,
-        shift: true,
-        employeeImages: true,
-        employeeDocuments: true,
-
+        shift: true
       }
     });
 
     if (!employee || !employee.user) {
-      return res.status(404).json({
-        success: false,
-        message: 'Employee or related user not found',
-      });
+      return res.status(404).json({ success: false, message: 'Employee or related user not found' });
     }
+
+    // ✅ Parse images and documents
+    const images = Array.isArray(employee.images) ? employee.images : [];
+    const documents = Array.isArray(employee.documents) ? employee.documents : [];
+
+    const profileImageUrl = images.length > 0 && typeof images[0] === 'object' && 'url' in images[0]!
+      ? (images[0] as { url: string }).url
+      : employee.profileImageUrl || null;
+
+    console.log("image_url", profileImageUrl);
+    console.log("image", images);
+    console.log("docs", documents);
 
     return res.status(200).json({
       success: true,
@@ -555,19 +542,17 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
           workLocation: employee.workLocation,
           emergencyContactName: employee.emergencyContactName,
           emergencyContactPhone: employee.emergencyContactPhone,
-          employeeImages: employee.employeeImages,
-          employeeDocuments: employee.employeeDocuments,
-          profileImageUrl: employee.profileImageUrl
+
+          // ✅ Updated fields
+          profileImageUrl,
+          images,
+          documents
         },
       },
     });
   } catch (error: any) {
     console.error('ListSingleEmployee error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: error.message || error,
-    });
+    return res.status(500).json({ success: false, message: 'Internal server error', error: error.message || error });
   }
 };
 
@@ -593,43 +578,87 @@ export const updateEmployee = async (req: Request, res: Response) => {
       salary,
       skills,
       workLocation,
-      shift,
       fatherName,
     } = req.body;
 
+    console.log("SUBROLE from req.body:", subRoleId);
+    console.log("Request body:", req.body);
+
+    // ✅ Handle file uploads
     const files = (req.files || {}) as { [fieldname: string]: Express.Multer.File[] };
+    console.log("Uploaded files from frontend:", files);
 
-    const profileImage = files.profileImage?.[0]
-      ? path.join('uploads', 'profiles', files.profileImage[0].filename)
-      : undefined;
+    // ✅ Parse existing documents metadata sent by frontend
+    let existingDocsFromFrontend: Document[] = [];
+    if (req.body.documentsMetadata) {
+      try {
+        existingDocsFromFrontend = JSON.parse(req.body.documentsMetadata);
+        console.log("Existing documents metadata from frontend:", existingDocsFromFrontend);
+      } catch (err) {
+        console.error("Failed to parse documentsMetadata:", req.body.documentsMetadata, err);
+      }
+    } else {
+      console.log("No existing documents metadata sent from frontend");
+    }
 
-    const documents = files.documents?.map(file => ({
-      name: file.originalname,
-      url: path.join('uploads', 'documents', file.filename),
-      type: file.mimetype
-    }));
+    // ✅ Build new profile image object if uploaded
+    const newProfileImageObj = files.profileImage?.[0]
+      ? [
+        {
+          name: files.profileImage[0].originalname,
+          url: getFileUrl(req, "profiles", files.profileImage[0].filename),
+          mimeType: files.profileImage[0].mimetype,
+          uploadedAt: new Date(),
+        },
+      ]
+      : [];
 
-    if (workLocation && !['Onsite', 'Remote', 'Hybrid'].includes(workLocation)) {
+    // ✅ Build new documents object if uploaded
+    const newDocumentsObj =
+      files.documents?.map((file) => ({
+        name: file.originalname,
+        url: getFileUrl(req, "documents", file.filename),
+        mimeType: file.mimetype,
+        type: file.mimetype,
+        uploadedAt: new Date(),
+      })) || [];
+
+    if (workLocation && !["Onsite", "Remote", "Hybrid"].includes(workLocation)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid work location. Must be one of: Onsite, Remote, Hybrid',
-        received: workLocation
+        message: "Invalid work location. Must be one of: Onsite, Remote, Hybrid",
+        received: workLocation,
       });
     }
 
+    // ✅ Process skills array
     const processedSkills = Array.isArray(skills)
       ? skills
-      : typeof skills === 'string'
-        ? skills.split(',').map(s => s.trim())
+      : typeof skills === "string"
+        ? skills.split(",").map((s) => s.trim())
         : [];
 
+    // ✅ Fetch existing employee
     const existingEmployee = await prisma.employee.findUnique({ where: { id } });
     if (!existingEmployee) {
       return res.status(404).json({
         success: false,
-        message: 'Employee not found'
+        message: "Employee not found",
       });
     }
+
+    // ✅ Merge profile image
+    const oldProfileImages = Array.isArray(existingEmployee.images) ? existingEmployee.images : [];
+    const mergedImages = newProfileImageObj.length > 0 ? newProfileImageObj : oldProfileImages;
+    const firstImage = mergedImages[0];
+    const profileImageUrl =
+      typeof firstImage === "object" && firstImage !== null && "url" in firstImage
+        ? (firstImage as { url: string }).url
+        : existingEmployee.profileImageUrl;
+
+    // ✅ Merge documents: only keep those sent from frontend + new uploads
+    const mergedDocuments = [...existingDocsFromFrontend, ...newDocumentsObj];
+    console.log("Documents to be saved:", mergedDocuments);
 
     const updatedEmployee = await prisma.employee.update({
       where: { id },
@@ -642,78 +671,82 @@ export const updateEmployee = async (req: Request, res: Response) => {
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
         hireDate: joiningDate ? new Date(joiningDate) : undefined,
         status,
-        skills: processedSkills.length > 0 ? processedSkills.join(',') : null,
+        skills: processedSkills.length > 0 ? processedSkills.join(",") : null,
         workLocation,
         gender,
         address,
         emergencyContactName,
         emergencyContactPhone,
         salary: salary ? Number(salary) : undefined,
-      }
+        profileImageUrl,
+        images: mergedImages.length > 0 ? JSON.parse(JSON.stringify(mergedImages)) : null,
+        documents: mergedDocuments.length > 0 ? JSON.parse(JSON.stringify(mergedDocuments)) : null,
+      },
     });
 
-    // Update user
+
+    // ✅ Update user info
     const updateUserData: any = {};
     if (email) updateUserData.email = email;
     if (fullName) updateUserData.fullName = fullName;
     if (roleId) updateUserData.roleId = roleId;
     if (subRoleId) updateUserData.subRoleId = subRoleId;
+    console.log("user sub-role updating as:", updateUserData.subRoleId, " and,", subRoleId);
 
     if (Object.keys(updateUserData).length > 0) {
       await prisma.user.update({
         where: { id: updatedEmployee.userId },
-        data: updateUserData
+        data: updateUserData,
       });
     }
 
-    // 👇 Notifications
+    // ✅ Send notifications (unchanged)
     try {
       const performedBy = req.user as unknown as CustomJwtPayload;
       const performer = await prisma.user.findUnique({ where: { id: performedBy.userId } });
-      const updatedUser = await prisma.user.findUnique({
-        where: { id: updatedEmployee.userId }
-      });
+      const updatedUser = await prisma.user.findUnique({ where: { id: updatedEmployee.userId } });
 
-      const performerName = performer?.fullName ?? 'Someone';
-      const employeeName = fullName || updatedUser?.fullName || 'An employee';
+      const performerName = performer?.fullName ?? "Someone";
+      const employeeName = fullName || updatedUser?.fullName || "An employee";
 
       await Promise.all([
         createScopedNotification({
-          scope: 'ADMIN_ONLY',
+          scope: "ADMIN_ONLY",
           data: {
-            title: 'Employee Info Updated',
+            title: "Employee Info Updated",
             message: `${employeeName}'s info was updated by ${performerName}.`,
-            type: 'Employee'
+            type: "Employee",
           },
-          visibilityLevel: 0
+          visibilityLevel: 0,
         }),
         createScopedNotification({
-          scope: 'DIRECTORS_HR',
+          scope: "DIRECTORS_HR",
           data: {
-            title: 'Employee Info Updated',
+            title: "Employee Info Updated",
             message: `${employeeName}'s profile was updated.`,
-            type: 'Employee'
+            type: "Employee",
           },
-          visibilityLevel: 1
+          visibilityLevel: 1,
         }),
         createScopedNotification({
-          scope: 'EMPLOYEE_ONLY',
+          scope: "EMPLOYEE_ONLY",
           data: {
-            title: 'Your Info Was Updated',
+            title: "Your Info Was Updated",
             message: `Your profile was updated. Please verify the changes.`,
-            type: 'Employee'
+            type: "Employee",
           },
           targetIds: { userId: updatedEmployee.userId },
-          visibilityLevel: 3
-        })
+          visibilityLevel: 3,
+        }),
       ]);
     } catch (err) {
-      console.error('Notification error after updateEmployee:', err);
+      console.error("Notification error after updateEmployee:", err);
     }
 
+    // ✅ Return updated employee
     return res.status(200).json({
       success: true,
-      message: 'Employee updated successfully.',
+      message: "Employee updated successfully.",
       data: {
         employee: {
           id: updatedEmployee.id,
@@ -723,25 +756,27 @@ export const updateEmployee = async (req: Request, res: Response) => {
           designation: updatedEmployee.position,
           department: departmentId,
           status: updatedEmployee.status,
-          skills: updatedEmployee.skills?.split(',').map(s => s.trim()) || [],
+          skills: updatedEmployee.skills?.split(",").map((s) => s.trim()) || [],
           workLocation: updatedEmployee.workLocation,
           gender: updatedEmployee.gender,
           address: updatedEmployee.address,
           emergencyContact: {
             name: updatedEmployee.emergencyContactName,
-            phone: updatedEmployee.emergencyContactPhone
+            phone: updatedEmployee.emergencyContactPhone,
           },
-          salary: updatedEmployee.salary
-        }
-      }
+          salary: updatedEmployee.salary,
+          profileImageUrl: updatedEmployee.profileImageUrl,
+          images: updatedEmployee.images || [],
+          documents: updatedEmployee.documents || [],
+        },
+      },
     });
-
   } catch (error: any) {
-    console.error('Update employee error:', error);
+    console.error("Update employee error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error?.message || error
+      message: "Internal server error",
+      error: error?.message || error,
     });
   }
 };
@@ -925,80 +960,4 @@ export const listInactiveUsers = async (req: Request, res: Response) => {
 const getFileUrl = (req: Request, folder: string, filename: string) => {
   const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
   return `${baseUrl}/uploads/${folder}/${filename}`;
-};
-
-export const uploadImage = async (req: Request, res: Response) => {
-  try {
-    const file = (req.files as any)?.profileImage?.[0];
-    const { employeeId } = req.body;
-
-    if (!file) return res.status(400).json({ message: "No image provided" });
-    if (!employeeId) return res.status(400).json({ message: "Employee ID is required" });
-
-    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-    if (!employee) return res.status(404).json({ message: "Employee not found" });
-
-    // Delete all previous images for this employee
-    await prisma.employeeImage.deleteMany({ where: { employeeId } });
-
-    // Build URL for new image
-    const imageUrl = getFileUrl(req, "profiles", file.filename);
-
-    // Save new image record
-    const saved = await prisma.employeeImage.create({
-      data: {
-        id: uuidv4(),
-        employeeId: employee.id,
-        name: file.originalname,
-        mimeType: file.mimetype,
-        url: imageUrl,
-        uploadedAt: new Date(),
-      },
-    });
-
-    // Update employee table with new profileImageUrl
-    await prisma.employee.update({
-      where: { id: employeeId },
-      data: { profileImageUrl: imageUrl },
-    });
-
-    res.status(200).json({ message: "Image uploaded successfully", saved });
-  } catch (err) {
-    console.error("Image upload failed:", err);
-    res.status(500).json({ message: "Image upload failed", error: err });
-  }
-};
-
-export const uploadEmployeeDocuments = async (req: Request, res: Response) => {
-  try {
-    const files = (req.files as any)?.documents;
-    const { employeeId } = req.body;
-
-    if (!files?.length) return res.status(400).json({ message: "No documents uploaded" });
-    if (!employeeId) return res.status(400).json({ message: "Employee ID is required" });
-
-    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-    if (!employee) return res.status(404).json({ message: "Employee not found" });
-
-    const savedDocuments = await Promise.all(
-      files.map((file: Express.Multer.File) =>
-        prisma.employeeDocument.create({
-          data: {
-            id: uuidv4(),
-            employeeId,
-            name: file.originalname,
-            url: getFileUrl(req, "documents", file.filename),
-            mimeType: file.mimetype,
-            type: "other",
-            uploadedAt: new Date(),
-          },
-        })
-      )
-    );
-
-    res.status(200).json({ message: "Documents uploaded successfully", savedDocuments });
-  } catch (err) {
-    console.error("Document upload failed:", err);
-    res.status(500).json({ message: "Document upload failed", error: err });
-  }
 };

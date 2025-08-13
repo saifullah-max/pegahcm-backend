@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createEmployee, listEmployees, listInactiveUsers, ListSingleEmployee, updateEmployee, uploadEmployeeDocuments, uploadImage } from '../controllers/employeeController';
+import { createEmployee, listEmployees, listInactiveUsers, ListSingleEmployee, updateEmployee } from '../controllers/employeeController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { isAdmin, isAdminOrHR } from '../middlewares/roleMiddleware';
 import { uploadMiddleware } from '../middlewares/uploadMiddleware';
@@ -34,9 +34,9 @@ router.get('/users/inactive', checkPermission("Employee", "delete"), listInactiv
 // router.delete('/user/delete/:userId', checkPermission("Employee", "delete"), deleteUser as any)
 
 // upload employee image
-router.post('/image', uploadMiddleware, checkPermission("Employee", "create"), uploadImage as any); // Endpoint to upload an employee image
+// router.post('/image', uploadMiddleware, checkPermission("Employee", "create"), uploadImage as any); // Endpoint to upload an employee image
 
 // upload docs
-router.post('/documents', uploadMiddleware, checkPermission("Employee", "create"), uploadEmployeeDocuments as any);
+// router.post('/documents', uploadMiddleware, checkPermission("Employee", "create"), uploadEmployeeDocuments as any);
 
 export default router;

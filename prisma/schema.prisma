@@ -189,17 +189,17 @@ model SubDepartment {
 }
 
 model Employee {
-  id                    String                 @id @default(uuid())
-  user                  User                   @relation(fields: [userId], references: [id])
-  userId                String                 @unique
-  employeeNumber        String                 @unique
-  department            Department?            @relation(fields: [departmentId], references: [id])
+  id                    String         @id @default(uuid())
+  user                  User           @relation(fields: [userId], references: [id])
+  userId                String         @unique
+  employeeNumber        String         @unique
+  department            Department?    @relation(fields: [departmentId], references: [id])
   departmentId          String?
-  subDepartment         SubDepartment?         @relation(fields: [subDepartmentId], references: [id])
+  subDepartment         SubDepartment? @relation(fields: [subDepartmentId], references: [id])
   subDepartmentId       String?
   phoneNumber           String?
   shiftId               String?
-  shift                 Shift?                 @relation(fields: [shiftId], references: [id])
+  shift                 Shift?         @relation(fields: [shiftId], references: [id])
   position              String
   fatherName            String?
   dateOfBirth           DateTime
@@ -210,24 +210,27 @@ model Employee {
   address               String
   emergencyContactName  String
   emergencyContactPhone String
-  salary                Decimal                @db.Decimal(10, 2)
-  employeeImages        employeeImage[]
-  employeeDocuments     employeeDocument[]
-  skills                String? // JSON string of skills array
-  manager               Employee?              @relation("EmployeeManager", fields: [managerId], references: [id])
-  managerId             String?
-  managedEmployees      Employee[]             @relation("EmployeeManager")
-  attendanceRecords     AttendanceRecord[]
-  leaveRequests         LeaveRequest[]
-  vacations             Vacation[]
-  onboardingProcesses   OnboardingProcess[]
-  resignations          Resignation[]
-  assets                Asset[]
-  hrProcesses           HRProcess[]
-  LeaveBalance          LeaveBalance[]
-  AttendanceFixRequest  AttendanceFixRequest[]
-  salaryDetails         SalaryDetail[]
-  profileImageUrl       String?
+  salary                Decimal        @db.Decimal(10, 2)
+
+  profileImageUrl      String?
+  images               Json? // Stores array of image objects [{name, url, mimeType, uploadedAt}]
+  documents            Json? // Stores array of document objects [{name, url, mimeType, type, uploadedAt, categoryId}]
+  skills               String? // JSON string of skills array
+  manager              Employee?              @relation("EmployeeManager", fields: [managerId], references: [id])
+  managerId            String?
+  managedEmployees     Employee[]             @relation("EmployeeManager")
+  attendanceRecords    AttendanceRecord[]
+  leaveRequests        LeaveRequest[]
+  vacations            Vacation[]
+  onboardingProcesses  OnboardingProcess[]
+  resignations         Resignation[]
+  assets               Asset[]
+  hrProcesses          HRProcess[]
+  LeaveBalance         LeaveBalance[]
+  AttendanceFixRequest AttendanceFixRequest[]
+  salaryDetails        SalaryDetail[]
+  employeeDocument     employeeDocument[]
+  employeeImage        employeeImage[]
 }
 
 model employeeImage {

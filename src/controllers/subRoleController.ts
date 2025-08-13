@@ -14,6 +14,20 @@ export const createSubRole = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: 'Level is required.' });
         }
 
+        // Check if level > 1 and already exists
+        if (level > 1) {
+            const existingSubRole = await prisma.subRole.findFirst({
+                where: { level },
+            });
+
+            if (existingSubRole) {
+                return res.status(400).json({
+                    success: false,
+                    message: `A sub-role with level ${level} already exists. Please choose a different level.`,
+                });
+            }
+        }
+
         const subRole = await prisma.subRole.create({
             data: {
                 name,
@@ -27,10 +41,10 @@ export const createSubRole = async (req: Request, res: Response) => {
             },
         });
 
-        res.status(201).json(subRole);
+        res.status(201).json({ success: true, subRole });
     } catch (error) {
         console.error('Create SubRole Error:', error);
-        res.status(500).json({ error: 'Failed to create SubRole' });
+        res.status(500).json({ success: false, message: 'Failed to create SubRole', error });
     }
 };
 
