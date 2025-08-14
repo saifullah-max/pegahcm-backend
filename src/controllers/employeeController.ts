@@ -528,6 +528,7 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
           employeeNumber: employee.employeeNumber,
           designation: employee.position,
           departmentId: employee.departmentId,
+          phoneNumber: employee.phoneNumber,
           subDepartmentId: employee.subDepartmentId,
           gender: employee.gender,
           fatherName: employee.fatherName,
@@ -961,3 +962,78 @@ const getFileUrl = (req: Request, folder: string, filename: string) => {
   const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
   return `${baseUrl}/uploads/${folder}/${filename}`;
 };
+
+export const updateEmployeeInfoByEmployee = async (req: Request, res: Response) => {
+  try {
+    const { email, phoneNumber } = req.body;
+    const userId = req.user?.userId;
+
+    const files = (req.files || {}) as { [fieldname: string]: Express.Multer.File[] };
+
+    // Build new image objects
+    let newImages: any[] = [];
+    if (files?.profileImage?.length) {
+      newImages = files.profileImage.map(file => ({
+        name: file.originalname,
+        url: getFileUrl(req, "profiles", file.filename),
+        mimeType: file.mimetype,
+        uploadedAt: new Date(),
+      }));
+    }
+
+    // Fetch existing employee
+    const existingEmployee = await prisma.employee.findUnique({ where: { userId } });
+    if (!existingEmployee) {
+      return res.status(404).json({ success: false, message: "Employee not found" });
+    }
+
+    // Merge images (replace old with new if uploaded)
+    const finalImages: any[] = newImages.length > 0
+      ? newImages
+      : Array.isArray(existingEmployee.images)
+        ? existingEmployee.images
+        : [];
+    // Profile URL: first image or existing
+    const profileImageUrl: string | undefined = newImages.length > 0
+      ? newImages[0].url
+      : existingEmployee.profileImageUrl || undefined;
+
+    if (!email && !phoneNumber && newImages.length === 0) {
+      return res.status(400).json({ success: false, message: "No fields to update." });
+    }
+
+    // Update employee
+    const updatedEmployee = await prisma.employee.update({
+      where: { userId },
+      data: {
+        phoneNumber: phoneNumber || undefined,
+        profileImageUrl,
+        images: finalImages.length > 0 ? JSON.parse(JSON.stringify(finalImages)) : null,
+      },
+    });
+
+    // Update user email
+    if (email) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { email },
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: {
+        email: email || undefined,
+        phoneNumber: updatedEmployee.phoneNumber,
+        profileImageUrl: updatedEmployee.profileImageUrl || undefined,
+        images: updatedEmployee.images || [],
+      },
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+

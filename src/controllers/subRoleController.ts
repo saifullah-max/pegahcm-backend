@@ -184,6 +184,14 @@ export const assignPermissionsToSubRole = async (req: Request, res: Response) =>
             }
         });
 
+        const subRoleName = await prisma.subRolePermission.findFirst({
+            where: { subRoleId },
+            include: {
+                subRole: true,  // includes all scalar fields of subRole, including 'name'
+            },
+        });
+
+
         // 🔔 Notify all users with that subRole
         const targetUsers = await prisma.user.findMany({
             where: {
@@ -218,7 +226,7 @@ export const assignPermissionsToSubRole = async (req: Request, res: Response) =>
                         targetIds: { userId: performedByUserId },
                         data: {
                             title: 'Sub-role Permissions Updated',
-                            message: `You successfully updated permissions for sub-role users.`,
+                            message: `You successfully updated permissions for ${subRoleName?.subRole.name} sub-role users.`,
                             type: 'INFO',
                         },
                         visibilityLevel: 0,

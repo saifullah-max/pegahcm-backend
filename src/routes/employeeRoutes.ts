@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createEmployee, listEmployees, listInactiveUsers, ListSingleEmployee, updateEmployee } from '../controllers/employeeController';
+import { createEmployee, listEmployees, listInactiveUsers, ListSingleEmployee, updateEmployee, updateEmployeeInfoByEmployee } from '../controllers/employeeController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { isAdmin, isAdminOrHR } from '../middlewares/roleMiddleware';
 import { uploadMiddleware } from '../middlewares/uploadMiddleware';
@@ -19,6 +19,9 @@ router.get('/', checkPermission("Employee", "view-all"), listEmployees as any)
 // getting a specific employee by ID
 router.get('/:id', checkPermission("Employee", "view"), ListSingleEmployee as any);
 
+// update only phone and email by employee
+router.patch('/update-contact', uploadMiddleware, checkPermission("Employee", "view"), updateEmployeeInfoByEmployee as any)
+
 // Create employee with file uploads and image processing
 router.post('/', uploadMiddleware, checkPermission("Employee", "create"), createEmployee as any);
 
@@ -29,6 +32,7 @@ router.put('/:id', uploadMiddleware, checkPermission("Employee", "update"), upda
 // router.delete('/:id', checkPermission("Employee", "delete"), deleteEmployee as any);
 
 router.get('/users/inactive', checkPermission("Employee", "delete"), listInactiveUsers as any);
+
 
 // Delete user 
 // router.delete('/user/delete/:userId', checkPermission("Employee", "delete"), deleteUser as any)

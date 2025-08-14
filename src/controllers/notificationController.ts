@@ -178,7 +178,6 @@ export const markGroupNotificationsAsRead = async (req: Request, res: Response) 
     }
 };
 
-
 //to mark all notifs are read
 export const markAllNotificationsAsRead = async (req: Request, res: Response) => {
     try {
