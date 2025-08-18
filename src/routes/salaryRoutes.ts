@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticateToken } from '../middlewares/authMiddleware';
-import { createSalary, updateSalary, deleteSalary, getAllSalaries, getSalaryById, getMySalary, copyPreviousSalaryByEmployee } from '../controllers/salaryController';
+import { createSalary, updateSalary, deleteSalary, getAllSalaries, getSalaryById, getMySalary, copyPreviousSalaryByEmployee, getSalarySlip } from '../controllers/salaryController';
 import { checkPermission } from '../middlewares/checkPermissions';
 import { canAccessSalary } from '../middlewares/canAccessFinance';
 
@@ -10,6 +10,7 @@ router.use(authenticateToken as any)
 
 // Normal user own salary
 router.get('/my', checkPermission("Salary", "view"), getMySalary as any);
+router.get('/download/:employeeId', checkPermission("Salary", "view"), getSalarySlip as any)
 
 router.use(canAccessSalary as any)
 

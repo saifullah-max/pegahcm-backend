@@ -1,7 +1,15 @@
-import { PrismaClient, RoleTag } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { Request, Response, NextFunction } from 'express';
 
 const prisma = new PrismaClient();
+
+enum RoleTag {
+    HR = "HR",
+    INTERVIEWER = "INTERVIEWER",
+    RECRUITER = "RECRUITER",
+    TRAINER = "TRAINER",
+    FINANCE = "FINANCE",
+}
 
 export const canAccessSalary = async (
     req: Request,

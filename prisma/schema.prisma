@@ -171,23 +171,6 @@ model User {
   resetPasswordExpires DateTime?
 }
 
-model Role {
-  id             String           @id @default(uuid())
-  name           String           @unique
-  description    String?
-  users          User[]
-  RolePermission RolePermission[]
-}
-
-model SubDepartment {
-  id           String     @id @default(uuid())
-  name         String     @unique
-  description  String?
-  department   Department @relation(fields: [departmentId], references: [id])
-  departmentId String
-  employees    Employee[]
-}
-
 model Employee {
   id                    String         @id @default(uuid())
   user                  User           @relation(fields: [userId], references: [id])
@@ -232,6 +215,24 @@ model Employee {
   employeeDocument     employeeDocument[]
   employeeImage        employeeImage[]
 }
+
+model Role {
+  id             String           @id @default(uuid())
+  name           String           @unique
+  description    String?
+  users          User[]
+  RolePermission RolePermission[]
+}
+
+model SubDepartment {
+  id           String     @id @default(uuid())
+  name         String     @unique
+  description  String?
+  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId String
+  employees    Employee[]
+}
+
 
 model employeeImage {
   id         String   @id @default(uuid())
