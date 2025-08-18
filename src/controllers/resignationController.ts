@@ -382,7 +382,7 @@ export const getMyResignation = async (req: Request, res: Response) => {
         });
 
         if (!resignation) {
-            return res.status(404).json({ message: 'No resignation submitted.' });
+            return res.status(200).json({ message: 'No resignation submitted.' });
         }
 
         return res.status(200).json({ data: resignation });
