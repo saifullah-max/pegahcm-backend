@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
 import { Request, Response, NextFunction } from 'express';
-
-const prisma = new PrismaClient();
+import prisma from '../utils/Prisma';
 
 enum RoleTag {
     HR = "HR",

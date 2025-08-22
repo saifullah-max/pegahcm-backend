@@ -1,9 +1,7 @@
 import { NextFunction, Request, Response } from "express";
-import { NotificationScope, PrismaClient } from '@prisma/client';
 import { JwtPayload } from "jsonwebtoken";
 import { createScopedNotification, notifyLeaveApprovers } from "../utils/notificationUtils";
-const prisma = new PrismaClient();
-
+import prisma from "../utils/Prisma";
 interface CustomJwtPayload extends JwtPayload {
     id: string;
 }

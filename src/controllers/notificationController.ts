@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import { Request, Response } from 'express';
-import { getVisibleNotificationsForUser } from '../utils/notificationUtils';
+import prisma from '../utils/Prisma';
 
-const prisma = new PrismaClient();
 
 export interface CustomJwtPayload {
     userId: string;

@@ -1,9 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import express, { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { createScopedNotification } from '../utils/notificationUtils';
-const prisma = new PrismaClient();
-
-const router = express.Router();
+import prisma from '../utils/Prisma';
 
 // CREATE SubRole
 export const createSubRole = async (req: Request, res: Response) => {

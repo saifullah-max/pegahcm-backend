@@ -1,11 +1,10 @@
-import e, { Request, Response } from 'express';
-import { Prisma, PrismaClient, RoleTag } from '@prisma/client';
+import { Request, Response } from 'express';
+import { RoleTag } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+
 import { createScopedNotification } from '../utils/notificationUtils';
 import { JwtPayload } from "jsonwebtoken";
-import { date } from 'zod';
+import prisma from '../utils/Prisma';
 
 
 // Add multer type definitions
@@ -18,8 +17,6 @@ declare global {
     }
   }
 }
-
-const prisma = new PrismaClient();
 
 
 export enum EmployeeStatus {

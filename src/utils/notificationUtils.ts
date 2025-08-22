@@ -1,8 +1,7 @@
-import { Prisma, PrismaClient } from "@prisma/client";
 import { getIO } from '../utils/socket';
+import prisma from "./Prisma";
 
 // utils/notificationUtils.ts
-const prisma = new PrismaClient();
 interface NotifyOptions {
     scope: VisibilityScope;
     data: { title: string; message: string; type: string };
@@ -226,7 +225,6 @@ export async function notifyLeaveApprovers({
     message,
     showPopup = false,
 }: NotifyRelevantApproversOptions) {
-    const prisma = new PrismaClient();
     const io = getIO();
 
     const employee = await prisma.employee.findUnique({

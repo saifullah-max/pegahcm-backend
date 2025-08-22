@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
 import { Request, Response, NextFunction } from 'express';
-
-const prisma = new PrismaClient();
+import prisma from '../utils/Prisma';
 
 export const checkPermission = (module: string, action: string) => {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {

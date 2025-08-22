@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import { Request, Response } from 'express';
 import { createScopedNotification } from '../utils/notificationUtils';
-
-const prisma = new PrismaClient();
+import prisma from '../utils/Prisma';
 
 export const createPermission = async (req: Request, res: Response) => {
   try {

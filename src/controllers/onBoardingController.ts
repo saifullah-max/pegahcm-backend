@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import { Prisma, PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { Prisma } from '@prisma/client';
+import prisma from '../utils/Prisma';
 
 export const createOnboarding = async (req: Request, res: Response) => {
     try {

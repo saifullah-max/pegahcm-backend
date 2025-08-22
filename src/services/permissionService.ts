@@ -1,6 +1,4 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import prisma from "../utils/Prisma";
 
 export const getAllPermissions = async () => {
     return await prisma.permission.findMany();

@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.use(authenticateToken as any)
 // checkPermission("Permission", "create"),
-router.post("/", createPermission as any)
+router.post("/", checkPermission("Permission", "create"), createPermission as any)
 
 router.get('/', checkPermission("Permission", "view"), getAllPermissions as any)
 

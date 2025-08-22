@@ -1,9 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import { Request, Response } from 'express';
 import PDFDocument from 'pdfkit';
-import { any } from 'zod';
-
-const prisma = new PrismaClient();
+import prisma from '../utils/Prisma';
 
 // Helper to calculate total salary
 export const calculateTotalSalary = (
@@ -19,6 +16,10 @@ export const calculateTotalSalary = (
 export const createSalary = async (req: Request, res: Response) => {
     try {
         const { employeeId, baseSalary, deductions, bonuses, allowances, effectiveFrom, effectiveTo } = req.body;
+        console.log("Employee ID:", employeeId);
+        if (!employeeId) {
+            return res.status(400).json({ error: "employeeId is required" });
+        }
 
         const createdSalary = await prisma.salaryDetail.create({
             data: {
@@ -279,9 +280,6 @@ export const getSalarySlip = async (req: Request, res: Response) => {
     try {
         const { employeeId } = req.params;
         const { month } = req.query as { month?: string }; // optional month filter
-
-
-        console.log("Requested month:", month);
 
         // Fetch employee details including user info
         const employee = await prisma.employee.findUnique({

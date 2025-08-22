@@ -1,14 +1,11 @@
 // controllers/authController.ts
 
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import EmailService from '../utils/emailService'; // You'll create this email helper
-
-
-const prisma = new PrismaClient();
+import prisma from '../utils/Prisma';
 
 export const register = async (req: Request, res: Response) => {
   try {

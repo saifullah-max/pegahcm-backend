@@ -21,6 +21,7 @@ import impersonateRoutes from './routes/impersonateRoutes'
 import fixAttendanceRoutes from './routes/fixAttendanceRoutes'
 import notificationRoutes from './routes/notificationRoutes'
 import salaryRoutes from './routes/salaryRoutes'
+import { startNotificationCleanupJob } from './utils/CronJob';
 
 // Load environment variables
 dotenv.config();
@@ -37,6 +38,7 @@ initSocket(server);
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -65,3 +67,5 @@ app.get('/', (req, res) => {
 server.listen(port, () => {
   console.log(`Server + Socket.IO running on port ${port}`);
 });
+
+startNotificationCleanupJob();
