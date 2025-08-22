@@ -11,7 +11,6 @@ import employeeRoutes from './routes/employeeRoutes';
 import shiftRoutes from './routes/shift.routes';
 import departmentRoutes from './routes/department.routes';
 import subDepartmentRoutes from './routes/subDepartment.routes';
-import testRoutes from './routes/test.routes';
 import userRoutes from './routes/userRoutes'
 import attendanceRoutes from './routes/attendanceRoutes'
 import adminAttendanceRoutes from './routes/adminAttendanceRoutes';
@@ -21,7 +20,6 @@ import impersonateRoutes from './routes/impersonateRoutes'
 import fixAttendanceRoutes from './routes/fixAttendanceRoutes'
 import notificationRoutes from './routes/notificationRoutes'
 import salaryRoutes from './routes/salaryRoutes'
-import { startNotificationCleanupJob } from './utils/CronJob';
 
 // Load environment variables
 dotenv.config();
@@ -67,5 +65,3 @@ app.get('/', (req, res) => {
 server.listen(port, () => {
   console.log(`Server + Socket.IO running on port ${port}`);
 });
-
-startNotificationCleanupJob();
