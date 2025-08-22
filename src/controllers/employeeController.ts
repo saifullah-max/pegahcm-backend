@@ -236,6 +236,7 @@ export const createEmployee = async (req: Request, res: Response) => {
         })
         : null;
       const isDirector = subRole?.name?.toLowerCase() === "director";
+      const isManager = subRole?.name?.toLowerCase() === "manager";
 
       // ✅ Create Employee
       const newEmployee = await prismaTx.employee.create({
@@ -245,7 +246,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           employeeNumber,
           shiftId,
           departmentId: !isDirector ? departmentId : null,
-          subDepartmentId: !isDirector ? subDepartmentId : null,
+          subDepartmentId: !isDirector && !isManager ? subDepartmentId : null,
           position: designation,
           fatherName: fatherName ?? undefined,
           dateOfBirth: new Date(dateOfBirth),
@@ -658,12 +659,27 @@ export const updateEmployee = async (req: Request, res: Response) => {
     const mergedDocuments = [...existingDocsFromFrontend, ...newDocumentsObj];
     console.log("Documents to be saved:", mergedDocuments);
 
+    // ✅ Determine subRole type
+    const subRole = subRoleId
+      ? await prisma.subRole.findUnique({
+        where: { id: subRoleId },
+        select: { name: true },
+      })
+      : null;
+    const isDirector = subRole?.name?.toLowerCase() === "director";
+    const isManager = subRole?.name?.toLowerCase() === "manager";
+
+    // ✅ Decide final subDepartmentId and departmentId
+    const subDeptIdToSave = !isDirector && !isManager && subDepartmentId ? subDepartmentId : null;
+    const deptIdToSave = !isDirector ? departmentId : null;
+
+    // ✅ Update employee
     const updatedEmployee = await prisma.employee.update({
       where: { id },
       data: {
         phoneNumber,
-        departmentId,
-        subDepartmentId,
+        departmentId: deptIdToSave,
+        subDepartmentId: subDeptIdToSave,
         position: designation,
         fatherName,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
@@ -682,7 +698,6 @@ export const updateEmployee = async (req: Request, res: Response) => {
       },
     });
 
-
     // ✅ Update user info
     const updateUserData: any = {};
     if (email) updateUserData.email = email;
@@ -698,7 +713,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Send notifications (unchanged)
+    // ✅ Send notifications
     try {
       const performedBy = req.user as unknown as CustomJwtPayload;
       const performer = await prisma.user.findUnique({ where: { id: performedBy.userId } });
@@ -752,7 +767,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
           fullName: fullName || undefined,
           email: email || undefined,
           designation: updatedEmployee.position,
-          department: departmentId,
+          department: deptIdToSave,
           status: updatedEmployee.status,
           skills: updatedEmployee.skills?.split(",").map((s) => s.trim()) || [],
           workLocation: updatedEmployee.workLocation,
@@ -778,7 +793,6 @@ export const updateEmployee = async (req: Request, res: Response) => {
     });
   }
 };
-
 // export const deleteEmployee = async (req: Request, res: Response) => {
 //   const { id } = req.params;
 
