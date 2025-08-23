@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const employeeController_1 = require("../controllers/employeeController");
+const checkPermissions_1 = require("../middlewares/checkPermissions");
+const authMiddleware_1 = require("../middlewares/authMiddleware");
+const router = (0, express_1.Router)();
+router.use(authMiddleware_1.authenticateToken);
+router.get('/:id', (0, checkPermissions_1.checkPermission)("Employee", "view"), employeeController_1.ListSingleEmployee);
+exports.default = router;

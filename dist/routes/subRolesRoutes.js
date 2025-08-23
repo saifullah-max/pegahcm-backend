@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const subRoleController_1 = require("../controllers/subRoleController");
+const checkPermissions_1 = require("../middlewares/checkPermissions");
+const authMiddleware_1 = require("../middlewares/authMiddleware");
+const router = (0, express_1.Router)();
+router.use(authMiddleware_1.authenticateToken);
+router.post('/', (0, checkPermissions_1.checkPermission)("SubRole", "create"), subRoleController_1.createSubRole);
+router.get('/all', (0, checkPermissions_1.checkPermission)("SubRole", "view"), subRoleController_1.getAllSubRoles);
+router.get('/', (0, checkPermissions_1.checkPermission)("SubRole", "view"), subRoleController_1.getSubRoleById);
+router.put('/:id', (0, checkPermissions_1.checkPermission)("SubRole", "update"), subRoleController_1.updateSubRole);
+router.delete('/:id', (0, checkPermissions_1.checkPermission)("SubRole", "delete"), subRoleController_1.deleteSubRole);
+router.post('/permission', (0, checkPermissions_1.checkPermission)("SubRole", "create"), subRoleController_1.assignPermissionsToSubRole);
+exports.default = router;
