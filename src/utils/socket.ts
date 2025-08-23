@@ -9,6 +9,7 @@ export function initSocket(server: http.Server) {
     cors: {
       origin: ["http://localhost:5173", "https://pegahcm.netlify.app"], // or your frontend domain in production
       methods: ["GET", "POST"],
+      credentials: true,
     },
   });
 
