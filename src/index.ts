@@ -32,11 +32,18 @@ const server = http.createServer(app);
 // Initialize Socket.IO cleanly
 initSocket(server);
 
-// Middleware
+const allowedOrigins = ["http://localhost:5173", "https://pegahcm.netlify.app"];
+
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://pegahcm.netlify.app/"], // allowed origins
-    credentials: true, // if you need cookies/auth headers
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS not allowed"));
+      }
+    },
+    credentials: true,
   })
 );
 app.use(express.json());
