@@ -32,7 +32,7 @@ const server = http.createServer(app);
 // Initialize Socket.IO cleanly
 initSocket(server);
 
-const allowedOrigins = ["https://pegahcm.netlify.app"];
+const allowedOrigins = ["https://pegahcm.netlify.app/"];
 
 app.use(
   cors({
