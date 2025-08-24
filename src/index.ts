@@ -30,7 +30,7 @@ const server = http.createServer(app);
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
   "http://localhost:5173",
-  "https://pegahcm.netlify.app"
+  "https://pegahcm.netlify.app/"
 ];
 
 // Express CORS
