@@ -32,7 +32,10 @@ const server = http.createServer(app);
 // Initialize Socket.IO cleanly
 initSocket(server);
 
-const allowedOrigins = ["https://pegahcm.netlify.app"];
+const allowedOrigins = [
+  "http://localhost:5173", // For local dev
+  "https://pegahcm.netlify.app", // For production
+];
 
 app.use(
   cors({
@@ -40,7 +43,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("CORS not allowed"));
+        callback(new Error(`CORS not allowed for ${origin}`));
       }
     },
     credentials: true,
