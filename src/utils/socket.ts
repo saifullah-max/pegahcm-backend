@@ -1,21 +1,30 @@
-// utils/socket.ts
 import { Server } from "socket.io";
 import http from "http";
 
 let io: Server;
 
-export function initSocket(server: http.Server) {
+export function initSocket(server: http.Server, allowedOrigins: string[]) {
+  if (io) {
+    console.warn("⚠ Socket.IO already initialized.");
+    return io;
+  }
+
   io = new Server(server, {
     cors: {
-      origin: ["http://localhost:5173", "https://pegahcm.netlify.app"],
-      methods: ["GET", "POST"],
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          callback(new Error(`Socket.IO CORS not allowed for ${origin}`));
+        }
+      },
       credentials: true,
     },
-    transports: ["websocket"],
+    transports: ["websocket"], // ✅ No polling fallback
   });
 
   io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
+    console.log("✅ Socket connected:", socket.id);
 
     socket.on("join", (userId) => {
       console.log(`🧠 Socket ${socket.id} joined room: ${userId}`);
@@ -23,7 +32,7 @@ export function initSocket(server: http.Server) {
     });
 
     socket.on("disconnect", () => {
-      console.log("User disconnected:", socket.id);
+      console.log("❌ Socket disconnected:", socket.id);
     });
   });
 
@@ -31,8 +40,6 @@ export function initSocket(server: http.Server) {
 }
 
 export function getIO() {
-  if (!io) {
-    throw new Error("Socket.io not initialized!");
-  }
+  if (!io) throw new Error("Socket.IO not initialized!");
   return io;
 }

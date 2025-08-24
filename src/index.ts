@@ -21,36 +21,35 @@ import fixAttendanceRoutes from "./routes/fixAttendanceRoutes";
 import notificationRoutes from "./routes/notificationRoutes";
 import salaryRoutes from "./routes/salaryRoutes";
 
-// Load environment variables
+// Load env
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3003;
-
 const server = http.createServer(app);
 
-// Initialize Socket.IO cleanly
-initSocket(server);
-
-const allowedOrigins = [
-  "http://localhost:5173", // For local dev
-  "https://pegahcm.netlify.app", // For production
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
+  "http://localhost:5173",
+  "https://pegahcm.netlify.app"
 ];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS not allowed for ${origin}`));
-      }
-    },
-    credentials: true,
-  })
-);
+// Express CORS
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS not allowed for ${origin}`));
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
+// Initialize Socket.IO
+initSocket(server, allowedOrigins);
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -75,7 +74,11 @@ app.get("/", (req, res) => {
   res.json({ message: "Welcome to PegaHCM API" });
 });
 
+// ✅ Routes (your existing routes here)
+
 // Start server
 server.listen(port, () => {
-  console.log(`Server + Socket.IO running on port ${port}`);
+  console.log(`✅ Server + Socket.IO running on port ${port}`);
 });
+
+
