@@ -12,9 +12,12 @@ export function initSocket(server: http.Server, allowedOrigins: string[]) {
   io = new Server(server, {
     cors: {
       origin: (origin, callback) => {
+        console.log("[SOCKET CORS CHECK] Incoming origin:", origin);
         if (!origin || allowedOrigins.includes(origin)) {
+          console.log("[SOCKET CORS ALLOWED]:", origin);
           callback(null, true);
         } else {
+          console.warn("[SOCKET CORS BLOCKED]:", origin);
           callback(new Error(`Socket.IO CORS not allowed for ${origin}`));
         }
       },

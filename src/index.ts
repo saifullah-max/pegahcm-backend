@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import { initSocket } from "./utils/socket";
 import http from "http";
 import path from "path";
+
+// Routes imports
 import authRoutes from "./routes/authRoutes";
 import roleRoutes from "./routes/roleRoutes";
 import subRoleRoutes from "./routes/subRolesRoutes";
@@ -28,30 +30,40 @@ const app = express();
 const port = process.env.PORT || 3003;
 const server = http.createServer(app);
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",") || [
-  "http://localhost:5173",
-  "https://pegahcm.netlify.app/"
-];
+// ✅ Prepare allowed origins dynamically
+const allowedOrigins = (
+  process.env.ALLOWED_ORIGINS?.split(",") || [
+    "http://localhost:5173",
+    "https://pegahcm.netlify.app",
+  ]
+).map((origin) => origin.trim().replace(/\/$/, "")); // remove trailing slash
 
-// Express CORS
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS not allowed for ${origin}`));
-    }
-  },
-  credentials: true
-}));
+console.log("✅ Allowed Origins:", allowedOrigins);
+
+// ✅ Express CORS
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      console.log("[EXPRESS CORS CHECK] Incoming origin:", origin);
+      if (!origin || allowedOrigins.includes(origin)) {
+        console.log("[EXPRESS CORS ALLOWED]:", origin);
+        callback(null, true);
+      } else {
+        console.warn("[EXPRESS CORS BLOCKED]:", origin);
+        callback(new Error(`CORS not allowed for ${origin}`));
+      }
+    },
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
-// Initialize Socket.IO
+// ✅ Initialize Socket.IO
 initSocket(server, allowedOrigins);
 
-// Routes
+// ✅ API Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/sub-roles", subRoleRoutes);
@@ -69,16 +81,12 @@ app.use("/api/impersonate", impersonateRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/salary", salaryRoutes);
 
-// Basic route
+// ✅ Basic route
 app.get("/", (req, res) => {
   res.json({ message: "Welcome to PegaHCM API" });
 });
 
-// ✅ Routes (your existing routes here)
-
-// Start server
+// ✅ Start server
 server.listen(port, () => {
   console.log(`✅ Server + Socket.IO running on port ${port}`);
 });
-
-
