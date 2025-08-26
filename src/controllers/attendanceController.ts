@@ -5,11 +5,11 @@ import {
   notifyLeaveApprovers,
 } from "../utils/notificationUtils";
 import prisma from "../utils/Prisma";
+import moment from "moment-timezone";
 interface CustomJwtPayload extends JwtPayload {
   id: string;
 }
 
-// POST /api/attendance/check-in
 export const checkIn = async (
   req: Request,
   res: Response,
@@ -42,16 +42,16 @@ export const checkIn = async (
     const roleName = userMeta.role.name.toLowerCase();
     const roleTag = userMeta.roleTag;
 
-    const today = new Date();
-    const todayStart = new Date(today.setHours(0, 0, 0, 0));
-    const todayEnd = new Date(today.setHours(23, 59, 59, 999));
+    const todayUtc = moment().utc().startOf("day");
+    const todayEndUtc = moment().utc().endOf("day");
 
+    // ✅ Check if on approved leave
     const onLeave = await prisma.leaveRequest.findFirst({
       where: {
         employeeId,
         status: "Approved",
-        startDate: { lte: todayStart },
-        endDate: { gte: todayEnd },
+        startDate: { lte: todayUtc.toDate() },
+        endDate: { gte: todayEndUtc.toDate() },
       },
     });
 
@@ -60,10 +60,11 @@ export const checkIn = async (
       return;
     }
 
+    // ✅ Check if already checked in
     const alreadyCheckedIn = await prisma.attendanceRecord.findFirst({
       where: {
         employeeId,
-        date: { gte: todayStart, lte: todayEnd },
+        date: { gte: todayUtc.toDate(), lte: todayEndUtc.toDate() },
       },
     });
 
@@ -72,30 +73,88 @@ export const checkIn = async (
       return;
     }
 
+    // ✅ Get shift info
     const { shiftId } = req.body;
-    const now = new Date();
+    if (!shiftId) {
+      res.status(400).json({ message: "Shift ID is required." });
+      return;
+    }
 
+    const shift = await prisma.shift.findUnique({ where: { id: shiftId } });
+    if (!shift) {
+      res.status(404).json({ message: "Shift not found." });
+      return;
+    }
+
+    // ✅ Get user's timezone (fallback to Asia/Karachi if not provided)
+    const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
+
+    // ✅ Current time in user's timezone
+    const now = moment().tz(userTimezone);
+
+    // ✅ Extract shift start time (ignore old date, only take time part)
+    const shiftStartHour = moment(shift.startTime).utc().hour();
+    const shiftStartMinute = moment(shift.startTime).utc().minute();
+
+    // ✅ Today's shift start in user's timezone
+    const shiftStartLocal = now.clone().startOf("day").hour(shiftStartHour).minute(shiftStartMinute).second(0);
+
+    // ✅ Late threshold = shift start + 30 mins
+    const lateThresholdLocal = shiftStartLocal.clone().add(30, "minutes");
+
+    console.log({
+      nowLocal: now.format(),
+      shiftStartLocal: shiftStartLocal.format(),
+      lateThresholdLocal: lateThresholdLocal.format(),
+    });
+
+    // ✅ Determine status
+    let status = "Present";
+    let lateMessage = "";
+
+    if (now.isAfter(lateThresholdLocal)) {
+      status = "Late";
+
+      const diffMinutes = now.diff(shiftStartLocal, "minutes");
+      const lateHours = Math.floor(diffMinutes / 60);
+      const lateMins = diffMinutes % 60;
+
+      lateMessage = `You are ${lateHours > 0 ? lateHours + " hr " : ""}${lateMins} mins late`;
+    } else if (now.isBefore(shiftStartLocal)) {
+      status = "Early";
+    }
+
+    let lateMinutes: number | null = null;
+
+    if (status === "Late") {
+      lateMinutes = now.diff(shiftStartLocal, "minutes");
+    }
+
+    // ✅ Save attendance record
     const newRecord = await prisma.attendanceRecord.create({
       data: {
         employeeId,
         shiftId,
-        date: now,
-        clockIn: now,
-        status: "Present",
+        date: now.utc().toDate(),
+        clockIn: now.utc().toDate(),
+        status,
+        lateMinutes,
       },
+      include: { shift: true },
     });
 
-    const clockInTime = now.toLocaleTimeString();
+    const clockInTimeLocal = now.format("hh:mm A"); // local time
+
+    // ✅ Send notifications
     const baseNotification = {
       title: "Clock In",
-      message: `${userMeta.fullName} clocked in at ${clockInTime}`,
+      message: `${userMeta.fullName} clocked in at ${clockInTimeLocal} (${status})`,
       type: "ClockIn" as const,
       employeeId,
     };
 
     const promises = [];
 
-    // Notification logic based on role
     if (roleName === "user" && subDepartmentId) {
       promises.push(
         createScopedNotification({
@@ -138,9 +197,13 @@ export const checkIn = async (
 
     await Promise.all(promises);
 
-    res
-      .status(200)
-      .json({ message: "Check-in successful", attendance: newRecord });
+    res.status(200).json({
+      message: `Check-in successful (${status})`,
+      status,
+      lateMessage: lateMessage || null,
+      clockIn: now.utc().toISOString(),
+      fullData: newRecord,
+    });
   } catch (err) {
     console.error("Check-in error:", err);
     next(err);
@@ -216,7 +279,7 @@ export const checkOut = async (
 
     const netWorkingMinutes = Math.floor(
       (now.getTime() - new Date(attendance.clockIn).getTime() - totalBreakMs) /
-        (1000 * 60)
+      (1000 * 60)
     );
 
     const updatedRecord = await prisma.attendanceRecord.update({
@@ -689,6 +752,63 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
       },
     });
 
+    if (status === "Approved") {
+      const employeeId = targetLeaveRequest.employeeId;
+      const startDate = new Date(targetLeaveRequest.startDate);
+      const endDate = new Date(targetLeaveRequest.endDate);
+
+      // Loop through each day in the leave range
+      let currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const formattedDate = new Date(currentDate);
+
+        // Check if attendance record exists for this date
+        const existingRecord = await prisma.attendanceRecord.findFirst({
+          where: {
+            employeeId: employeeId,
+            date: {
+              gte: new Date(formattedDate.setHours(0, 0, 0, 0)),
+              lt: new Date(formattedDate.setHours(23, 59, 59, 999)),
+            },
+          },
+        });
+
+        if (existingRecord) {
+          // ✅ Update existing record
+          await prisma.attendanceRecord.update({
+            where: { id: existingRecord.id },
+            data: { status: "OnLeave", absenceReason: "Leave Approved" },
+          });
+        } else {
+          // ✅ Fetch shift for employee
+          const shift = await prisma.shift.findFirst({
+            where: { id: targetLeaveRequest.employee.shiftId! },
+          });
+
+          if (!shift) {
+            throw new Error("Shift not found for employee.");
+          }
+
+          // ✅ Create new record with mandatory fields
+          await prisma.attendanceRecord.create({
+            data: {
+              employeeId: employeeId,
+              date: new Date(formattedDate),
+              status: "OnLeave",
+              shiftId: shift.id,
+              clockIn: shift.startTime, // Assuming shift.startTime is Date
+              absenceReason: "Leave Approved",
+            },
+          });
+        }
+
+
+        // Move to next day
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    }
+
+
     const employeeUser = targetLeaveRequest.employee.user;
     const fullName = `${employeeUser.fullName}`;
     const fromDate = targetLeaveRequest.startDate.toLocaleDateString();
@@ -719,9 +839,8 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         scope: "MANAGERS_DEPT",
         data: {
           title: "Leave Request Processed",
-          message: `${
-            user.fullName
-          } ${status.toLowerCase()} the leave request of ${fullName}.`,
+          message: `${user.fullName
+            } ${status.toLowerCase()} the leave request of ${fullName}.`,
           type: "LeaveRequest",
         },
         targetIds: {
@@ -739,9 +858,8 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         scope: "TEAMLEADS_SUBDEPT",
         data: {
           title: "Leave Request Processed",
-          message: `${
-            user.fullName
-          } ${status.toLowerCase()} the leave request of ${fullName}.`,
+          message: `${user.fullName
+            } ${status.toLowerCase()} the leave request of ${fullName}.`,
           type: "LeaveRequest",
         },
         targetIds: {
@@ -777,6 +895,96 @@ export const getAllAttendance = async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Failed to fetch attendance:", error);
     res.status(500).json({ message: "Failed to fetch attendance" });
+  }
+};
+
+// GET weekly hours summary (Mon-Fri) for an employee
+export const getEmployeeDailyHoursSummary = async (req: Request, res: Response) => {
+  try {
+    const employeeId = req.params.employeeId as string;
+    const weekNumber = req.query.weekNumber ? parseInt(req.query.weekNumber as string) : undefined;
+
+    if (!employeeId) {
+      return res.status(400).json({ message: "Employee ID is required" });
+    }
+
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-11
+
+    // Helper: get Monday of a week number
+    const getMondayOfWeek = (weekNum: number): Date => {
+      const firstDayOfMonth = new Date(year, month, 1);
+      const firstMondayOffset = (8 - firstDayOfMonth.getDay()) % 7; // 0=Sun, 1=Mon
+      const monday = new Date(firstDayOfMonth);
+      monday.setDate(firstDayOfMonth.getDate() + firstMondayOffset + (weekNum - 1) * 7);
+      monday.setHours(0, 0, 0, 0);
+      return monday;
+    };
+
+    // Determine the week to fetch
+    let startOfWeek: Date;
+    let endOfWeek: Date;
+    if (weekNumber) {
+      startOfWeek = getMondayOfWeek(weekNumber);
+    } else {
+      // Current week: Monday
+      const day = now.getDay();
+      const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+      startOfWeek = new Date(year, month, diff);
+      startOfWeek.setHours(0, 0, 0, 0);
+    }
+    // Friday
+    endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 4);
+    endOfWeek.setHours(23, 59, 59, 999);
+
+    // Fetch attendance records for the week (Mon-Fri)
+    const attendanceData = await prisma.attendanceRecord.findMany({
+      where: {
+        employeeId,
+        date: { gte: startOfWeek, lte: endOfWeek },
+        clockOut: { not: null },
+      },
+      orderBy: { date: "asc" },
+    });
+
+    const result = {
+      weeklyWorkedHours: 0,
+      weeklyLateMinutes: 0,
+      daily: {} as Record<string, {
+        clockIn: Date | null;
+        clockOut: Date | null;
+        hoursWorked: number;
+        lateMinutes: number;
+        status: string;
+      }>
+    };
+
+    for (const record of attendanceData) {
+      const { date, clockIn, clockOut, lateMinutes, status } = record;
+      if (!clockOut || !clockIn) continue;
+
+      const workedHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+      const dateKey = new Date(date).toISOString().split("T")[0];
+
+      result.daily[dateKey] = {
+        clockIn,
+        clockOut,
+        hoursWorked: workedHours,
+        lateMinutes: lateMinutes || 0,
+        status: status || "Pending",
+      };
+
+      result.weeklyWorkedHours += workedHours;
+      result.weeklyLateMinutes += lateMinutes || 0;
+    }
+
+    res.status(200).json(result);
+
+  } catch (error) {
+    console.error("Error fetching weekly hours:", error);
+    res.status(500).json({ message: "Failed to fetch weekly hours" });
   }
 };
 
@@ -1044,9 +1252,9 @@ export const getEmployeesAttendanceSummary = async (
 
         let todayStatus = "Absent";
         if (onLeaveToday) {
-          todayStatus = "On Leave";
-        } else if (todayAttendance?.status === "Late Arrival") {
-          todayStatus = "Late Arrival";
+          todayStatus = "OnLeave";
+        } else if (todayAttendance?.status === "Late") {
+          todayStatus = "Late";
         } else if (todayAttendance?.status === "Present") {
           todayStatus = "Present";
         }
@@ -1061,7 +1269,7 @@ export const getEmployeesAttendanceSummary = async (
         const lateArrivals = await prisma.attendanceRecord.count({
           where: {
             employeeId: emp.id,
-            status: "Late Arrival",
+            status: "Late",
           },
         });
 
