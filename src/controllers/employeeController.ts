@@ -34,7 +34,6 @@ export enum EmployeeStatus {
   PROBATION = "probation",
 }
 
-// constants/statusOptions.ts
 export const statusOptions = [
   { value: EmployeeStatus.ACTIVE, label: "Active" },
   { value: EmployeeStatus.INACTIVE, label: "Inactive" },
@@ -136,6 +135,15 @@ export const createEmployee = async (req: Request, res: Response) => {
       fatherName,
     }: CreateEmployeeRequest = req.body;
 
+    // ✅ Check for existing user by email
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "A user with this email already exists.",
+      });
+    }
+
     const files = (req.files || {}) as {
       [fieldname: string]: Express.Multer.File[];
     };
@@ -143,13 +151,13 @@ export const createEmployee = async (req: Request, res: Response) => {
     // ✅ Build profile image object if uploaded
     const profileImageObj = files.profileImage?.[0]
       ? [
-          {
-            name: files.profileImage[0].originalname,
-            url: getFileUrl(req, "profiles", files.profileImage[0].filename),
-            mimeType: files.profileImage[0].mimetype,
-            uploadedAt: new Date(),
-          },
-        ]
+        {
+          name: files.profileImage[0].originalname,
+          url: getFileUrl(req, "profiles", files.profileImage[0].filename),
+          mimeType: files.profileImage[0].mimetype,
+          uploadedAt: new Date(),
+        },
+      ]
       : [];
 
     // ✅ Build documents object if uploaded
@@ -176,17 +184,8 @@ export const createEmployee = async (req: Request, res: Response) => {
     const processedSkills = Array.isArray(skills)
       ? skills
       : typeof skills === "string"
-      ? skills.split(",").map((s) => s.trim())
-      : [];
-
-    // ✅ Check for existing user by email
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(409).json({
-        success: false,
-        message: "A user with this email already exists.",
-      });
-    }
+        ? skills.split(",").map((s) => s.trim())
+        : [];
 
     // ✅ Generate Employee Number & Hash Password
     const employeeNumber = await generateEmployeeNumber();
@@ -233,12 +232,11 @@ export const createEmployee = async (req: Request, res: Response) => {
         }
       }
 
-      // ✅ Check if Director
       const subRole = subRoleId
         ? await prismaTx.subRole.findUnique({
-            where: { id: subRoleId },
-            select: { name: true },
-          })
+          where: { id: subRoleId },
+          select: { name: true },
+        })
         : null;
       const isDirector = subRole?.name?.toLowerCase() === "director";
       const isManager = subRole?.name?.toLowerCase() === "manager";
@@ -273,7 +271,6 @@ export const createEmployee = async (req: Request, res: Response) => {
       return { user: newUser, employee: newEmployee, isDirector };
     });
 
-    // ✅ Notifications (same logic)
     try {
       await Promise.all([
         createScopedNotification({
@@ -295,31 +292,31 @@ export const createEmployee = async (req: Request, res: Response) => {
           visibilityLevel: 1,
         }),
         !result.isDirector &&
-          departmentId &&
-          createScopedNotification({
-            scope: "MANAGERS_DEPT",
-            data: {
-              title: "New Department Member",
-              message: `${fullName} has joined your department.`,
-              type: "Employee",
-            },
-            targetIds: { departmentId, employeeId: result.employee.id },
-            visibilityLevel: 2,
-            excludeUserId: result.user.id,
-          }),
+        departmentId &&
+        createScopedNotification({
+          scope: "MANAGERS_DEPT",
+          data: {
+            title: "New Department Member",
+            message: `${fullName} has joined your department.`,
+            type: "Employee",
+          },
+          targetIds: { departmentId, employeeId: result.employee.id },
+          visibilityLevel: 2,
+          excludeUserId: result.user.id,
+        }),
         !result.isDirector &&
-          subDepartmentId &&
-          createScopedNotification({
-            scope: "TEAMLEADS_SUBDEPT",
-            data: {
-              title: "New Team Member",
-              message: `${fullName} has joined your sub-department.`,
-              type: "Employee",
-            },
-            targetIds: { subDepartmentId, employeeId: result.employee.id },
-            visibilityLevel: 3,
-            excludeUserId: result.user.id,
-          }),
+        subDepartmentId &&
+        createScopedNotification({
+          scope: "TEAMLEADS_SUBDEPT",
+          data: {
+            title: "New Team Member",
+            message: `${fullName} has joined your sub-department.`,
+            type: "Employee",
+          },
+          targetIds: { subDepartmentId, employeeId: result.employee.id },
+          visibilityLevel: 3,
+          excludeUserId: result.user.id,
+        }),
         createScopedNotification({
           scope: "EMPLOYEE_ONLY",
           data: {
@@ -435,8 +432,8 @@ export const listEmployees = async (req: Request, res: Response) => {
 
       const profileImageUrl =
         images.length > 0 &&
-        typeof images[0] === "object" &&
-        "url" in images[0]!
+          typeof images[0] === "object" &&
+          "url" in images[0]!
           ? (images[0] as { url: string }).url
           : emp.profileImageUrl || null;
 
@@ -496,6 +493,7 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
+    // admin isnt related to employee admin - that's why checking for both user and admin
     const employee = await prisma.employee.findFirst({
       where: { OR: [{ id }, { userId: id }] },
       include: {
@@ -511,7 +509,7 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Parse images and documents
+    // Parse images and documents
     const images = Array.isArray(employee.images) ? employee.images : [];
     const documents = Array.isArray(employee.documents)
       ? employee.documents
@@ -521,10 +519,6 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
       images.length > 0 && typeof images[0] === "object" && "url" in images[0]!
         ? (images[0] as { url: string }).url
         : employee.profileImageUrl || null;
-
-    console.log("image_url", profileImageUrl);
-    console.log("image", images);
-    console.log("docs", documents);
 
     return res.status(200).json({
       success: true,
@@ -559,7 +553,7 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
           emergencyContactName: employee.emergencyContactName,
           emergencyContactPhone: employee.emergencyContactPhone,
 
-          // ✅ Updated fields
+          // Updated fields
           profileImageUrl,
           images,
           documents,
@@ -579,6 +573,18 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
 export const updateEmployee = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+
+    // Fetch existing employee
+    const existingEmployee = await prisma.employee.findUnique({
+      where: { id },
+    });
+    if (!existingEmployee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
     const {
       fullName,
       email,
@@ -601,24 +607,16 @@ export const updateEmployee = async (req: Request, res: Response) => {
       fatherName,
     } = req.body;
 
-    console.log("SUBROLE from req.body:", subRoleId);
-    console.log("Request body:", req.body);
-
-    // ✅ Handle file uploads
+    // Handle file uploads
     const files = (req.files || {}) as {
       [fieldname: string]: Express.Multer.File[];
     };
-    console.log("Uploaded files from frontend:", files);
 
-    // ✅ Parse existing documents metadata sent by frontend
+    // Parse existing documents metadata sent by frontend
     let existingDocsFromFrontend: Document[] = [];
     if (req.body.documentsMetadata) {
       try {
         existingDocsFromFrontend = JSON.parse(req.body.documentsMetadata);
-        console.log(
-          "Existing documents metadata from frontend:",
-          existingDocsFromFrontend
-        );
       } catch (err) {
         console.error(
           "Failed to parse documentsMetadata:",
@@ -630,19 +628,19 @@ export const updateEmployee = async (req: Request, res: Response) => {
       console.log("No existing documents metadata sent from frontend");
     }
 
-    // ✅ Build new profile image object if uploaded
+    // Build new profile image object if uploaded
     const newProfileImageObj = files.profileImage?.[0]
       ? [
-          {
-            name: files.profileImage[0].originalname,
-            url: getFileUrl(req, "profiles", files.profileImage[0].filename),
-            mimeType: files.profileImage[0].mimetype,
-            uploadedAt: new Date(),
-          },
-        ]
+        {
+          name: files.profileImage[0].originalname,
+          url: getFileUrl(req, "profiles", files.profileImage[0].filename),
+          mimeType: files.profileImage[0].mimetype,
+          uploadedAt: new Date(),
+        },
+      ]
       : [];
 
-    // ✅ Build new documents object if uploaded
+    // Build new documents object if uploaded
     const newDocumentsObj =
       files.documents?.map((file) => ({
         name: file.originalname,
@@ -664,58 +662,48 @@ export const updateEmployee = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Process skills array
+    // Process skills array
     const processedSkills = Array.isArray(skills)
       ? skills
       : typeof skills === "string"
-      ? skills.split(",").map((s) => s.trim())
-      : [];
+        ? skills.split(",").map((s) => s.trim())
+        : [];
 
-    // ✅ Fetch existing employee
-    const existingEmployee = await prisma.employee.findUnique({
-      where: { id },
-    });
-    if (!existingEmployee) {
-      return res.status(404).json({
-        success: false,
-        message: "Employee not found",
-      });
-    }
-
-    // ✅ Merge profile image
+    // Merge profile image
     const oldProfileImages = Array.isArray(existingEmployee.images)
       ? existingEmployee.images
       : [];
+
     const mergedImages =
       newProfileImageObj.length > 0 ? newProfileImageObj : oldProfileImages;
     const firstImage = mergedImages[0];
+
     const profileImageUrl =
       typeof firstImage === "object" &&
-      firstImage !== null &&
-      "url" in firstImage
+        firstImage !== null &&
+        "url" in firstImage
         ? (firstImage as { url: string }).url
         : existingEmployee.profileImageUrl;
 
-    // ✅ Merge documents: only keep those sent from frontend + new uploads
+    // Merge documents: only keep those sent from frontend + new uploads
     const mergedDocuments = [...existingDocsFromFrontend, ...newDocumentsObj];
-    console.log("Documents to be saved:", mergedDocuments);
 
-    // ✅ Determine subRole type
+    // Determine subRole type
     const subRole = subRoleId
       ? await prisma.subRole.findUnique({
-          where: { id: subRoleId },
-          select: { name: true },
-        })
+        where: { id: subRoleId },
+        select: { name: true },
+      })
       : null;
     const isDirector = subRole?.name?.toLowerCase() === "director";
     const isManager = subRole?.name?.toLowerCase() === "manager";
 
-    // ✅ Decide final subDepartmentId and departmentId
+    // Decide final subDepartmentId and departmentId
     const subDeptIdToSave =
       !isDirector && !isManager && subDepartmentId ? subDepartmentId : null;
     const deptIdToSave = !isDirector ? departmentId : null;
 
-    // ✅ Update employee
+    // Update employee
     const updatedEmployee = await prisma.employee.update({
       where: { id },
       data: {
@@ -746,18 +734,12 @@ export const updateEmployee = async (req: Request, res: Response) => {
       },
     });
 
-    // ✅ Update user info
+    // Update user info
     const updateUserData: any = {};
     if (email) updateUserData.email = email;
     if (fullName) updateUserData.fullName = fullName;
     if (roleId) updateUserData.roleId = roleId;
     if (subRoleId) updateUserData.subRoleId = subRoleId;
-    console.log(
-      "user sub-role updating as:",
-      updateUserData.subRoleId,
-      " and,",
-      subRoleId
-    );
 
     if (Object.keys(updateUserData).length > 0) {
       await prisma.user.update({
@@ -766,7 +748,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
       });
     }
 
-    // ✅ Send notifications
+    // Send notifications
     try {
       const performedBy = req.user as unknown as CustomJwtPayload;
       const performer = await prisma.user.findUnique({
@@ -813,7 +795,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
       console.error("Notification error after updateEmployee:", err);
     }
 
-    // ✅ Return updated employee
+    // Return updated employee
     return res.status(200).json({
       success: true,
       message: "Employee updated successfully.",
@@ -851,6 +833,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
     });
   }
 };
+
 // export const deleteEmployee = async (req: Request, res: Response) => {
 //   const { id } = req.params;
 
@@ -953,6 +936,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
 // };
 
 // GET /users/inactive
+
 export const listInactiveUsers = async (req: Request, res: Response) => {
   try {
     const inactiveUsers = await prisma.user.findMany({
@@ -1027,12 +1011,14 @@ export const listInactiveUsers = async (req: Request, res: Response) => {
 // };
 
 // Helper to generate file URL
+
 const getFileUrl = (req: Request, folder: string, filename: string) => {
   const baseUrl =
     process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
   return `${baseUrl}/uploads/${folder}/${filename}`;
 };
 
+// info updated by employee himself - phone / email / profileImage only
 export const updateEmployeeInfoByEmployee = async (
   req: Request,
   res: Response
@@ -1071,8 +1057,8 @@ export const updateEmployeeInfoByEmployee = async (
       newImages.length > 0
         ? newImages
         : Array.isArray(existingEmployee.images)
-        ? existingEmployee.images
-        : [];
+          ? existingEmployee.images
+          : [];
     // Profile URL: first image or existing
     const profileImageUrl: string | undefined =
       newImages.length > 0

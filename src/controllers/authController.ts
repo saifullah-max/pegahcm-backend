@@ -127,7 +127,7 @@ export const login = async (req: Request, res: Response) => {
           name: user.subRole?.name || null
         }
       },
-      process.env.JWT_SECRET || 'your-secret-key',
+      process.env.JWT_SECRET || 'poiuytrewasdfghjkl0998877!!!3?><>:&^&hjn',
       { expiresIn: '24h' }
     );
 

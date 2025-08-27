@@ -29,9 +29,8 @@ export const createPermission = async (req: Request, res: Response) => {
       },
     });
 
-    // Find the 'admin' role (adjust field if needed)
     const adminRole = await prisma.role.findUnique({
-      where: { name: 'admin' }, // Change to `roleType` if you're using that
+      where: { name: 'admin' },
       include: { users: true },
     });
 
