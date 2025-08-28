@@ -275,6 +275,9 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
 // GET /attendance-fix
 export const getAllFixRequests = async (req: Request, res: Response) => {
     const reviewerId = req.user?.userId;
+    const { limit = "5", lastCursorId } = req.query
+
+    const limitNumber = parseInt(limit as string)
 
     try {
         const reviewer = await prisma.user.findUnique({
@@ -291,7 +294,11 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
 
         // Admin can see all
         if (reviewer.role?.name === "admin") {
+            const total = await prisma.attendanceFixRequest.count({})
             const allRequests = await prisma.attendanceFixRequest.findMany({
+                skip: lastCursorId ? 1 : 0,
+                take: limitNumber,
+                cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
                 include: {
                     employee: {
                         include: {
@@ -305,12 +312,21 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
                 },
             });
 
-            return res.status(200).json({ success: true, data: allRequests });
+            const pagination = {
+                limit,
+                total,
+                totalPages: Math.ceil(total / limitNumber)
+            }
+
+            return res.status(200).json({ success: true, data: allRequests, pagination });
         }
 
         // Sub-role-based access (get requests of users with lower level)
         if (reviewer.subRole?.level !== undefined) {
             const requests = await prisma.attendanceFixRequest.findMany({
+                take: limitNumber,
+                skip: lastCursorId ? 1 : 0,
+                cursor: localStorage ? { id: lastCursorId as string } : undefined,
                 where: {
                     employee: {
                         user: {
@@ -334,8 +350,16 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
                     requestedAt: 'desc',
                 },
             });
+            const total = await prisma.attendanceFixRequest.count({})
 
-            return res.status(200).json({ success: true, data: requests });
+            const pagination = {
+                limit,
+                total,
+                totalPages: Math.ceil(total / limitNumber)
+            }
+
+
+            return res.status(200).json({ success: true, data: requests, pagination });
         }
 
         return res.status(403).json({ message: "You are not authorized to view requests" });

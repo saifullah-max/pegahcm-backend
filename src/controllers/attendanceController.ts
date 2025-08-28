@@ -621,7 +621,19 @@ export const getAllLeaveRequestsForAdmin = async (
   res: Response
 ) => {
   try {
+    const { limit = "5", lastCursorId } = req.query;
+
+    const limitNumber = parseInt(limit as string);
+    // const skip = (pageNumber - 1) * limitNumber;
+
+    const total = await prisma.leaveRequest.count({})
+    const cursor = lastCursorId ? { id: lastCursorId } : undefined
+    console.log("Cursor passed to db:", cursor);
+
     const leaveRequests = await prisma.leaveRequest.findMany({
+      skip: cursor ? 1 : 0,
+      take: limitNumber,
+      cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
       include: {
         leaveType: true,
         employee: {
@@ -642,7 +654,16 @@ export const getAllLeaveRequestsForAdmin = async (
       orderBy: { requestedAt: "desc" },
     });
 
-    return res.status(200).json({ success: true, data: leaveRequests });
+    return res.status(200).json({
+      success: true, data: {
+        leaveRequests,
+        pagination: {
+          limit,
+          total,
+          totalPages: Math.ceil(total / limitNumber)
+        }
+      }
+    });
   } catch (error) {
     console.error("Error fetching leave requests for admin:", error);
     return res.status(500).json({
@@ -1220,16 +1241,26 @@ export const getEmployeesAttendanceSummary = async (
   res: Response
 ) => {
   try {
+    const { limit = "5", lastCursorId } = req.query;
+
+    const limitNumber = parseInt(limit as string);
+
+    const total = await prisma.employee.count({})
+
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
     const employees = await prisma.employee.findMany({
+      skip: lastCursorId ? 1 : 0,
+      take: limitNumber,
+      cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
       include: {
         user: { select: { fullName: true, email: true } },
         department: true,
       },
+      orderBy: { id: "desc" }
     });
 
     const summary = await Promise.all(
@@ -1251,13 +1282,9 @@ export const getEmployeesAttendanceSummary = async (
         });
 
         let todayStatus = "Absent";
-        if (onLeaveToday) {
-          todayStatus = "OnLeave";
-        } else if (todayAttendance?.status === "Late") {
-          todayStatus = "Late";
-        } else if (todayAttendance?.status === "Present") {
-          todayStatus = "Present";
-        }
+        if (onLeaveToday) todayStatus = "OnLeave"
+        else if (todayAttendance?.status === "Late") todayStatus = "Late";
+        else if (todayAttendance?.status === "Present") todayStatus = "Present";
 
         const totalLeaves = await prisma.leaveRequest.count({
           where: {
@@ -1272,7 +1299,6 @@ export const getEmployeesAttendanceSummary = async (
             status: "Late",
           },
         });
-
         return {
           employeeId: emp.id,
           fullName: emp.user.fullName,
@@ -1280,12 +1306,20 @@ export const getEmployeesAttendanceSummary = async (
           department: emp.department?.name || "N/A",
           todayStatus,
           totalLeaves,
-          lateArrivals,
+          lateArrivals
         };
       })
     );
 
-    return res.status(200).json({ success: true, data: summary });
+    return res.status(200).json({
+      success: true,
+      data: summary,
+      pagination: {
+        limit,
+        total,
+        totalPages: Math.ceil(total / limitNumber)
+      }
+    });
   } catch (error) {
     console.error("Failed to fetch employee summary:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
