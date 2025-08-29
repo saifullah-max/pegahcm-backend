@@ -41,7 +41,7 @@ export const checkPermission = (module: string, action: string) => {
                 return;
             }
 
-            return next(); // ✅ must return next()
+            return next(); // must return next()
         } catch (error) {
             console.error('Permission check error:', error);
             res.status(500).json({ message: 'Internal server error' });

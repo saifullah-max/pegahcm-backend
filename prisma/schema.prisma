@@ -81,22 +81,22 @@ model UserPermission {
 }
 
 model User {
-  id                    String                 @id @default(uuid())
-  username              String                 @unique
-  passwordHash          String
-  email                 String                 @unique
-  fullName              String
-  role                  Role                   @relation(fields: [roleId], references: [id])
-  roleId                String
-  status                String
-  dateJoined            DateTime               @default(now())
-  lastLogin             DateTime?
-  subRoleId             String?
-  subRole               SubRole?               @relation("UserSubRole", fields: [subRoleId], references: [id])
-  roleTag               RoleTag?
+  id                   String    @id @default(uuid())
+  username             String    @unique
+  passwordHash         String
+  email                String    @unique
+  fullName             String
+  role                 Role      @relation(fields: [roleId], references: [id])
+  roleId               String
+  status               String
+  dateJoined           DateTime  @default(now())
+  lastLogin            DateTime?
+  subRoleId            String?
+  subRole              SubRole?  @relation("UserSubRole", fields: [subRoleId], references: [id])
+  roleTag              RoleTag?
   resetPasswordToken   String?   @unique
   resetPasswordExpires DateTime?
-  employee              Employee?
+  employee             Employee?
 
   approvedLeaves        LeaveRequest[]         @relation("ApprovedBy")
   approvedVacations     Vacation[]             @relation("ApprovedBy")
@@ -124,9 +124,9 @@ model Employee {
   hireDate              DateTime
   status                String
   fatherName            String?
-  manager              Employee?              @relation("EmployeeManager", fields: [managerId], references: [id])
-  managerId            String?
-  skills               String? // JSON string of skills array
+  manager               Employee?      @relation("EmployeeManager", fields: [managerId], references: [id])
+  managerId             String?
+  skills                String? // JSON string of skills array
   subDepartment         SubDepartment? @relation(fields: [subDepartmentId], references: [id])
   subDepartmentId       String?
   address               String
@@ -139,9 +139,9 @@ model Employee {
   shiftId               String?
   shift                 Shift?         @relation(fields: [shiftId], references: [id])
 
-  profileImageUrl      String?
-  images               Json? // Stores array of image objects [{name, url, mimeType, uploadedAt}]
-  documents            Json? // Stores array of document objects [{name, url, mimeType, type, uploadedAt, categoryId}]
+  profileImageUrl String?
+  images          Json? // Stores array of image objects [{name, url, mimeType, uploadedAt}]
+  documents       Json? // Stores array of document objects [{name, url, mimeType, type, uploadedAt, categoryId}]
 
   managedEmployees     Employee[]             @relation("EmployeeManager")
   attendanceRecords    AttendanceRecord[]
@@ -154,6 +154,8 @@ model Employee {
   LeaveBalance         LeaveBalance[]
   AttendanceFixRequest AttendanceFixRequest[]
   salaryDetails        SalaryDetail[]
+  employeeDocument     employeeDocument[]
+  employeeImage        employeeImage[]
 }
 
 model Role {
@@ -325,4 +327,166 @@ model Allowance {
   amount Decimal @db.Decimal(10, 2)
 
   createdAt DateTime @default(now())
+}
+
+model DocumentCategory {
+  id          String             @id @default(uuid())
+  name        String             @unique
+  description String?
+  documents   employeeDocument[]
+}
+
+model employeeDocument {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  name       String
+  url        String // File path or external link
+  mimeType   String
+  uploadedAt DateTime @default(now())
+  type       String // e.g. "resume", "certificate", etc.
+
+  categoryId String?
+  category   DocumentCategory? @relation(fields: [categoryId], references: [id])
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String // store as string or JSON
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model Holiday {
+  id          String   @id @default(uuid())
+  title       String
+  date        DateTime
+  description String?
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  action    String // e.g., "Updated Shift", "Approved Leave"
+  module    String // e.g., "Attendance"
+  metadata  String? // optional JSON (e.g. { recordId: "xyz" })
+  timestamp DateTime @default(now())
+}
+
+model LeaveBalance {
+  id          String    @id @default(uuid())
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId  String
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
+  leaveTypeId String
+  balance     Int
+  updatedAt   DateTime  @updatedAt
+}
+
+model BulkUpload {
+  id           String   @id @default(uuid())
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+  fileUrl      String
+  type         String // e.g., "attendance"
+  status       String // Processed, Failed, Pending
+  uploadedAt   DateTime @default(now())
+}
+
+model employeeImage {
+  id         String   @id @default(uuid())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  name       String
+  url        String // File path or external link (Cloudinary, S3, etc.)
+  mimeType   String
+  uploadedAt DateTime @default(now())
+}
+
+model BreakType {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  duration    Int // duration in minutes (optional for fixed-length breaks)
+  description String?
+  breaks      Break[]
+}
+
+model Vacation {
+  id           String    @id @default(uuid())
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String
+  startDate    DateTime
+  endDate      DateTime
+  vacationType String
+  status       String
+  approvedBy   User      @relation("ApprovedBy", fields: [approvedById], references: [id])
+  approvedById String
+  approvedAt   DateTime?
+}
+
+model OnboardingProcess {
+  id           String    @id @default(uuid())
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId   String    @unique
+  startDate    DateTime
+  endDate      DateTime?
+  status       String
+  assignedHR   User      @relation("AssignedHR", fields: [assignedHRId], references: [id])
+  assignedHRId String
+  notes        String?
+}
+
+model Resignation {
+  id                     String             @id @default(uuid())
+  employee               Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId             String
+  resignationDate        DateTime
+  lastWorkingDay         DateTime
+  reason                 String
+  reviewComments         String?
+  status                 String
+  clearanceStatus        String
+  assetReturnStatus      String
+  processedBy            User?              @relation("ProcessedBy", fields: [processedById], references: [id])
+  processedById          String?
+  processedAt            DateTime?
+  clearanceResponsible   User?              @relation(fields: [clearanceResponsibleId], references: [id])
+  clearanceResponsibleId String?
+  assets                 ResignationAsset[]
+}
+
+model Asset {
+  id                String             @id @default(uuid())
+  name              String
+  description       String?
+  serialNumber      String             @unique
+  assignedTo        Employee           @relation(fields: [assignedToId], references: [id], onDelete: Cascade)
+  assignedToId      String
+  status            String
+  resignationAssets ResignationAsset[]
+}
+
+model ResignationAsset {
+  id            String      @id @default(uuid())
+  resignation   Resignation @relation(fields: [resignationId], references: [id])
+  resignationId String
+  asset         Asset       @relation(fields: [assetId], references: [id])
+  assetId       String
+  returnStatus  String
+  returnDate    DateTime?
+}
+
+model HRProcess {
+  id            String    @id @default(uuid())
+  processType   String
+  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId    String
+  initiatedBy   User      @relation("InitiatedBy", fields: [initiatedById], references: [id])
+  initiatedById String
+  startDate     DateTime
+  endDate       DateTime?
+  status        String
+  notes         String?
 }
