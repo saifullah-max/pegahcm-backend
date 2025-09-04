@@ -14,7 +14,7 @@ router.use(authenticateToken as any);
 // submit resignation
 router.post('/resignation/apply', checkPermission("Resignation", "create"), submitResignation as any);
 
-router.get('/', checkPermission("Employee", "view-all"), listEmployees as any)
+router.get('/', listEmployees as any)
 
 // getting a specific employee by ID
 router.get('/:id', checkPermission("Employee", "view"), ListSingleEmployee as any);
@@ -23,7 +23,7 @@ router.get('/:id', checkPermission("Employee", "view"), ListSingleEmployee as an
 router.patch('/update-contact', uploadMiddleware, checkPermission("Employee", "view"), updateEmployeeInfoByEmployee as any)
 
 // Create employee with file uploads and image processing
-router.post('/', uploadMiddleware, checkPermission("Employee", "create"), createEmployee as any);
+router.post('/', uploadMiddleware, createEmployee as any);
 
 // Update employee
 router.put('/:id', uploadMiddleware, checkPermission("Employee", "update"), updateEmployee as any); // Reusing createEmployee for updates, adjust as needed

@@ -10,7 +10,7 @@ router.post('/', checkPermission("SubRole", "create"),createSubRole as any);
 
 router.get('/all', checkPermission("SubRole", "view"),getAllSubRoles as any);
 
-router.get('/', checkPermission("SubRole", "view"),getSubRoleById as any);
+router.get('/:id', checkPermission("SubRole", "view"),getSubRoleById as any);
 
 router.put('/:id', checkPermission("SubRole", "update"),updateSubRole as any);
 

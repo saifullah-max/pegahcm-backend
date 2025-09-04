@@ -69,6 +69,7 @@ export const getAllSubRoles = async (req: Request, res: Response) => {
 export const getSubRoleById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        console.log("Sub-role id:", id);
         const subRole = await prisma.subRole.findUnique({
             where: { id },
             include: {

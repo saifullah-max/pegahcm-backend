@@ -5,7 +5,6 @@ import prisma from '../utils/Prisma';
 
 export const createShift = async (req: Request, res: Response) => {
   try {
-    console.log('Request body:', req.body);
 
     if (!req.body) {
       return res.status(400).json({ error: 'Request body is required' });
@@ -84,10 +83,11 @@ export const getShiftById = async (req: Request, res: Response) => {
   }
 };
 
-function convertTimeToDate(timeStr: string): Date {
-  const today = new Date();
-  const [time, modifier] = timeStr.split(' '); // e.g., "03:00 PM"
-  const [hoursStr, minutesStr] = time.split(':');
+function convertTimeToDate(dateTimeStr: string): Date {
+  // Example input: "2025-09-03 10:00 PM"
+  const [datePart, timePart, modifier] = dateTimeStr.split(/[\s]+/);
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hoursStr, minutesStr] = timePart.split(':');
 
   let hours = parseInt(hoursStr, 10);
   const minutes = parseInt(minutesStr, 10);
@@ -95,13 +95,7 @@ function convertTimeToDate(timeStr: string): Date {
   if (modifier === 'PM' && hours !== 12) hours += 12;
   if (modifier === 'AM' && hours === 12) hours = 0;
 
-  const date = new Date(today);
-  date.setHours(hours);
-  date.setMinutes(minutes);
-  date.setSeconds(0);
-  date.setMilliseconds(0);
-
-  return date;
+  return new Date(year, month - 1, day, hours, minutes, 0, 0);
 }
 
 export const updateShift = async (req: Request, res: Response) => {

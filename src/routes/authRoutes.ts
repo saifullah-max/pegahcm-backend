@@ -8,4 +8,4 @@ router.post('/register', register as any);
 router.post('/forgot-password', forgotPassword as any);
 router.post('/reset-password/:token', resetPassword as any);
 
-export default router; 
+export default router;
