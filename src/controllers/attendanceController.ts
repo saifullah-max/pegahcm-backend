@@ -17,13 +17,13 @@ export const checkIn = async (
 ): Promise<void> => {
   try {
     const user = req.user as unknown as CustomJwtPayload;
-    const user_id = user.userId;
+    const userId = user.userId;
 
-    const employee = await prisma.employees.findUnique({
-      where: { user_id },
+    const employee = await prisma.employee.findUnique({
+      where: { userId },
       include: {
         user: {
-          include: { role: true, sub_role: true },
+          include: { role: true, subRole: true },
         },
       },
     });
@@ -34,24 +34,24 @@ export const checkIn = async (
     }
 
     const {
-      id: employee_id,
-      sub_department_id,
-      department_id,
+      id: employeeId,
+      subDepartmentId,
+      departmentId,
       user: userMeta,
     } = employee;
     const roleName = userMeta.role.name.toLowerCase();
-    const role_tag = userMeta.role_tag;
+    const roleTag = userMeta.roleTag;
 
     const todayUtc = moment().utc().startOf("day");
     const todayEndUtc = moment().utc().endOf("day");
 
     // ✅ Check if on approved leave
-    const onLeave = await prisma.leave_requests.findFirst({
+    const onLeave = await prisma.leaveRequest.findFirst({
       where: {
-        employee_id,
+        employeeId,
         status: "Approved",
-        start_date: { lte: todayUtc.toDate() },
-        end_date: { gte: todayEndUtc.toDate() },
+        startDate: { lte: todayUtc.toDate() },
+        endDate: { gte: todayEndUtc.toDate() },
       },
     });
 
@@ -61,9 +61,9 @@ export const checkIn = async (
     }
 
     // ✅ Check if already checked in
-    const alreadyCheckedIn = await prisma.attendance_records.findFirst({
+    const alreadyCheckedIn = await prisma.attendanceRecord.findFirst({
       where: {
-        employee_id,
+        employeeId,
         date: { gte: todayUtc.toDate(), lte: todayEndUtc.toDate() },
       },
     });
@@ -74,13 +74,13 @@ export const checkIn = async (
     }
 
     // ✅ Get shift info
-    const { shift_id } = req.body;
-    if (!shift_id) {
+    const { shiftId } = req.body;
+    if (!shiftId) {
       res.status(400).json({ message: "Shift ID is required." });
       return;
     }
 
-    const shift = await prisma.shifts.findUnique({ where: { id: shift_id } });
+    const shift = await prisma.shift.findUnique({ where: { id: shiftId } });
     if (!shift) {
       res.status(404).json({ message: "Shift not found." });
       return;
@@ -93,8 +93,8 @@ export const checkIn = async (
     const now = moment().tz(userTimezone);
 
     // ✅ Extract shift start time (ignore old date, only take time part)
-    const shiftStartHour = moment(shift.start_time).utc().hour();
-    const shiftStartMinute = moment(shift.start_time).utc().minute();
+    const shiftStartHour = moment(shift.startTime).utc().hour();
+    const shiftStartMinute = moment(shift.startTime).utc().minute();
 
     // ✅ Today's shift start in user's timezone
     const shiftStartLocal = now.clone().startOf("day").hour(shiftStartHour).minute(shiftStartMinute).second(0);
@@ -124,23 +124,23 @@ export const checkIn = async (
       status = "Early";
     }
 
-    let late_minutes: number | null = null;
+    let lateMinutes: number | null = null;
 
     if (status === "Late") {
-      late_minutes = now.diff(shiftStartLocal, "minutes");
+      lateMinutes = now.diff(shiftStartLocal, "minutes");
     }
 
     // ✅ Save attendance record
-    const newRecord = await prisma.attendance_records.create({
+    const newRecord = await prisma.attendanceRecord.create({
       data: {
-        employee_id,
-        shift_id,
+        employeeId,
+        shiftId,
         date: now.utc().toDate(),
-        clock_in: now.utc().toDate(),
+        clockIn: now.utc().toDate(),
         status,
-        late_minutes,
+        lateMinutes,
       },
-      include: { shifts: true },
+      include: { shift: true },
     });
 
     const clockInTimeLocal = now.format("hh:mm A"); // local time
@@ -148,40 +148,40 @@ export const checkIn = async (
     // ✅ Send notifications
     const baseNotification = {
       title: "Clock In",
-      message: `${userMeta.full_name} clocked in at ${clockInTimeLocal} (${status})`,
+      message: `${userMeta.fullName} clocked in at ${clockInTimeLocal} (${status})`,
       type: "ClockIn" as const,
-      employee_id,
+      employeeId,
     };
 
     const promises = [];
 
-    if (roleName === "user" && sub_department_id) {
+    if (roleName === "user" && subDepartmentId) {
       promises.push(
         createScopedNotification({
           scope: "TEAMLEADS_SUBDEPT",
           data: baseNotification,
-          targetIds: { sub_department_id },
+          targetIds: { subDepartmentId },
           visibilityLevel: 3,
-          excludeUserId: user_id,
+          excludeUserId: userId,
         })
       );
-    } else if (roleName === "teamlead" && department_id) {
+    } else if (roleName === "teamlead" && departmentId) {
       promises.push(
         createScopedNotification({
           scope: "MANAGERS_DEPT",
           data: baseNotification,
-          targetIds: { department_id },
+          targetIds: { departmentId },
           visibilityLevel: 2,
-          excludeUserId: user_id,
+          excludeUserId: userId,
         })
       );
-    } else if (roleName === "manager" && role_tag === "HR") {
+    } else if (roleName === "manager" && roleTag === "HR") {
       promises.push(
         createScopedNotification({
           scope: "DIRECTORS_HR",
           data: baseNotification,
           visibilityLevel: 1,
-          excludeUserId: user_id,
+          excludeUserId: userId,
         })
       );
     } else if (roleName === "director") {
@@ -190,7 +190,7 @@ export const checkIn = async (
           scope: "ADMIN_ONLY",
           data: baseNotification,
           visibilityLevel: 0,
-          excludeUserId: user_id,
+          excludeUserId: userId,
         })
       );
     }
@@ -218,13 +218,13 @@ export const checkOut = async (
 ): Promise<void> => {
   try {
     const user = req.user as unknown as CustomJwtPayload;
-    const user_id = user.userId;
+    const userId = user.userId;
 
-    const employee = await prisma.employees.findUnique({
-      where: { user_id },
+    const employee = await prisma.employee.findUnique({
+      where: { userId },
       include: {
         user: {
-          include: { role: true, sub_role: true },
+          include: { role: true, subRole: true },
         },
       },
     });
@@ -235,95 +235,95 @@ export const checkOut = async (
     }
 
     const {
-      id: employee_id,
-      sub_department_id,
-      department_id,
+      id: employeeId,
+      subDepartmentId,
+      departmentId,
       user: userMeta,
     } = employee;
     const roleName = userMeta.role.name.toLowerCase();
-    const role_tag = userMeta.role_tag;
+    const roleTag = userMeta.roleTag;
 
     const today = new Date();
     const todayStart = new Date(today.setHours(0, 0, 0, 0));
     const todayEnd = new Date(today.setHours(23, 59, 59, 999));
 
-    const attendance = await prisma.attendance_records.findFirst({
+    const attendance = await prisma.attendanceRecord.findFirst({
       where: {
-        employee_id,
+        employeeId,
         date: { gte: todayStart, lte: todayEnd },
       },
     });
 
-    if (!attendance || !attendance.clock_in) {
+    if (!attendance || !attendance.clockIn) {
       res.status(400).json({ message: "No check-in record found." });
       return;
     }
 
-    if (attendance.clock_out) {
+    if (attendance.clockOut) {
       res.status(400).json({ message: "Already checked out today." });
       return;
     }
 
     const now = new Date();
-    const breaks = await prisma.breaks.findMany({
-      where: { attendance_record_id: attendance.id },
+    const breaks = await prisma.break.findMany({
+      where: { attendanceRecordId: attendance.id },
     });
 
     let totalBreakMs = 0;
     for (const brk of breaks) {
-      if (brk.break_start && brk.break_end) {
+      if (brk.breakStart && brk.breakEnd) {
         totalBreakMs +=
-          new Date(brk.break_end).getTime() - new Date(brk.break_start).getTime();
+          new Date(brk.breakEnd).getTime() - new Date(brk.breakStart).getTime();
       }
     }
 
-    const net_working_minutes = Math.floor(
-      (now.getTime() - new Date(attendance.clock_in).getTime() - totalBreakMs) /
+    const netWorkingMinutes = Math.floor(
+      (now.getTime() - new Date(attendance.clockIn).getTime() - totalBreakMs) /
       (1000 * 60)
     );
 
-    const updatedRecord = await prisma.attendance_records.update({
+    const updatedRecord = await prisma.attendanceRecord.update({
       where: { id: attendance.id },
-      data: { clock_out: now, net_working_minutes },
+      data: { clockOut: now, netWorkingMinutes },
     });
 
     const clockOutTime = now.toLocaleTimeString();
     const baseNotification = {
       title: "Clock Out",
-      message: `${userMeta.full_name} clocked out at ${clockOutTime}`,
+      message: `${userMeta.fullName} clocked out at ${clockOutTime}`,
       type: "ClockOut" as const,
-      employee_id,
+      employeeId,
     };
 
     const promises = [];
 
-    if (roleName === "user" && sub_department_id) {
+    if (roleName === "user" && subDepartmentId) {
       promises.push(
         createScopedNotification({
           scope: "TEAMLEADS_SUBDEPT",
           data: baseNotification,
-          targetIds: { sub_department_id },
+          targetIds: { subDepartmentId },
           visibilityLevel: 3,
-          excludeUserId: user_id,
+          excludeUserId: userId,
         })
       );
-    } else if (roleName === "teamlead" && department_id) {
+    } else if (roleName === "teamlead" && departmentId) {
       promises.push(
         createScopedNotification({
           scope: "MANAGERS_DEPT",
           data: baseNotification,
-          targetIds: { department_id },
+          targetIds: { departmentId },
           visibilityLevel: 2,
-          excludeUserId: user_id,
+          excludeUserId: userId,
         })
       );
-    } else if (roleName === "manager" && role_tag === "HR") {
+    } else if (roleName === "manager" && roleTag === "HR") {
       promises.push(
         createScopedNotification({
           scope: "DIRECTORS_HR",
           data: baseNotification,
           visibilityLevel: 1,
-          excludeUserId: user_id,
+          excludeUserId: userId,
         })
       );
     } else if (roleName === "director") {
@@ -332,7 +332,7 @@ export const checkOut = async (
           scope: "ADMIN_ONLY",
           data: baseNotification,
           visibilityLevel: 0,
-          excludeUserId: user_id,
+          excludeUserId: userId,
         })
       );
     }
@@ -351,17 +351,17 @@ export const checkOut = async (
 // GET /api/attendance/today
 export const checkTodayAttendance = async (req: Request, res: Response) => {
   try {
-    const user_id = req.user?.userId;
+    const userId = req.user?.userId;
 
-    if (!user_id) {
+    if (!userId) {
       return res
         .status(401)
         .json({ message: "Unauthorized: userId not found in token." });
     }
 
     // Step 1: Get employeeId using userId
-    const employee = await prisma.employees.findUnique({
-      where: { user_id },
+    const employee = await prisma.employee.findUnique({
+      where: { userId },
     });
 
     if (!employee) {
@@ -376,18 +376,18 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
     endOfDay.setHours(23, 59, 59, 999);
 
     // Step 3: Check if attendance exists today
-    const attendance = await prisma.attendance_records.findFirst({
+    const attendance = await prisma.attendanceRecord.findFirst({
       where: {
-        employee_id: employee.id,
-        clock_in: {
+        employeeId: employee.id,
+        clockIn: {
           gte: startOfDay,
           lte: endOfDay,
         },
       },
       include: {
         breaks: {
-          orderBy: { break_start: "asc" },
-          include: { break_type: true },
+          orderBy: { breakStart: "asc" },
+          include: { breakType: true },
         },
       },
     });
@@ -399,19 +399,19 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
     let activeBreak = null;
 
     if (attendance) {
-      const ongoing = attendance.breaks.find((b: any) => b.break_end === null);
+      const ongoing = attendance.breaks.find((b: any) => b.breakEnd === null);
       if (ongoing) {
         activeBreak = {
           id: ongoing.id,
-          break_start: ongoing.break_start,
-          break_type: ongoing.break_type, // includes name
+          breakStart: ongoing.breakStart,
+          breakType: ongoing.breakType, // includes name
         };
       }
     }
 
     return res.status(200).json({
       checkedIn: true,
-      checkedOut: attendance.clock_out !== null,
+      checkedOut: attendance.clockOut !== null,
       attendance,
       activeBreak, // ✅ Now included in response
     });
@@ -424,17 +424,17 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
 // GET /api/attendance/employee/all
 export const getAllAttendanceRecords = async (req: Request, res: Response) => {
   try {
-    const user_id = req.user?.userId;
+    const userId = req.user?.userId;
 
-    if (!user_id) {
+    if (!userId) {
       return res
         .status(401)
         .json({ message: "Unauthorized: userId not found in token." });
     }
 
     // Step 1: Get employeeId using userId
-    const employee = await prisma.employees.findUnique({
-      where: { user_id },
+    const employee = await prisma.employee.findUnique({
+      where: { userId },
     });
 
     if (!employee) {
@@ -442,17 +442,17 @@ export const getAllAttendanceRecords = async (req: Request, res: Response) => {
     }
 
     // Step 2: Get all attendance records for this employee
-    const attendanceRecords = await prisma.attendance_records.findMany({
+    const attendanceRecords = await prisma.attendanceRecord.findMany({
       where: {
-        employee_id: employee.id,
+        employeeId: employee.id,
       },
       orderBy: {
-        clock_in: "desc", // Optional: latest first
+        clockIn: "desc", // Optional: latest first
       },
     });
 
     return res.status(200).json({
-      employee_id: employee.id,
+      employeeId: employee.id,
       totalRecords: attendanceRecords.length,
       records: attendanceRecords,
     });
@@ -466,10 +466,10 @@ export const getAllAttendanceRecords = async (req: Request, res: Response) => {
 export const leaveRequest = async (req: Request, res: Response) => {
   try {
     const user = req.user as unknown as CustomJwtPayload;
-    const user_id = user.userId;
+    const userId = user.userId;
 
-    const employee = await prisma.employees.findUnique({
-      where: { user_id },
+    const employee = await prisma.employee.findUnique({
+      where: { userId },
     });
 
     if (!employee) {
@@ -479,9 +479,9 @@ export const leaveRequest = async (req: Request, res: Response) => {
       });
     }
 
-    const { leaveId, start_date, end_date, reason, approved_by_id } = req.body;
+    const { leaveId, startDate, endDate, reason, approvedById } = req.body;
 
-    if (!leaveId || !start_date || !end_date || !reason) {
+    if (!leaveId || !startDate || !endDate || !reason) {
       return res.status(400).json({
         success: false,
         message: "All fields are required.",
@@ -489,31 +489,31 @@ export const leaveRequest = async (req: Request, res: Response) => {
     }
 
     const data: any = {
-      employee_id: employee.id,
-      leave_type_id: leaveId,
-      start_date: new Date(start_date),
-      end_date: new Date(end_date),
+      employeeId: employee.id,
+      leaveTypeId: leaveId,
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
       reason,
       status: "Pending",
     };
 
-    if (approved_by_id) {
-      data.approved_by_id = approved_by_id;
+    if (approvedById) {
+      data.approvedById = approvedById;
     }
 
-    const newRequest = await prisma.leave_requests.create({ data });
+    const newRequest = await prisma.leaveRequest.create({ data });
 
-    const leaveName = await prisma.leave_types.findUnique({
+    const leaveName = await prisma.leaveType.findUnique({
       where: { id: leaveId },
     });
-    const empName = await prisma.users.findUnique({
-      where: { id: employee.user_id },
+    const empName = await prisma.user.findUnique({
+      where: { id: employee.userId },
     });
 
     await notifyLeaveApprovers({
-      employee_id: employee.id,
+      employeeId: employee.id,
       title: "New Leave Request",
-      message: `${empName?.full_name} submitted a leave request from ${start_date} to ${end_date} for the ${leaveName?.name}`,
+      message: `${empName?.fullName} submitted a leave request from ${startDate} to ${endDate} for the ${leaveName?.name}`,
     });
 
     return res.status(201).json({ success: true, data: newRequest });
@@ -530,10 +530,10 @@ export const leaveRequest = async (req: Request, res: Response) => {
 export const getEmployeeLeaves = async (req: Request, res: Response) => {
   try {
     const user = req.user as unknown as CustomJwtPayload;
-    const user_id = user.userId;
+    const userId = user.userId;
 
-    const employee = await prisma.employees.findUnique({
-      where: { user_id },
+    const employee = await prisma.employee.findUnique({
+      where: { userId },
     });
 
     if (!employee) {
@@ -543,12 +543,12 @@ export const getEmployeeLeaves = async (req: Request, res: Response) => {
       });
     }
 
-    const leaveRequests = await prisma.leave_requests.findMany({
-      where: { employee_id: employee.id },
+    const leaveRequests = await prisma.leaveRequest.findMany({
+      where: { employeeId: employee.id },
       include: {
-        leave_type: true,
+        leaveType: true,
       },
-      orderBy: { requested_at: "desc" },
+      orderBy: { requestedAt: "desc" },
     });
 
     return res.status(200).json({
@@ -565,7 +565,7 @@ export const getEmployeeLeaves = async (req: Request, res: Response) => {
 };
 
 export const createLeaveType = async (req: Request, res: Response) => {
-  const { name, description, is_paid, total_days } = req.body;
+  const { name, description, isPaid, totalDays } = req.body;
 
   if (!name) {
     return res
@@ -574,12 +574,12 @@ export const createLeaveType = async (req: Request, res: Response) => {
   }
 
   try {
-    const leaveType = await prisma.leave_types.create({
+    const leaveType = await prisma.leaveType.create({
       data: {
         name,
         description,
-        is_paid: is_paid ?? true, // default true if not provided
-        total_days: Number(total_days),
+        isPaid: isPaid ?? true, // default true if not provided
+        totalDays: Number(totalDays),
       },
     });
 
@@ -603,7 +603,7 @@ export const createLeaveType = async (req: Request, res: Response) => {
 
 export const getAllLeaveTypes = async (req: Request, res: Response) => {
   try {
-    const leaveTypes = await prisma.leave_types.findMany();
+    const leaveTypes = await prisma.leaveType.findMany();
     console.log("LEAVE API hit: ", leaveTypes);
     return res.status(200).json({ success: true, data: leaveTypes });
   } catch (error) {
@@ -621,37 +621,37 @@ export const getAllLeaveRequestsForAdmin = async (
   res: Response
 ) => {
   try {
-    const { limit = "5", last_cursor_id } = req.query;
+    const { limit = "5", lastCursorId } = req.query;
 
     const limitNumber = parseInt(limit as string);
     // const skip = (pageNumber - 1) * limitNumber;
 
-    const total = await prisma.leave_requests.count({})
-    const cursor = last_cursor_id ? { id: last_cursor_id } : undefined
+    const total = await prisma.leaveRequest.count({})
+    const cursor = lastCursorId ? { id: lastCursorId } : undefined
     console.log("Cursor passed to db:", cursor);
 
-    const leaveRequests = await prisma.leave_requests.findMany({
+    const leaveRequests = await prisma.leaveRequest.findMany({
       skip: cursor ? 1 : 0,
       take: limitNumber,
-      cursor: last_cursor_id ? { id: last_cursor_id as string } : undefined,
+      cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
       include: {
-        leave_type: true,
+        leaveType: true,
         employee: {
           include: {
             user: {
               select: {
-                full_name: true,
+                fullName: true,
               },
             },
           },
         },
-        approved_by: {
+        approvedBy: {
           select: {
-            full_name: true,
+            fullName: true,
           },
         },
       },
-      orderBy: { requested_at: "desc" },
+      orderBy: { requestedAt: "desc" },
     });
 
     return res.status(200).json({
@@ -685,14 +685,14 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         .json({ success: false, message: "Invalid status value." });
     }
 
-    const current_user_id = (req.user as unknown as CustomJwtPayload).userId;
+    const currentUserId = (req.user as unknown as CustomJwtPayload).userId;
 
     // Fetch current user
-    const user = await prisma.users.findUnique({
-      where: { id: current_user_id },
+    const user = await prisma.user.findUnique({
+      where: { id: currentUserId },
       include: {
         role: true,
-        sub_role: true,
+        subRole: true,
       },
     });
 
@@ -711,18 +711,18 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
     }
 
     // 🔄 Fetch leave request (used in all branches)
-    const targetLeaveRequest = await prisma.leave_requests.findUnique({
+    const targetLeaveRequest = await prisma.leaveRequest.findUnique({
       where: { id },
       include: {
         employee: {
           include: {
             user: {
               include: {
-                sub_role: true,
+                subRole: true,
               },
             },
             department: true,
-            sub_department: true,
+            subDepartment: true,
           },
         },
       },
@@ -736,7 +736,7 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
 
     // 🔐 Sub-role level checks for non-admins
     if (roleName !== "admin") {
-      if (!user.sub_role || typeof user.sub_role.level !== "number") {
+      if (!user.subRole || typeof user.subRole.level !== "number") {
         return res.status(403).json({
           success: false,
           message:
@@ -744,8 +744,8 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         });
       }
 
-      const approverLevel = user.sub_role.level;
-      const requesterLevel = targetLeaveRequest.employee?.user?.sub_role?.level;
+      const approverLevel = user.subRole.level;
+      const requesterLevel = targetLeaveRequest.employee?.user?.subRole?.level;
 
       if (requesterLevel === undefined || requesterLevel === null) {
         return res.status(403).json({
@@ -764,29 +764,29 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
     }
 
     // ✅ Update leave status
-    const updated = await prisma.leave_requests.update({
+    const updated = await prisma.leaveRequest.update({
       where: { id },
       data: {
         status,
-        approved_at: status === "Approved" ? new Date() : null,
-        approved_by_id: current_user_id,
+        approvedAt: status === "Approved" ? new Date() : null,
+        approvedById: currentUserId,
       },
     });
 
     if (status === "Approved") {
-      const employee_id = targetLeaveRequest.employee_id;
-      const start_date = new Date(targetLeaveRequest.start_date);
-      const end_date = new Date(targetLeaveRequest.end_date);
+      const employeeId = targetLeaveRequest.employeeId;
+      const startDate = new Date(targetLeaveRequest.startDate);
+      const endDate = new Date(targetLeaveRequest.endDate);
 
       // Loop through each day in the leave range
-      let currentDate = new Date(start_date);
-      while (currentDate <= end_date) {
+      let currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
         const formattedDate = new Date(currentDate);
 
         // Check if attendance record exists for this date
-        const existingRecord = await prisma.attendance_records.findFirst({
+        const existingRecord = await prisma.attendanceRecord.findFirst({
           where: {
-            employee_id: employee_id,
+            employeeId: employeeId,
             date: {
               gte: new Date(formattedDate.setHours(0, 0, 0, 0)),
               lt: new Date(formattedDate.setHours(23, 59, 59, 999)),
@@ -796,14 +796,14 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
 
         if (existingRecord) {
           // ✅ Update existing record
-          await prisma.attendance_records.update({
+          await prisma.attendanceRecord.update({
             where: { id: existingRecord.id },
-            data: { status: "OnLeave", absence_reason: "Leave Approved" },
+            data: { status: "OnLeave", absenceReason: "Leave Approved" },
           });
         } else {
           // ✅ Fetch shift for employee
-          const shift = await prisma.shifts.findFirst({
-            where: { id: targetLeaveRequest.employee.shift_id! },
+          const shift = await prisma.shift.findFirst({
+            where: { id: targetLeaveRequest.employee.shiftId! },
           });
 
           if (!shift) {
@@ -811,14 +811,14 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
           }
 
           // ✅ Create new record with mandatory fields
-          await prisma.attendance_records.create({
+          await prisma.attendanceRecord.create({
             data: {
-              employee_id: employee_id,
+              employeeId: employeeId,
               date: new Date(formattedDate),
               status: "OnLeave",
-              shift_id: shift.id,
-              clock_in: shift.start_time, // Assuming shift.start_time is Date
-              absence_reason: "Leave Approved",
+              shiftId: shift.id,
+              clockIn: shift.startTime, // Assuming shift.startTime is Date
+              absenceReason: "Leave Approved",
             },
           });
         }
@@ -831,9 +831,9 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
 
 
     const employeeUser = targetLeaveRequest.employee.user;
-    const full_name = `${employeeUser.full_name}`;
-    const fromDate = targetLeaveRequest.start_date.toLocaleDateString();
-    const toDate = targetLeaveRequest.end_date.toLocaleDateString();
+    const fullName = `${employeeUser.fullName}`;
+    const fromDate = targetLeaveRequest.startDate.toLocaleDateString();
+    const toDate = targetLeaveRequest.endDate.toLocaleDateString();
 
     // 🔔 1. Notify the employee who applied
     await createScopedNotification({
@@ -843,51 +843,51 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
           status === "Approved" ? "🎉 Leave Approved" : "⛔ Leave Rejected",
         message:
           status === "Approved"
-            ? `${user.full_name} approved your leave from ${fromDate} to ${toDate}.`
+            ? `${user.fullName} approved your leave from ${fromDate} to ${toDate}.`
             : `Your leave request from ${fromDate} to ${toDate} was rejected.`,
         type: "LeaveRequest",
       },
       targetIds: {
-        user_id: employeeUser.id,
+        userId: employeeUser.id,
       },
       visibilityLevel: 0,
       showPopup: true,
     });
 
     // 🔔 2. Notify department managers
-    if (targetLeaveRequest.employee.department_id) {
+    if (targetLeaveRequest.employee.departmentId) {
       await createScopedNotification({
         scope: "MANAGERS_DEPT",
         data: {
           title: "Leave Request Processed",
-          message: `${user.full_name
-            } ${status.toLowerCase()} the leave request of ${full_name}.`,
+          message: `${user.fullName
+            } ${status.toLowerCase()} the leave request of ${fullName}.`,
           type: "LeaveRequest",
         },
         targetIds: {
-          department_id: targetLeaveRequest.employee.department_id,
+          departmentId: targetLeaveRequest.employee.departmentId,
         },
         visibilityLevel: 1,
-        excludeUserId: current_user_id,
+        excludeUserId: currentUserId,
         showPopup: true,
       });
     }
 
     // 🔔 3. Notify team leads of the same sub-department
-    if (targetLeaveRequest.employee.sub_department_id) {
+    if (targetLeaveRequest.employee.subDepartmentId) {
       await createScopedNotification({
         scope: "TEAMLEADS_SUBDEPT",
         data: {
           title: "Leave Request Processed",
-          message: `${user.full_name
-            } ${status.toLowerCase()} the leave request of ${full_name}.`,
+          message: `${user.fullName
+            } ${status.toLowerCase()} the leave request of ${fullName}.`,
           type: "LeaveRequest",
         },
         targetIds: {
-          sub_department_id: targetLeaveRequest.employee.sub_department_id,
+          subDepartmentId: targetLeaveRequest.employee.subDepartmentId,
         },
         visibilityLevel: 1,
-        excludeUserId: current_user_id,
+        excludeUserId: currentUserId,
         showPopup: true,
       });
     }
@@ -905,10 +905,10 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
 // all attendance
 export const getAllAttendance = async (req: Request, res: Response) => {
   try {
-    const allAttendance = await prisma.attendance_records.findMany({
+    const allAttendance = await prisma.attendanceRecord.findMany({
       include: {
         employee: true,
-        shifts: true,
+        shift: true,
         breaks: true,
       },
     });
@@ -922,10 +922,10 @@ export const getAllAttendance = async (req: Request, res: Response) => {
 // GET weekly hours summary (Mon-Fri) for an employee
 export const getEmployeeDailyHoursSummary = async (req: Request, res: Response) => {
   try {
-    const employee_id = req.params.employee_id as string;
-    const weekNumber = req.query.week_number ? parseInt(req.query.week_number as string) : undefined;
+    const employeeId = req.params.employeeId as string;
+    const weekNumber = req.query.weekNumber ? parseInt(req.query.weekNumber as string) : undefined;
 
-    if (!employee_id) {
+    if (!employeeId) {
       return res.status(400).json({ message: "Employee ID is required" });
     }
 
@@ -961,11 +961,11 @@ export const getEmployeeDailyHoursSummary = async (req: Request, res: Response) 
     endOfWeek.setHours(23, 59, 59, 999);
 
     // Fetch attendance records for the week (Mon-Fri)
-    const attendanceData = await prisma.attendance_records.findMany({
+    const attendanceData = await prisma.attendanceRecord.findMany({
       where: {
-        employee_id,
+        employeeId,
         date: { gte: startOfWeek, lte: endOfWeek },
-        clock_out: { not: null },
+        clockOut: { not: null },
       },
       orderBy: { date: "asc" },
     });
@@ -974,31 +974,31 @@ export const getEmployeeDailyHoursSummary = async (req: Request, res: Response) 
       weeklyWorkedHours: 0,
       weeklyLateMinutes: 0,
       daily: {} as Record<string, {
-        clock_in: Date | null;
-        clock_out: Date | null;
-        hours_worked: number;
-        late_minutes: number;
+        clockIn: Date | null;
+        clockOut: Date | null;
+        hoursWorked: number;
+        lateMinutes: number;
         status: string;
       }>
     };
 
     for (const record of attendanceData) {
-      const { date, clock_in, clock_out, late_minutes, status } = record;
-      if (!clock_out || !clock_in) continue;
+      const { date, clockIn, clockOut, lateMinutes, status } = record;
+      if (!clockOut || !clockIn) continue;
 
-      const workedHours = (clock_out.getTime() - clock_in.getTime()) / (1000 * 60 * 60);
+      const workedHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
       const dateKey = new Date(date).toISOString().split("T")[0];
 
       result.daily[dateKey] = {
-        clock_in,
-        clock_out,
-        hours_worked: workedHours,
-        late_minutes: late_minutes || 0,
+        clockIn,
+        clockOut,
+        hoursWorked: workedHours,
+        lateMinutes: lateMinutes || 0,
         status: status || "Pending",
       };
 
       result.weeklyWorkedHours += workedHours;
-      result.weeklyLateMinutes += late_minutes || 0;
+      result.weeklyLateMinutes += lateMinutes || 0;
     }
 
     res.status(200).json(result);
@@ -1012,7 +1012,7 @@ export const getEmployeeDailyHoursSummary = async (req: Request, res: Response) 
 // GET total hours clocked per employee this week & month
 export const getEmployeeHoursSummary = async (req: Request, res: Response) => {
   try {
-    const attendanceData = await prisma.attendance_records.findMany({
+    const attendanceData = await prisma.attendanceRecord.findMany({
       include: { employee: true },
     });
 
@@ -1028,19 +1028,19 @@ export const getEmployeeHoursSummary = async (req: Request, res: Response) => {
     startOfMonth.setHours(0, 0, 0, 0);
 
     for (const record of attendanceData) {
-      const { employee_id, clock_in, clock_out, date } = record;
-      if (!clock_out) continue; // incomplete record
+      const { employeeId, clockIn, clockOut, date } = record;
+      if (!clockOut) continue; // incomplete record
 
       const hoursWorked =
-        (clock_out.getTime() - clock_in.getTime()) / (1000 * 60 * 60);
+        (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
 
-      if (!result[employee_id]) {
-        result[employee_id] = { weekly: 0, monthly: 0 };
+      if (!result[employeeId]) {
+        result[employeeId] = { weekly: 0, monthly: 0 };
       }
 
       const recordDate = new Date(date);
-      if (recordDate >= startOfWeek) result[employee_id].weekly += hoursWorked;
-      if (recordDate >= startOfMonth) result[employee_id].monthly += hoursWorked;
+      if (recordDate >= startOfWeek) result[employeeId].weekly += hoursWorked;
+      if (recordDate >= startOfMonth) result[employeeId].monthly += hoursWorked;
     }
 
     res.status(200).json(result);
@@ -1061,8 +1061,8 @@ export const createBreak = async (
     const { breakType } = req.body;
 
     // 1. Find Employee
-    const employee = await prisma.employees.findUnique({
-      where: { user_id: user.userId },
+    const employee = await prisma.employee.findUnique({
+      where: { userId: user.userId },
     });
 
     if (!employee) {
@@ -1075,9 +1075,9 @@ export const createBreak = async (
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    const todayAttendance = await prisma.attendance_records.findFirst({
+    const todayAttendance = await prisma.attendanceRecord.findFirst({
       where: {
-        employee_id: employee.id,
+        employeeId: employee.id,
         date: {
           gte: startOfDay,
           lte: endOfDay,
@@ -1092,10 +1092,10 @@ export const createBreak = async (
     }
 
     // 3. Check for existing active break
-    const existingBreak = await prisma.breaks.findFirst({
+    const existingBreak = await prisma.break.findFirst({
       where: {
-        attendance_record_id: todayAttendance.id,
-        break_end: null,
+        attendanceRecordId: todayAttendance.id,
+        breakEnd: null,
       },
     });
 
@@ -1104,12 +1104,12 @@ export const createBreak = async (
     }
 
     // ✅ 4. Find BreakType by name
-    const breakTypeRecord = await prisma.break_types.findUnique({
+    const breakTypeRecord = await prisma.breakType.findUnique({
       where: { name: breakType },
     });
 
     if (!breakTypeRecord) {
-      const existingTypes = await prisma.break_types.findMany({
+      const existingTypes = await prisma.breakType.findMany({
         select: { name: true },
       });
       return res.status(400).json({
@@ -1120,11 +1120,11 @@ export const createBreak = async (
     }
 
     // ✅ 5. Create new break using breakTypeId
-    const newBreak = await prisma.breaks.create({
+    const newBreak = await prisma.break.create({
       data: {
-        break_start: new Date(),
-        break_type_id: breakTypeRecord.id,
-        attendance_record_id: todayAttendance.id,
+        breakStart: new Date(),
+        breakTypeId: breakTypeRecord.id,
+        attendanceRecordId: todayAttendance.id,
       },
     });
 
@@ -1145,8 +1145,8 @@ export const endBreak = async (
     const user = req.user as unknown as CustomJwtPayload;
 
     // 1. Get employee by userId
-    const employee = await prisma.employees.findUnique({
-      where: { user_id: user.userId },
+    const employee = await prisma.employee.findUnique({
+      where: { userId: user.userId },
     });
 
     if (!employee) {
@@ -1161,9 +1161,9 @@ export const endBreak = async (
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const attendance = await prisma.attendance_records.findFirst({
+    const attendance = await prisma.attendanceRecord.findFirst({
       where: {
-        employee_id: employee.id,
+        employeeId: employee.id,
         date: {
           gte: todayStart,
           lte: todayEnd,
@@ -1179,10 +1179,10 @@ export const endBreak = async (
     }
 
     // 3. Find active break (no breakEnd yet)
-    const activeBreak = await prisma.breaks.findFirst({
+    const activeBreak = await prisma.break.findFirst({
       where: {
-        attendance_record_id: attendance.id,
-        break_end: null,
+        attendanceRecordId: attendance.id,
+        breakEnd: null,
       },
     });
 
@@ -1192,10 +1192,10 @@ export const endBreak = async (
     }
 
     // 4. End the break
-    const endedBreak = await prisma.breaks.update({
+    const endedBreak = await prisma.break.update({
       where: { id: activeBreak.id },
       data: {
-        break_end: new Date(),
+        breakEnd: new Date(),
       },
     });
 
@@ -1215,17 +1215,17 @@ export const getBreaksByAttendanceRecord = async (
   next: NextFunction
 ) => {
   try {
-    const { attendance_record_id } = req.query;
+    const { attendanceRecordId } = req.query;
 
-    if (!attendance_record_id || typeof attendance_record_id !== "string") {
+    if (!attendanceRecordId || typeof attendanceRecordId !== "string") {
       return res
         .status(400)
         .json({ message: "Missing or invalid attendanceRecordId." });
     }
 
-    const breaks = await prisma.breaks.findMany({
-      where: { attendance_record_id },
-      orderBy: { break_start: "asc" },
+    const breaks = await prisma.break.findMany({
+      where: { attendanceRecordId },
+      orderBy: { breakStart: "asc" },
     });
 
     res.status(200).json({ breaks });
@@ -1245,19 +1245,19 @@ export const getEmployeesAttendanceSummary = async (
 
     const limitNumber = parseInt(limit as string);
 
-    const total = await prisma.employees.count({})
+    const total = await prisma.employee.count({})
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const employees = await prisma.employees.findMany({
+    const employees = await prisma.employee.findMany({
       skip: lastCursorId ? 1 : 0,
       take: limitNumber,
       cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
       include: {
-        user: { select: { full_name: true, email: true } },
+        user: { select: { fullName: true, email: true } },
         department: true,
       },
       orderBy: { id: "desc" }
@@ -1265,19 +1265,19 @@ export const getEmployeesAttendanceSummary = async (
 
     const summary = await Promise.all(
       employees.map(async (emp: any) => {
-        const todayAttendance = await prisma.attendance_records.findFirst({
+        const todayAttendance = await prisma.attendanceRecord.findFirst({
           where: {
-            employee_id: emp.id,
+            employeeId: emp.id,
             date: { gte: todayStart, lte: todayEnd },
           },
         });
 
-        const onLeaveToday = await prisma.leave_requests.findFirst({
+        const onLeaveToday = await prisma.leaveRequest.findFirst({
           where: {
-            employee_id: emp.id,
+            employeeId: emp.id,
             status: "Approved",
-            start_date: { lte: todayStart },
-            end_date: { gte: todayEnd },
+            startDate: { lte: todayStart },
+            endDate: { gte: todayEnd },
           },
         });
 
@@ -1286,22 +1286,22 @@ export const getEmployeesAttendanceSummary = async (
         else if (todayAttendance?.status === "Late") todayStatus = "Late";
         else if (todayAttendance?.status === "Present") todayStatus = "Present";
 
-        const totalLeaves = await prisma.leave_requests.count({
+        const totalLeaves = await prisma.leaveRequest.count({
           where: {
-            employee_id: emp.id,
+            employeeId: emp.id,
             status: "Approved",
           },
         });
 
-        const lateArrivals = await prisma.attendance_records.count({
+        const lateArrivals = await prisma.attendanceRecord.count({
           where: {
-            employee_id: emp.id,
+            employeeId: emp.id,
             status: "Late",
           },
         });
         return {
-          employee_id: emp.id,
-          full_name: emp.user.full_name,
+          employeeId: emp.id,
+          fullName: emp.user.fullName,
           email: emp.user.email,
           department: emp.department?.name || "N/A",
           todayStatus,

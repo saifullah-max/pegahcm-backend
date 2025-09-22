@@ -24,16 +24,16 @@ interface NotifyRelevantApproversOptions {
 
 export async function getVisibleNotificationsForUser(userId: string) {
     // console.log("🔍 getVisibleNotificationsForUser called with:", userId); // ✅ Add this
-    const user = await prisma.users.findUnique({
+    const user = await prisma.user.findUnique({
         where: { id: userId },
         include: {
             role: true,
-            sub_role: true,
+            subRole: true,
             employee: {
                 select: {
                     id: true,
-                    department_id: true,
-                    sub_department_id: true,
+                    departmentId: true,
+                    subDepartmentId: true,
                 },
             },
         },
@@ -43,40 +43,40 @@ export async function getVisibleNotificationsForUser(userId: string) {
         return [];
     }
 
-    const allNotifications = await prisma.notifications.findMany({
-        orderBy: { created_at: 'desc' },
+    const allNotifications = await prisma.notification.findMany({
+        orderBy: { createdAt: 'desc' },
     });
 
     const visibleNotifications = allNotifications.filter((notification) => {
         // 1. If it's a personal notification
-        if (notification.user_id === user.id) return true;
+        if (notification.userId === user.id) return true;
 
         // 2. Exclude notifications about the user themselves (e.g., new employee joined)
-        if (notification.employee_id && notification.employee_id === user.employee?.id) {
+        if (notification.employeeId && notification.employeeId === user.employee?.id) {
             return false;
         }
 
         // 3. Visibility Scopes
-        switch (notification.visibility_level) {
+        switch (notification.visibilityLevel) {
             case 0: // Only Admins
                 return user.role.name === 'admin';
 
             case 1: // Director, Manager, TeamLead
                 return (
                     user.role.name === 'user' &&
-                    ['director', 'manager', 'teamLead'].includes(user.sub_role?.name || '')
+                    ['director', 'manager', 'teamLead'].includes(user.subRole?.name || '')
                 );
 
             case 2: // Department-based
                 return (
-                    user.employee?.department_id &&
-                    user.employee.department_id === notification.department_id
+                    user.employee?.departmentId &&
+                    user.employee.departmentId === notification.departmentId
                 );
 
             case 3: // Sub-department-based
                 return (
-                    user.employee?.sub_department_id &&
-                    user.employee.sub_department_id === notification.sub_department_id
+                    user.employee?.subDepartmentId &&
+                    user.employee.subDepartmentId === notification.subDepartmentId
                 );
 
             case 4: // All users
@@ -91,10 +91,10 @@ export async function getVisibleNotificationsForUser(userId: string) {
     console.log({
         userId: user.id,
         role: user.role.name,
-        subRole: user.sub_role?.name,
+        subRole: user.subRole?.name,
         employeeId: user.employee?.id,
-        departmentId: user.employee?.department_id,
-        subDepartmentId: user.employee?.sub_department_id,
+        departmentId: user.employee?.departmentId,
+        subDepartmentId: user.employee?.subDepartmentId,
     });
 
     return visibleNotifications;
@@ -108,14 +108,14 @@ export async function createScopedNotification(opts: NotifyOptions) {
 
     console.log('📥 Incoming Notification Options:', opts);
 
-    const notification = await prisma.notifications.create({
+    const notification = await prisma.notification.create({
         data: {
             ...data,
-            user_id: targetIds?.userId,
-            employee_id: targetIds?.employeeId,
-            department_id: targetIds?.departmentId,
-            sub_department_id: targetIds?.subDepartmentId,
-            visibility_level: visibilityLevel
+            userId: targetIds?.userId,
+            employeeId: targetIds?.employeeId,
+            departmentId: targetIds?.departmentId,
+            subDepartmentId: targetIds?.subDepartmentId,
+            visibilityLevel,
         }
     });
 
@@ -125,18 +125,18 @@ export async function createScopedNotification(opts: NotifyOptions) {
 
     switch (scope) {
         case 'ADMIN_ONLY':
-            targetUserIds = (await prisma.users.findMany({
+            targetUserIds = (await prisma.user.findMany({
                 where: { role: { name: 'admin' }, status: 'ACTIVE' },
                 select: { id: true }
             })).map(u => u.id);
             break;
 
         case 'DIRECTORS_HR':
-            targetUserIds = (await prisma.users.findMany({
+            targetUserIds = (await prisma.user.findMany({
                 where: {
                     role: { name: 'user' },
-                    sub_role: { name: { in: ['director', 'manager'] } },
-                    role_tag: "HR",
+                    subRole: { name: { in: ['director', 'manager'] } },
+                    roleTag: "HR",
                     status: 'ACTIVE'
                 },
                 select: { id: true }
@@ -145,12 +145,12 @@ export async function createScopedNotification(opts: NotifyOptions) {
 
         case 'MANAGERS_DEPT':
             if (!targetIds?.departmentId) break;
-            targetUserIds = (await prisma.users.findMany({
+            targetUserIds = (await prisma.user.findMany({
                 where: {
                     employee: {
-                        department_id: targetIds.departmentId
+                        departmentId: targetIds.departmentId
                     },
-                    sub_role: {
+                    subRole: {
                         name: { in: ['manager'] }
                     },
                     status: 'ACTIVE'
@@ -161,12 +161,12 @@ export async function createScopedNotification(opts: NotifyOptions) {
 
         case 'TEAMLEADS_SUBDEPT':
             if (!targetIds?.subDepartmentId) break;
-            targetUserIds = (await prisma.users.findMany({
+            targetUserIds = (await prisma.user.findMany({
                 where: {
                     employee: {
-                        sub_department_id: targetIds.subDepartmentId
+                        subDepartmentId: targetIds.subDepartmentId
                     },
-                    sub_role: {
+                    subRole: {
                         name: { in: ['teamLead'] }
                     },
                     status: 'ACTIVE'
@@ -189,10 +189,10 @@ export async function createScopedNotification(opts: NotifyOptions) {
         console.log('🧹 After excluding:', targetUserIds);
     }
 
-    await prisma.userNotifications.createMany({
+    await prisma.userNotification.createMany({
         data: targetUserIds.map(userId => ({
-            user_id: userId,
-            notification_id: notification.id
+            userId,
+            notificationId: notification.id
         })),
         skipDuplicates: true,
     });
@@ -203,14 +203,14 @@ export async function createScopedNotification(opts: NotifyOptions) {
             id: notification.id,
             title: notification.title,
             description: notification.message,
-            createdAt: notification.created_at,
+            createdAt: notification.createdAt,
         });
 
         io.to(userId).emit('new_notification', {
             id: notification.id,
             title: notification.title,
             description: notification.message,
-            createdAt: notification.created_at,
+            createdAt: notification.createdAt,
             showPopup: opts.showPopup || false,
         });
     });
@@ -227,51 +227,51 @@ export async function notifyLeaveApprovers({
 }: NotifyRelevantApproversOptions) {
     const io = getIO();
 
-    const employee = await prisma.employees.findUnique({
+    const employee = await prisma.employee.findUnique({
         where: { id: employeeId },
         select: {
             id: true,
-            department_id: true,
-            sub_department_id: true,
+            departmentId: true,
+            subDepartmentId: true,
         },
     });
 
     if (!employee) return;
 
-    const departmentId = employee.department_id;
-    const subDepartmentId = employee.sub_department_id;
+    const departmentId = employee.departmentId;
+    const subDepartmentId = employee.subDepartmentId;
 
     // 1. Find HRs
-    const hrUsers = await prisma.users.findMany({
+    const hrUsers = await prisma.user.findMany({
         where: {
             role: { name: 'user' },
-            sub_role: { name: 'manager' },
-            role_tag: "HR",
+            subRole: { name: 'manager' },
+            roleTag: "HR",
             status: 'ACTIVE',
         },
         select: { id: true },
     });
 
     // 2. Find Managers of same department
-    const departmentManagers = await prisma.users.findMany({
+    const departmentManagers = await prisma.user.findMany({
         where: {
             role: { name: 'user' },
-            employee: { department_id: departmentId },
+            employee: { departmentId },
             status: 'ACTIVE',
             OR: [
-                { sub_role: { name: 'manager' } }, // Managers with role tag
-                { sub_role: null }, // Managers without role tag (assuming your system allows)
+                { subRole: { name: 'manager' } }, // Managers with role tag
+                { subRole: null }, // Managers without role tag (assuming your system allows)
             ],
         },
         select: { id: true },
     });
 
     // 3. Find TeamLeads of same sub-department
-    const subDeptLeads = await prisma.users.findMany({
+    const subDeptLeads = await prisma.user.findMany({
         where: {
             role: { name: 'user' },
-            sub_role: { name: 'teamLead' },
-            employee: { sub_department_id: subDepartmentId },
+            subRole: { name: 'teamLead' },
+            employee: { subDepartmentId },
             status: 'ACTIVE',
         },
         select: { id: true },
@@ -281,23 +281,23 @@ export async function notifyLeaveApprovers({
     [...hrUsers, ...departmentManagers, ...subDeptLeads].forEach(u => allTargetUserIds.add(u.id));
 
     // Create notification record
-    const notif = await prisma.notifications.create({
+    const notif = await prisma.notification.create({
         data: {
             title,
             message,
             type: 'info',
-            employee_id: employeeId,
-            department_id: departmentId,
-            sub_department_id: subDepartmentId,
-            visibility_level: 1, // custom level if needed
+            employeeId,
+            departmentId,
+            subDepartmentId,
+            visibilityLevel: 1, // custom level if needed
         },
     });
 
     // Associate with users
-    await prisma.userNotifications.createMany({
+    await prisma.userNotification.createMany({
         data: Array.from(allTargetUserIds).map(userId => ({
-            user_id: userId,
-            notification_id: notif.id,
+            userId,
+            notificationId: notif.id,
         })),
         skipDuplicates: true,
     });
@@ -308,7 +308,7 @@ export async function notifyLeaveApprovers({
             id: notif.id,
             title: notif.title,
             description: notif.message,
-            createdAt: notif.created_at,
+            createdAt: notif.createdAt,
             showPopup: showPopup || false,
         });
     });

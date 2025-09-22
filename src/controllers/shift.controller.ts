@@ -10,13 +10,13 @@ export const createShift = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Request body is required' });
     }
 
-    const { name, start_time, end_time, description } = req.body;
+    const { name, startTime, endTime, description } = req.body;
 
-    if (!name || !start_time || !end_time) {
+    if (!name || !startTime || !endTime) {
       return res.status(400).json({
         error: 'Missing required fields',
-        required: ['name', 'start_time', 'end_time'],
-        received: { name, start_time, end_time, description }
+        required: ['name', 'startTime', 'endTime'],
+        received: { name, startTime, endTime, description }
       });
     }
 
@@ -26,11 +26,11 @@ export const createShift = async (req: Request, res: Response) => {
       return res.status(400).json({ error: validationError });
     }
 
-    const shift = await prisma.shifts.create({
+    const shift = await prisma.shift.create({
       data: {
         name,
-        start_time: new Date(start_time),
-        end_time: new Date(end_time),
+        startTime: new Date(startTime),
+        endTime: new Date(endTime),
         description
       }
     });
@@ -57,7 +57,7 @@ export const createShift = async (req: Request, res: Response) => {
 
 export const getAllShifts = async (req: Request, res: Response) => {
   try {
-    const shifts = await prisma.shifts.findMany();
+    const shifts = await prisma.shift.findMany();
     res.json(shifts);
   } catch (error) {
     console.error('Error fetching shifts:', error);
@@ -68,7 +68,7 @@ export const getAllShifts = async (req: Request, res: Response) => {
 export const getShiftById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const shift = await prisma.shifts.findUnique({
+    const shift = await prisma.shift.findUnique({
       where: { id }
     });
 
@@ -83,9 +83,9 @@ export const getShiftById = async (req: Request, res: Response) => {
   }
 };
 
-function convertTimeToDate(date_time_str: string): Date {
+function convertTimeToDate(dateTimeStr: string): Date {
   // Example input: "2025-09-03 10:00 PM"
-  const [datePart, timePart, modifier] = date_time_str.split(/[\s]+/);
+  const [datePart, timePart, modifier] = dateTimeStr.split(/[\s]+/);
   const [year, month, day] = datePart.split('-').map(Number);
   const [hoursStr, minutesStr] = timePart.split(':');
 
@@ -101,19 +101,19 @@ function convertTimeToDate(date_time_str: string): Date {
 export const updateShift = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, start_time, end_time, description } = req.body;
+    const { name, startTime, endTime, description } = req.body;
 
     const validationError = validateShift(req.body);
     if (validationError) {
       return res.status(400).json({ error: validationError });
     }
 
-    const shift = await prisma.shifts.update({
+    const shift = await prisma.shift.update({
       where: { id },
       data: {
         name,
-        start_time: convertTimeToDate(start_time),
-        end_time: convertTimeToDate(end_time),
+        startTime: convertTimeToDate(startTime),
+        endTime: convertTimeToDate(endTime),
         description,
       },
     });
@@ -140,7 +140,7 @@ export const deleteShift = async (req: Request, res: Response) => {
       });
     }
 
-    await prisma.shifts.delete({
+    await prisma.shift.delete({
       where: { id }
     });
 
