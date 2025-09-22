@@ -3,12 +3,12 @@ import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
 
 export const impersonateUser = async (req: Request, res: Response) => {
-    const { userId } = req.params;
+    const { user_id } = req.params;
     const admin = req.user; // Assumes JWT middleware attaches authenticated user
 
     try {
         // Check if admin is valid and has role
-        const adminUser = await prisma.user.findUnique({
+        const adminUser = await prisma.users.findUnique({
             where: { id: admin?.userId },
             include: { role: true },
         });
@@ -17,14 +17,14 @@ export const impersonateUser = async (req: Request, res: Response) => {
             return res.status(403).json({ message: 'Access denied' });
         }
 
-        if (!userId) {
+        if (!user_id) {
             return res.status(400).json({ message: 'User ID is required' });
         }
 
         // Fetch the user to impersonate (include employee as well)
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
-            include: { role: true, subRole: true, employee: true },
+        const user = await prisma.users.findUnique({
+            where: { id: user_id },
+            include: { role: true, sub_role: true, employee: true },
         });
 
         if (!user || !user.role) {
@@ -34,20 +34,20 @@ export const impersonateUser = async (req: Request, res: Response) => {
         // Generate impersonation token with same structure as login
         const token = jwt.sign(
             {
-                userId: user.id,
+                user_id: user.id,
                 username: user.username,
-                fullName: user.fullName,
+                full_name: user.full_name,
                 email: user.email,
                 role: user.role.name,
-                subRole: user.subRole
+                sub_role: user.sub_role
                     ? {
-                        id: user.subRole.id,
-                        name: user.subRole.name,
-                        description: user.subRole.description,
+                        id: user.sub_role.id,
+                        name: user.sub_role.name,
+                        description: user.sub_role.description,
                     }
                     : null,
-                employeeId: user.employee?.id || null,
-                impersonatedBy: admin!.userId, // optional
+                employee_id: user.employee?.id || null,
+                impersonated_by: admin!.userId, // optional
             },
             process.env.JWT_SECRET!,
             { expiresIn: '30m' }
@@ -58,13 +58,13 @@ export const impersonateUser = async (req: Request, res: Response) => {
             user: {
                 id: user.id,
                 username: user.username,
-                fullName: user.fullName,
+                full_name: user.full_name,
                 email: user.email,
                 role: user.role.name,
-                subRole: user.subRole,
+                sub_role: user.sub_role,
                 status: user.status,
                 employee: user.employee,
-                impersonatedBy: admin!.userId 
+                impersonated_by: admin!.userId 
             },
         });
     } catch (error) {

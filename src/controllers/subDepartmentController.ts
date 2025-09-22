@@ -4,9 +4,9 @@ import prisma from '../utils/Prisma';
 // Create a new sub-department
 export const createSubDepartment = async (req: Request, res: Response) => {
   try {
-    const { name, description, departmentId } = req.body;
+    const { name, description, department_id } = req.body;
 
-    if (!name || !departmentId) {
+    if (!name || !department_id) {
       return res.status(400).json({
         success: false,
         message: 'Sub-department name and department ID are required'
@@ -14,8 +14,8 @@ export const createSubDepartment = async (req: Request, res: Response) => {
     }
 
     // Check if department exists
-    const department = await prisma.department.findUnique({
-      where: { id: departmentId }
+    const department = await prisma.departments.findUnique({
+      where: { id: department_id }
     });
 
     if (!department) {
@@ -26,7 +26,7 @@ export const createSubDepartment = async (req: Request, res: Response) => {
     }
 
     // Check if sub-department with same name exists
-    const existingSubDepartment = await prisma.subDepartment.findUnique({
+    const existingSubDepartment = await prisma.sub_departments.findUnique({
       where: { name }
     });
 
@@ -37,14 +37,14 @@ export const createSubDepartment = async (req: Request, res: Response) => {
       });
     }
 
-    const subDepartment = await prisma.subDepartment.create({
+    const subDepartment = await prisma.sub_departments.create({
       data: {
         name,
         description,
-        departmentId
+        department_id
       }
     });
-    const getAllSubDepartments = await prisma.subDepartment.findMany({});
+    const getAllSubDepartments = await prisma.sub_departments.findMany({});
     console.log("All sub dept:",  getAllSubDepartments);
 
     res.status(201).json({
@@ -63,7 +63,7 @@ export const createSubDepartment = async (req: Request, res: Response) => {
 // Get all sub-departments
 export const getAllSubDepartments = async (req: Request, res: Response) => {
   try {
-    const subDepartments = await prisma.subDepartment.findMany({
+    const subDepartments = await prisma.sub_departments.findMany({
       include: {
         department: true,
         employees: true
@@ -88,7 +88,7 @@ export const getSubDepartmentById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    const subDepartment = await prisma.subDepartment.findUnique({
+    const subDepartment = await prisma.sub_departments.findUnique({
       where: { id },
       include: {
         department: true,
@@ -120,9 +120,9 @@ export const getSubDepartmentById = async (req: Request, res: Response) => {
 export const updateSubDepartment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, description, departmentId } = req.body;
+    const { name, description, department_id } = req.body;
 
-    if (!name || !departmentId) {
+    if (!name || !department_id) {
       return res.status(400).json({
         success: false,
         message: 'Sub-department name and department ID are required'
@@ -130,7 +130,7 @@ export const updateSubDepartment = async (req: Request, res: Response) => {
     }
 
     // Check if sub-department exists
-    const existingSubDepartment = await prisma.subDepartment.findUnique({
+    const existingSubDepartment = await prisma.sub_departments.findUnique({
       where: { id }
     });
 
@@ -142,8 +142,8 @@ export const updateSubDepartment = async (req: Request, res: Response) => {
     }
 
     // Check if department exists
-    const department = await prisma.department.findUnique({
-      where: { id: departmentId }
+    const department = await prisma.departments.findUnique({
+      where: { id: department_id }
     });
 
     if (!department) {
@@ -155,7 +155,7 @@ export const updateSubDepartment = async (req: Request, res: Response) => {
 
     // Check if new name conflicts with other sub-departments
     if (name !== existingSubDepartment.name) {
-      const nameConflict = await prisma.subDepartment.findUnique({
+      const nameConflict = await prisma.sub_departments.findUnique({
         where: { name }
       });
 
@@ -167,12 +167,12 @@ export const updateSubDepartment = async (req: Request, res: Response) => {
       }
     }
 
-    const updatedSubDepartment = await prisma.subDepartment.update({
+    const updatedSubDepartment = await prisma.sub_departments.update({
       where: { id },
       data: {
         name,
         description,
-        departmentId
+        department_id
       }
     });
 
@@ -195,7 +195,7 @@ export const deleteSubDepartment = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     // Check if sub-department exists
-    const subDepartment = await prisma.subDepartment.findUnique({
+    const subDepartment = await prisma.sub_departments.findUnique({
       where: { id },
       include: {
         employees: true
@@ -217,7 +217,7 @@ export const deleteSubDepartment = async (req: Request, res: Response) => {
       });
     }
 
-    await prisma.subDepartment.delete({
+    await prisma.sub_departments.delete({
       where: { id }
     });
 

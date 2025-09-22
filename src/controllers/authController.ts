@@ -22,7 +22,7 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Required fields missing' });
     }
 
-    const existingUser = await prisma.user.findFirst({
+    const existingUser = await prisma.users.findFirst({
       where: {
         OR: [
           { username: username || undefined },
@@ -35,7 +35,7 @@ export const register = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Username or email already exists' });
     }
 
-    const role = await prisma.role.findUnique({
+    const role = await prisma.roles.findUnique({
       where: { name: roleName }
     });
 
@@ -45,19 +45,19 @@ export const register = async (req: Request, res: Response) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.create({
+    const user = await prisma.users.create({
       data: {
         username,
-        passwordHash,
+        password_hash: passwordHash,
         email,
-        fullName,
-        roleId: role.id, // Use roleId from fetched role
-        subRoleId: subRoleId || null,
+        full_name: fullName,
+        role_id: role.id, // Use roleId from fetched role
+        sub_role_id: subRoleId || null,
         status: 'active',
-        dateJoined: new Date()
+        date_joined: new Date()
       },
       include: {
-        subRole: true,
+        sub_role: true,
         role: true // 👈 include role.name for JWT and response
       }
     });
@@ -66,8 +66,8 @@ export const register = async (req: Request, res: Response) => {
       {
         userId: user.id,
         role: user.role.name,
-        subRoleId: user.subRoleId
-      },
+        sub_role_id: user.sub_role_id
+      } as any,
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
     );
@@ -79,9 +79,9 @@ export const register = async (req: Request, res: Response) => {
           id: user.id,
           email: user.email,
           username: user.username,
-          fullName: user.fullName,
+          full_name: user.full_name,
           role: user.role.name,
-          subRole: user.subRole,
+          sub_role: user.sub_role,
           status: user.status
         },
         token
@@ -102,16 +102,16 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: 'Email and password required' });
     }
 
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { email },
       include: {
         role: true,     // 👈 include full role
-        subRole: true,
+        sub_role: true,
         employee: true
       }
     });
 
-    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
@@ -120,20 +120,20 @@ export const login = async (req: Request, res: Response) => {
         userId: user.id,
         role: user.role.name,
         email: user.email,
-        fullName: user.fullName,
+        full_name: user.full_name,
         employee: user.employee,
-        subRole: {
-          id: user.subRoleId,
-          name: user.subRole?.name || null
+        sub_role: {
+          id: user.sub_role_id,
+          name: user.sub_role?.name || null
         }
-      },
+      } as any,
       process.env.JWT_SECRET || 'poiuytrewasdfghjkl0998877!!!3?><>:&^&hjn',
       { expiresIn: '24h' }
     );
 
-    await prisma.user.update({
+    await prisma.users.update({
       where: { id: user.id },
-      data: { lastLogin: new Date() }
+      data: { last_login: new Date() }
     });
 
     res.status(200).json({
@@ -143,9 +143,9 @@ export const login = async (req: Request, res: Response) => {
           id: user.id,
           email: user.email,
           username: user.username,
-          fullName: user.fullName,
+          full_name: user.full_name,
           role: user.role.name,
-          subRole: user.subRole,
+          sub_role: user.sub_role,
           status: user.status,
           employee: user.employee
         },
@@ -164,7 +164,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
   if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
 
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.users.findUnique({ where: { email } });
     if (!user) {
       // Respond generically
       return res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
@@ -173,11 +173,11 @@ export const forgotPassword = async (req: Request, res: Response) => {
     const resetToken = crypto.randomBytes(32).toString('hex');
     const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
-    await prisma.user.update({
+    await prisma.users.update({
       where: { email },
       data: {
-        resetPasswordToken: hashedToken,
-        resetPasswordExpires: new Date(Date.now() + 3600000), // 1 hour expiry
+        reset_password_token: hashedToken,
+        reset_password_expires: new Date(Date.now() + 3600000), // 1 hour expiry
       },
     });
 
@@ -200,10 +200,10 @@ export const resetPassword = async (req: Request, res: Response) => {
   try {
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
-    const user = await prisma.user.findFirst({
+    const user = await prisma.users.findFirst({
       where: {
-        resetPasswordToken: hashedToken,
-        resetPasswordExpires: { gt: new Date() }
+        reset_password_token: hashedToken,
+        reset_password_expires: { gt: new Date() }
       }
     });
 
@@ -213,12 +213,12 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    await prisma.user.update({
+    await prisma.users.update({
       where: { id: user.id },
       data: {
-        passwordHash,
-        resetPasswordToken: null,
-        resetPasswordExpires: null,
+        password_hash: passwordHash,
+        reset_password_token: null,
+        reset_password_expires: null,
       }
     });
 

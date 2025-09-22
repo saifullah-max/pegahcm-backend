@@ -13,7 +13,7 @@ export const createRole = async (req: Request, res: Response) => {
       });
     }
 
-    const role = await prisma.role.create({
+    const role = await prisma.roles.create({
       data: {
         name,
         description
@@ -36,7 +36,7 @@ export const createRole = async (req: Request, res: Response) => {
 // Get all roles
 export const getRoles = async (req: Request, res: Response) => {
   try {
-    const roles = await prisma.role.findMany();
+    const roles = await prisma.roles.findMany();
     return res.status(200).json({
       success: true,
       data: roles
@@ -54,7 +54,7 @@ export const getRoles = async (req: Request, res: Response) => {
 export const getRoleById = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const role = await prisma.role.findUnique({
+    const role = await prisma.roles.findUnique({
       where: { id }
     });
 
@@ -91,7 +91,7 @@ export const updateRole = async (req: Request, res: Response) => {
       });
     }
 
-    const role = await prisma.role.update({
+    const role = await prisma.roles.update({
       where: { id },
       data: {
         name,
@@ -118,8 +118,8 @@ export const deleteRole = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     // Check if role is being used by any users
-    const usersWithRole = await prisma.user.findFirst({
-      where: { roleId: id }
+    const usersWithRole = await prisma.users.findFirst({
+      where: { role_id: id }
     });
 
     if (usersWithRole) {
@@ -129,7 +129,7 @@ export const deleteRole = async (req: Request, res: Response) => {
       });
     }
 
-    await prisma.role.delete({
+    await prisma.roles.delete({
       where: { id }
     });
 
