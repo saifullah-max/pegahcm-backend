@@ -140,9 +140,7 @@ export const deleteShift = async (req: Request, res: Response) => {
       });
     }
 
-
-
-    await prisma.shifts.delete({
+    await prisma.shift.delete({
       where: { id }
     });
 
