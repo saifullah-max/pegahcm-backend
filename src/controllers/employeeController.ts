@@ -121,8 +121,6 @@ export const createEmployee = async (req: Request, res: Response) => {
       emergency_contact_phone,
       address,
       role_id,
-      sub_role_id,
-      role_tag,
       department_id,
       sub_department_id,
       designation,
@@ -191,12 +189,6 @@ export const createEmployee = async (req: Request, res: Response) => {
     const employee_number = await generateEmployeeNumber();
     const password_hash = await bcrypt.hash(password, 10);
 
-    const prismaRoleTag: RoleTag | null = Object.values(RoleTag).includes(
-      role_tag as RoleTag
-    )
-      ? (role_tag as RoleTag)
-      : null;
-
     // ✅ Transaction: Create User & Employee
     const result = await prisma.$transaction(async (prismaTx: any) => {
       // Create User
@@ -207,17 +199,15 @@ export const createEmployee = async (req: Request, res: Response) => {
           password_hash,
           full_name,
           role_id,
-          sub_role_id,
-          role_tag: prismaRoleTag,
           status,
           date_joined: new Date(),
         },
       });
 
       // ✅ Assign subRole permissions
-      if (sub_role_id) {
-        const subRolePermissions = await prismaTx.sub_role_permissions.findMany({
-          where: { sub_role_id },
+      if (role_id) {
+        const subRolePermissions = await prismaTx.role_permissions.findMany({
+          where: { role_id },
           select: { permission_id: true },
         });
 
@@ -232,14 +222,12 @@ export const createEmployee = async (req: Request, res: Response) => {
         }
       }
 
-      const subRole = sub_role_id
-        ? await prismaTx.sub_roles.findUnique({
-          where: { id: sub_role_id },
+      const Role = role_id
+        ? await prismaTx.roles.findUnique({
+          where: { id: role_id },
           select: { name: true },
         })
         : null;
-      const isDirector = subRole?.name?.toLowerCase() === "director";
-      const isManager = subRole?.name?.toLowerCase() === "manager";
 
       // ✅ Create Employee
       const newEmployee = await prismaTx.employees.create({
@@ -248,8 +236,8 @@ export const createEmployee = async (req: Request, res: Response) => {
           phone_number: phone_number ? String(phone_number) : undefined,
           employee_number,
           shift_id,
-          department_id: !isDirector ? department_id : null,
-          sub_department_id: !isDirector && !isManager ? sub_department_id : null,
+          department_id: department_id,
+          sub_department_id: sub_department_id,
           position: designation,
           father_name: father_name ?? undefined,
           date_of_birth: new Date(date_of_birth),
@@ -268,7 +256,7 @@ export const createEmployee = async (req: Request, res: Response) => {
         },
       });
 
-      return { user: newUser, employee: newEmployee, isDirector };
+      return { user: newUser, employee: newEmployee };
     });
 
     try {
@@ -291,7 +279,6 @@ export const createEmployee = async (req: Request, res: Response) => {
           },
           visibilityLevel: 1,
         }),
-        !result.isDirector &&
         department_id &&
         createScopedNotification({
           scope: "MANAGERS_DEPT",
@@ -304,7 +291,6 @@ export const createEmployee = async (req: Request, res: Response) => {
           visibilityLevel: 2,
           excludeUserId: result.user.id,
         }),
-        !result.isDirector &&
         sub_department_id &&
         createScopedNotification({
           scope: "TEAMLEADS_SUBDEPT",
@@ -595,7 +581,6 @@ export const updateEmployee = async (req: Request, res: Response) => {
       emergency_contact_phone,
       address,
       role_id,
-      sub_role_id,
       department_id,
       sub_department_id,
       designation,
@@ -689,27 +674,20 @@ export const updateEmployee = async (req: Request, res: Response) => {
     const mergedDocuments = [...existingDocsFromFrontend, ...newDocumentsObj];
 
     // Determine subRole type
-    const subRole = sub_role_id
-      ? await prisma.sub_roles.findUnique({
-        where: { id: sub_role_id },
+    const Role = role_id
+      ? await prisma.roles.findUnique({
+        where: { id: role_id },
         select: { name: true },
       })
       : null;
-    const isDirector = subRole?.name?.toLowerCase() === "director";
-    const isManager = subRole?.name?.toLowerCase() === "manager";
-
-    // Decide final subDepartmentId and departmentId
-    const subDeptIdToSave =
-      !isDirector && !isManager && sub_department_id ? sub_department_id : null;
-    const deptIdToSave = !isDirector ? department_id : null;
 
     // Update employee
     const updatedEmployee = await prisma.employees.update({
       where: { id },
       data: {
         phone_number,
-        department_id: deptIdToSave,
-        sub_department_id: subDeptIdToSave,
+        department_id: department_id,
+        sub_department_id: sub_department_id,
         position: designation,
         father_name,
         date_of_birth: date_of_birth ? new Date(date_of_birth) : undefined,
@@ -739,7 +717,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
     if (email) updateUserData.email = email;
     if (full_name) updateUserData.full_name = full_name;
     if (role_id) updateUserData.role_id = role_id;
-    if (sub_role_id) updateUserData.sub_role_id = sub_role_id;
+    if (role_id) updateUserData.role_id = role_id;
 
     if (Object.keys(updateUserData).length > 0) {
       await prisma.users.update({
@@ -806,7 +784,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
           full_name: full_name || undefined,
           email: email || undefined,
           designation: updatedEmployee.position,
-          department: deptIdToSave,
+          department: department_id,
           status: updatedEmployee.status,
           skills:
             updatedEmployee.skills?.split(",").map((s: any) => s.trim()) || [],
@@ -1014,7 +992,7 @@ export const listInactiveUsers = async (req: Request, res: Response) => {
 
 const getFileUrl = (req: Request, folder: string, filename: string) => {
   const baseUrl =
-  process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+    process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
   return `${baseUrl}/uploads/${folder}/${filename}`;
 };
 

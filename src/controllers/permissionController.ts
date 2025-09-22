@@ -125,12 +125,12 @@ export const assignPermissionsToUser = async (req: Request, res: Response) => {
   }
 };
 
-export const getPermissionsOfSubRole = async (req: Request, res: Response) => {
+export const getPermissionsOfRole = async (req: Request, res: Response) => {
   try {
-    const { sub_role_id } = req.params;
+    const { RoleId } = req.params;
 
-    const permissions = await prisma.sub_role_permissions.findMany({
-      where: { sub_role_id },
+    const permissions = await prisma.role_permissions.findMany({
+      where: { role_id: RoleId },
       include: {
         permission: true,
       },
