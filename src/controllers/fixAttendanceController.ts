@@ -198,7 +198,7 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
             // 🔔 Notify EMPLOYEE_ONLY
             await createScopedNotification({
                 scope: 'EMPLOYEE_ONLY',
-                targetIds: { user_id: request.employee.user_id },
+                target_ids: { user_id: request.employee.user_id },
                 data: {
                     title: baseNotification.title,
                     message: baseNotification.message,
@@ -218,7 +218,7 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
             // notify HR (DIRECTORS_HR)
             await createScopedNotification({
                 scope: 'DIRECTORS_HR',
-                targetIds: {},
+                target_ids: {},
                 data: commonData,
                 visibilityLevel: 1,
                 excludeUserId: reviewer_id, // reviewer shouldn’t get self-notification
@@ -228,7 +228,7 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
             if (request.employee.department_id) {
                 await createScopedNotification({
                     scope: 'MANAGERS_DEPT',
-                    targetIds: { department_id: request.employee.department_id },
+                    target_ids: { department_id: request.employee.department_id },
                     data: commonData,
                     visibilityLevel: 2,
                     excludeUserId: reviewer_id,
@@ -239,7 +239,7 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
             if (request.employee.sub_department_id) {
                 await createScopedNotification({
                     scope: 'TEAMLEADS_SUBDEPT',
-                    targetIds: { sub_department_id: request.employee.sub_department_id },
+                    target_ids: { sub_department_id: request.employee.sub_department_id },
                     data: commonData,
                     visibilityLevel: 2,
                     excludeUserId: reviewer_id,
@@ -284,7 +284,7 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
             where: { id: reviewerId },
             include: {
                 role: true,
-                subRole: true,
+                sub_role: true,
             },
         });
 
@@ -305,10 +305,10 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
                             user: true,
                         },
                     },
-                    reviewedBy: true,
+                    reviewed_by: true,
                 },
                 orderBy: {
-                    requestedAt: 'desc',
+                    requested_at: 'desc',
                 },
             });
 
@@ -322,7 +322,7 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
         }
 
         // Sub-role-based access (get requests of users with lower level)
-        if (reviewer.subRole?.level !== undefined) {
+        if (reviewer.sub_role?.level !== undefined) {
             const requests = await prisma.attendance_fix_requests.findMany({
                 take: limitNumber,
                 skip: lastCursorId ? 1 : 0,
@@ -330,9 +330,9 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
                 where: {
                     employee: {
                         user: {
-                            subRole: {
+                            sub_role: {
                                 level: {
-                                    gt: reviewer.subRole.level, // Only lower level
+                                    gt: reviewer.sub_role.level, // Only lower level
                                 },
                             },
                         },
@@ -344,10 +344,10 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
                             user: true,
                         },
                     },
-                    reviewedBy: true,
+                    reviewed_by: true,
                 },
                 orderBy: {
-                    requestedAt: 'desc',
+                    requested_at: 'desc',
                 },
             });
             const total = await prisma.attendance_fix_requests.count({})
@@ -371,29 +371,29 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
 };
 
 export const getFixRequestsByEmployee = async (req: Request, res: Response) => {
-    const { employeeId } = req.params;
+    const { employee_id } = req.params;
 
-    if (!employeeId) {
+    if (!employee_id) {
         return res.status(400).json({ message: "Employee ID is required." });
     }
 
     try {
         const fixRequests = await prisma.attendance_fix_requests.findMany({
-            where: { employeeId },
+            where: { employee_id },
             include: {
-                reviewedBy: {
-                    select: { fullName: true }
+                reviewed_by: {
+                    select: { full_name: true }
                 },
                 employee: {
                     include: {
                         user: {
-                            select: { fullName: true }
+                            select: { full_name: true }
                         }
                     }
                 },
             },
             orderBy: {
-                requestedAt: 'desc',
+                requested_at: 'desc',
             },
         });
 
@@ -407,7 +407,7 @@ export const getFixRequestsByEmployee = async (req: Request, res: Response) => {
 // update data 
 export const editFixRequest = async (req: Request, res: Response) => {
     const requestId = req.params.id;
-    const { status, reason, requestType, requestedCheckIn, requestedCheckOut, remarks } = req.body;
+    const { status, reason, request_type, requestedCheckIn, requestedCheckOut, remarks } = req.body;
 
     try {
         const existingRequest = await prisma.attendance_fix_requests.findUnique({
@@ -417,7 +417,7 @@ export const editFixRequest = async (req: Request, res: Response) => {
                     include: {
                         user: true,
                         department: true,
-                        subDepartment: true
+                        sub_department: true
                     }
                 }
             }
@@ -446,11 +446,11 @@ export const editFixRequest = async (req: Request, res: Response) => {
             data: {
                 status,
                 reason,
-                requestType,
-                requestedCheckIn: requestedCheckIn ? new Date(requestedCheckIn) : undefined,
-                requestedCheckOut: requestedCheckOut ? new Date(requestedCheckOut) : undefined,
+                request_type,
+                requested_check_in: requestedCheckIn ? new Date(requestedCheckIn) : undefined,
+                requested_check_out: requestedCheckOut ? new Date(requestedCheckOut) : undefined,
                 remarks,
-                reviewedAt: new Date(),
+                requested_at: new Date(),
             },
         });
 
@@ -504,7 +504,7 @@ export const getFixRequestById = async (req: Request, res: Response) => {
                 employee: {
                     include: { user: true }
                 },
-                reviewedBy: true,
+                reviewed_by: true,
             }
         });
 

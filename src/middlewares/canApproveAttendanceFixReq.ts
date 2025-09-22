@@ -9,9 +9,9 @@ export const canApproveFixRequest = async (req: Request, res: Response, next: Ne
             return res.status(400).json({ message: "Missing reviewer ID or request ID" });
         }
 
-        const reviewer = await prisma.user.findUnique({
+        const reviewer = await prisma.users.findUnique({
             where: { id: reviewerId },
-            include: { subRole: true, role: true },
+            include: { sub_role: true, role: true },
         });
 
         if (!reviewer) {
@@ -23,13 +23,13 @@ export const canApproveFixRequest = async (req: Request, res: Response, next: Ne
             return next();
         }
 
-        const request = await prisma.attendanceFixRequest.findUnique({
+        const request = await prisma.attendance_fix_requests.findUnique({
             where: { id: requestId },
             include: {
                 employee: {
                     include: {
                         user: {
-                            include: { subRole: true },
+                            include: { sub_role: true },
                         },
                     },
                 },
@@ -40,8 +40,8 @@ export const canApproveFixRequest = async (req: Request, res: Response, next: Ne
             return res.status(404).json({ message: "Fix request not found" });
         }
 
-        const employeeSubRole = request.employee.user.subRole;
-        const reviewerSubRole = reviewer.subRole;
+        const employeeSubRole = request.employee.user.sub_role;
+        const reviewerSubRole = reviewer.sub_role;
 
         // ✅ If reviewer has no subRole but is not Admin (fallback), deny
         if (!reviewerSubRole) {

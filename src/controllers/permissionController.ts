@@ -90,7 +90,7 @@ export const assignPermissionsToUser = async (req: Request, res: Response) => {
       // 🔔 Notify target user
       await createScopedNotification({
         scope: 'ASSIGNED_USER',
-        targetIds: { user_id },
+        target_ids: { user_id },
         data: {
           title: 'Permissions Updated',
           message: `Your permissions have been updated by ${performed_by_name}.`,
@@ -104,7 +104,7 @@ export const assignPermissionsToUser = async (req: Request, res: Response) => {
       if (performed_by_user_id) {
         await createScopedNotification({
           scope: 'ADMIN_ONLY',
-          targetIds: { user_id: performed_by_user_id },
+          target_ids: { user_id: performed_by_user_id },
           data: {
             title: 'Permission Update Executed',
             message: `You successfully updated permissions for a user.`,

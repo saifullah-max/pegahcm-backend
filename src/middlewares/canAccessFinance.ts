@@ -19,12 +19,12 @@ export const canAccessSalary = async (
     }
 
     // Get fresh user details from DB
-    const dbUser = await prisma.user.findUnique({
+    const dbUser = await prisma.users.findUnique({
         where: { id: req.user.userId },
         select: {
             role: { select: { name: true } },
-            subRole: { select: { name: true } },
-            roleTag: true,
+            sub_role: { select: { name: true } },
+            role_tag: true,
         },
     });
 
@@ -32,15 +32,15 @@ export const canAccessSalary = async (
         return res.status(404).json({ message: 'User not found' });
     }
     console.log('Role:', dbUser.role.name);
-    console.log('SubRole:', dbUser.subRole?.name);
-    console.log('RoleTag:', dbUser.roleTag);
+    console.log('SubRole:', dbUser.sub_role?.name);
+    console.log('RoleTag:', dbUser.role_tag);
 
 
     const isAdmin = dbUser.role.name.toLowerCase() === 'admin';
     const isFinanceManager =
         dbUser.role.name.toLowerCase() === 'user' &&
-        dbUser.subRole?.name.toLowerCase() === 'manager' &&
-        dbUser.roleTag === RoleTag.FINANCE;
+        dbUser.sub_role?.name.toLowerCase() === 'manager' &&
+        dbUser.role_tag === RoleTag.FINANCE;
 
     if (isAdmin || isFinanceManager) {
         return next();

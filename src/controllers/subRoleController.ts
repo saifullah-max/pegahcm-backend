@@ -204,7 +204,7 @@ export const assignPermissionsToSubRole = async (req: Request, res: Response) =>
             const notifyUserPromises = targetUsers.map(user =>
                 createScopedNotification({
                     scope: 'ASSIGNED_USER',
-                    targetIds: { userId: user.id },
+                    target_ids: { user_id: user.id },
                     data: {
                         title: 'Role Permissions Updated',
                         message: `Permissions for your role have been updated by ${performed_by_name}.`,
@@ -221,7 +221,7 @@ export const assignPermissionsToSubRole = async (req: Request, res: Response) =>
                 notifyUserPromises.push(
                     createScopedNotification({
                         scope: 'ASSIGNED_USER',
-                        targetIds: { userId: performed_by_user_id },
+                        target_ids: { user_id: performed_by_user_id },
                         data: {
                             title: 'Sub-role Permissions Updated',
                             message: `You successfully updated permissions for ${subRoleName?.sub_role.name} sub-role users.`,

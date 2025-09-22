@@ -6,10 +6,10 @@ const cron = nodeCron;
 export const startNotificationCleanupJob = () => {
     cron.schedule('0 1 * * *', async () => {
         try {
-            const deletedCount = await prisma.userNotification.deleteMany({
+            const deletedCount = await prisma.user_notifications.deleteMany({
                 where: {
                     notification: {
-                        createdAt: {
+                        created_at: {
                             lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
                         },
                     },
