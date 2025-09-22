@@ -125,12 +125,12 @@ export const assignPermissionsToUser = async (req: Request, res: Response) => {
   }
 };
 
-export const getPermissionsOfSubRole = async (req: Request, res: Response) => {
+export const getPermissionsOfRole = async (req: Request, res: Response) => {
   try {
-    const { subRoleId } = req.params;
+    const { RoleId } = req.params;
 
-    const permissions = await prisma.subRolePermission.findMany({
-      where: { subRoleId },
+    const permissions = await prisma.rolePermission.findMany({
+      where: { roleId: RoleId },
       include: {
         permission: true,
       },
@@ -141,7 +141,7 @@ export const getPermissionsOfSubRole = async (req: Request, res: Response) => {
     res.status(200).json(permissionIds);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Failed to fetch sub-role permissions' });
+    res.status(500).json({ message: 'Failed to fetch role permissions' });
   }
 };
 

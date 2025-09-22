@@ -121,7 +121,6 @@ export const createEmployee = async (req: Request, res: Response) => {
       emergencyContactPhone,
       address,
       roleId,
-      subRoleId,
       roleTag,
       departmentId,
       subDepartmentId,
@@ -135,7 +134,7 @@ export const createEmployee = async (req: Request, res: Response) => {
       fatherName,
     }: CreateEmployeeRequest = req.body;
 
-    // ✅ Check for existing user by email
+    // Check for existing user by email
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(409).json({
@@ -148,7 +147,7 @@ export const createEmployee = async (req: Request, res: Response) => {
       [fieldname: string]: Express.Multer.File[];
     };
 
-    // ✅ Build profile image object if uploaded
+    // Build profile image object if uploaded
     const profileImageObj = files.profileImage?.[0]
       ? [
         {
@@ -207,39 +206,11 @@ export const createEmployee = async (req: Request, res: Response) => {
           passwordHash,
           fullName,
           roleId,
-          subRoleId,
           roleTag: prismaRoleTag,
           status,
           dateJoined: new Date(),
         },
       });
-
-      // ✅ Assign subRole permissions
-      if (subRoleId) {
-        const subRolePermissions = await prismaTx.subRolePermission.findMany({
-          where: { subRoleId },
-          select: { permissionId: true },
-        });
-
-        if (subRolePermissions.length > 0) {
-          await prismaTx.userPermission.createMany({
-            data: subRolePermissions.map((sp: any) => ({
-              userId: newUser.id,
-              permissionId: sp.permissionId,
-            })),
-            skipDuplicates: true,
-          });
-        }
-      }
-
-      const subRole = subRoleId
-        ? await prismaTx.subRole.findUnique({
-          where: { id: subRoleId },
-          select: { name: true },
-        })
-        : null;
-      const isDirector = subRole?.name?.toLowerCase() === "director";
-      const isManager = subRole?.name?.toLowerCase() === "manager";
 
       // ✅ Create Employee
       const newEmployee = await prismaTx.employee.create({
@@ -248,8 +219,8 @@ export const createEmployee = async (req: Request, res: Response) => {
           phoneNumber: phoneNumber ? String(phoneNumber) : undefined,
           employeeNumber,
           shiftId,
-          departmentId: !isDirector ? departmentId : null,
-          subDepartmentId: !isDirector && !isManager ? subDepartmentId : null,
+          departmentId: departmentId,
+          subDepartmentId: subDepartmentId,
           position: designation,
           fatherName: fatherName ?? undefined,
           dateOfBirth: new Date(dateOfBirth),
@@ -268,71 +239,72 @@ export const createEmployee = async (req: Request, res: Response) => {
         },
       });
 
-      return { user: newUser, employee: newEmployee, isDirector };
+      return { user: newUser, employee: newEmployee };
     });
 
-    try {
-      await Promise.all([
-        createScopedNotification({
-          scope: "ADMIN_ONLY",
-          data: {
-            title: "New Employee Joined",
-            message: `${fullName} has joined the company.`,
-            type: "Employee",
-          },
-          visibilityLevel: 0,
-        }),
-        createScopedNotification({
-          scope: "DIRECTORS_HR",
-          data: {
-            title: "New Employee Joined",
-            message: `${fullName} has joined the company.`,
-            type: "Employee",
-          },
-          visibilityLevel: 1,
-        }),
-        !result.isDirector &&
-        departmentId &&
-        createScopedNotification({
-          scope: "MANAGERS_DEPT",
-          data: {
-            title: "New Department Member",
-            message: `${fullName} has joined your department.`,
-            type: "Employee",
-          },
-          targetIds: { departmentId, employeeId: result.employee.id },
-          visibilityLevel: 2,
-          excludeUserId: result.user.id,
-        }),
-        !result.isDirector &&
-        subDepartmentId &&
-        createScopedNotification({
-          scope: "TEAMLEADS_SUBDEPT",
-          data: {
-            title: "New Team Member",
-            message: `${fullName} has joined your sub-department.`,
-            type: "Employee",
-          },
-          targetIds: { subDepartmentId, employeeId: result.employee.id },
-          visibilityLevel: 3,
-          excludeUserId: result.user.id,
-        }),
-        createScopedNotification({
-          scope: "EMPLOYEE_ONLY",
-          data: {
-            title: "Welcome to the Team 🎉",
-            message: `Hey ${fullName}, we're excited to have you onboard!`,
-            type: "Employee",
-          },
-          targetIds: { userId: result.user.id },
-          visibilityLevel: 3,
-        }),
-      ]);
-    } catch (err) {
-      console.error("Notification error:", err);
-    }
+    // try {
+    //   await Promise.all([
+    //     createScopedNotification({
+    //       scope: "ADMIN_ONLY",
+    //       data: {
+    //         title: "New Employee Joined",
+    //         message: `${fullName} has joined the company.`,
+    //         type: "Employee",
+    //       },
+    //       visibilityLevel: 0,
+    //     }),
+    //     createScopedNotification({
+    //       scope: "DIRECTORS_HR",
+    //       data: {
+    //         title: "New Employee Joined",
+    //         message: `${fullName} has joined the company.`,
+    //         type: "Employee",
+    //       },
+    //       visibilityLevel: 1,
+    //     }),
+    //     !result.isDirector &&
+    //     departmentId &&
+    //     createScopedNotification({
+    //       scope: "MANAGERS_DEPT",
+    //       data: {
+    //         title: "New Department Member",
+    //         message: `${fullName} has joined your department.`,
+    //         type: "Employee",
+    //       },
+    //       targetIds: { departmentId, employeeId: result.employee.id },
+    //       visibilityLevel: 2,
+    //       excludeUserId: result.user.id,
+    //     }),
+    //     !result.isDirector &&
+    //     subDepartmentId &&
+    //     createScopedNotification({
+    //       scope: "TEAMLEADS_SUBDEPT",
+    //       data: {
+    //         title: "New Team Member",
+    //         message: `${fullName} has joined your sub-department.`,
+    //         type: "Employee",
+    //       },
+    //       targetIds: { subDepartmentId, employeeId: result.employee.id },
+    //       visibilityLevel: 3,
+    //       excludeUserId: result.user.id,
+    //     }),
+    //     createScopedNotification({
+    //       scope: "EMPLOYEE_ONLY",
+    //       data: {
+    //         title: "Welcome to the Team 🎉",
+    //         message: `Hey ${fullName}, we're excited to have you onboard!`,
+    //         type: "Employee",
+    //       },
+    //       targetIds: { userId: result.user.id },
+    //       visibilityLevel: 3,
+    //     }),
+    //   ]);
+    // } catch (err) {
+    //   console.error("Notification error:", err);
+    // }
 
     // ✅ Final Response
+
     return res.status(201).json({
       success: true,
       message: "Employee and user created successfully.",
@@ -426,7 +398,7 @@ export const listEmployees = async (req: Request, res: Response) => {
     });
 
     const formattedEmployees = employees.map((emp: any) => {
-      // ✅ Parse JSON safely
+      // Parse JSON safely
       const images = Array.isArray(emp.images) ? emp.images : [];
       const documents = Array.isArray(emp.documents) ? emp.documents : [];
 
@@ -595,7 +567,6 @@ export const updateEmployee = async (req: Request, res: Response) => {
       emergencyContactPhone,
       address,
       roleId,
-      subRoleId,
       departmentId,
       subDepartmentId,
       designation,
@@ -688,28 +659,13 @@ export const updateEmployee = async (req: Request, res: Response) => {
     // Merge documents: only keep those sent from frontend + new uploads
     const mergedDocuments = [...existingDocsFromFrontend, ...newDocumentsObj];
 
-    // Determine subRole type
-    const subRole = subRoleId
-      ? await prisma.subRole.findUnique({
-        where: { id: subRoleId },
-        select: { name: true },
-      })
-      : null;
-    const isDirector = subRole?.name?.toLowerCase() === "director";
-    const isManager = subRole?.name?.toLowerCase() === "manager";
-
-    // Decide final subDepartmentId and departmentId
-    const subDeptIdToSave =
-      !isDirector && !isManager && subDepartmentId ? subDepartmentId : null;
-    const deptIdToSave = !isDirector ? departmentId : null;
-
     // Update employee
     const updatedEmployee = await prisma.employee.update({
       where: { id },
       data: {
         phoneNumber,
-        departmentId: deptIdToSave,
-        subDepartmentId: subDeptIdToSave,
+        departmentId: departmentId,
+        subDepartmentId: subDepartmentId,
         position: designation,
         fatherName,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
@@ -739,7 +695,6 @@ export const updateEmployee = async (req: Request, res: Response) => {
     if (email) updateUserData.email = email;
     if (fullName) updateUserData.fullName = fullName;
     if (roleId) updateUserData.roleId = roleId;
-    if (subRoleId) updateUserData.subRoleId = subRoleId;
 
     if (Object.keys(updateUserData).length > 0) {
       await prisma.user.update({
@@ -747,6 +702,8 @@ export const updateEmployee = async (req: Request, res: Response) => {
         data: updateUserData,
       });
     }
+
+    const deptName = await prisma.department.findUnique({ where: { id: departmentId } })
 
     // Send notifications
     try {
@@ -806,7 +763,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
           fullName: fullName || undefined,
           email: email || undefined,
           designation: updatedEmployee.position,
-          department: deptIdToSave,
+          department: deptName,
           status: updatedEmployee.status,
           skills:
             updatedEmployee.skills?.split(",").map((s: any) => s.trim()) || [],

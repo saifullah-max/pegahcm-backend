@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
+import { createScopedNotification } from '../utils/notificationUtils';
 
 // Create a new role
 export const createRole = async (req: Request, res: Response) => {
@@ -144,4 +145,117 @@ export const deleteRole = async (req: Request, res: Response) => {
       message: 'Internal server error'
     });
   }
-}; 
+};
+
+// controllers/permissionController.ts
+export const assignPermissionsToRole = async (req: Request, res: Response) => {
+  try {
+    const { RoleId, permissionIds } = req.body;
+    const performedByUserId = req.user?.userId;
+    const performedByName = req.user?.username || 'Admin';
+
+    if (!RoleId || !Array.isArray(permissionIds)) {
+      return res.status(400).json({ message: 'Invalid data' });
+    }
+
+    // Start transaction
+    await prisma.$transaction(async (tx) => {
+      // Step 1: Delete existing SubRolePermissions
+      await tx.rolePermission.deleteMany({ where: { roleId: RoleId } });
+
+      // Step 2: Re-assign new permissions to SubRole
+      const data = permissionIds.map((permissionId: string) => ({
+        roleId: RoleId,
+        permissionId,
+      }));
+      await tx.rolePermission.createMany({ data, skipDuplicates: true });
+
+      // Step 3: Get all users with this subRole
+      const users = await tx.user.findMany({
+        where: { roleId: RoleId },
+        select: { id: true },
+      });
+
+      const userIds = users.map((u) => u.id);
+      if (userIds.length > 0) {
+        // Step 4: Delete all UserPermissions for those users
+        await tx.userPermission.deleteMany({
+          where: { userId: { in: userIds } },
+        });
+
+        // Step 5: Add new permissions to those users
+        const userPermissionData = userIds.flatMap((userId) =>
+          permissionIds.map((permissionId: string) => ({
+            userId,
+            permissionId,
+          }))
+        );
+
+        await tx.userPermission.createMany({
+          data: userPermissionData,
+          skipDuplicates: true,
+        });
+      }
+    });
+
+    const RoleName = await prisma.rolePermission.findFirst({
+      where: { roleId: RoleId },
+      include: {
+        role: true,  // includes all scalar fields of subRole, including 'name'
+      },
+    });
+
+
+    // 🔔 Notify all users with that subRole
+    const targetUsers = await prisma.user.findMany({
+      where: {
+        roleId: RoleId,
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+
+
+    try {
+      const notifyUserPromises = targetUsers.map(user =>
+        createScopedNotification({
+          scope: 'ASSIGNED_USER',
+          targetIds: { userId: user.id },
+          data: {
+            title: 'Role Permissions Updated',
+            message: `Permissions for your role have been updated by ${performedByName}.`,
+            type: 'INFO',
+          },
+          visibilityLevel: 3,
+          showPopup: true,
+          excludeUserId: performedByUserId, // Don't notify admin again
+        })
+      );
+
+      // 🔔 Notify admin who updated
+      if (performedByUserId) {
+        notifyUserPromises.push(
+          createScopedNotification({
+            scope: 'ASSIGNED_USER',
+            targetIds: { userId: performedByUserId },
+            data: {
+              title: 'Sub-role Permissions Updated',
+              message: `You successfully updated permissions for ${RoleName?.role.name} sub-role users.`,
+              type: 'INFO',
+            },
+            visibilityLevel: 0,
+            showPopup: true,
+          })
+        );
+      }
+      await Promise.all(notifyUserPromises);
+    } catch (error) {
+      console.error("Failed to notify subroles as their permissions updated: ", error)
+    }
+
+    res.status(200).json({ message: 'SubRole and user permissions updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Failed to assign permissions to SubRole' });
+  }
+};
