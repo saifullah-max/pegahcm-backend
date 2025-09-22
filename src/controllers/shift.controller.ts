@@ -11,6 +11,7 @@ export const createShift = async (req: Request, res: Response) => {
     }
 
     const { name, start_time, end_time, description } = req.body;
+    console.log("req body:", start_time);
 
     if (!name || !start_time || !end_time) {
       return res.status(400).json({
