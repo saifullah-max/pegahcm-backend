@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import EmailService from '../utils/emailService'; // You'll create this email helper
 import prisma from '../utils/Prisma';
 
+
 export const register = async (req: Request, res: Response) => {
   try {
     const {
