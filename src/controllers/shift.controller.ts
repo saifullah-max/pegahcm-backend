@@ -130,7 +130,7 @@ export const deleteShift = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     // Check if shift is being used in any attendance records
-    const attendanceRecords = await prisma.attendance_records.findMany({
+    const attendanceRecords = await prisma.attendanceRecords.findMany({
       where: { shift_id: id }
     });
 

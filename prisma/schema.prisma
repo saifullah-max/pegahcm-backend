@@ -104,7 +104,7 @@ model Users {
   assigned_onboarding    OnboardingProcesses[]    @relation("AssignedHR")
   processed_resignations Resignations[]          @relation("ProcessedBy")
   initiated_hr_processes  HrProcesses[]            @relation("InitiatedBy")
-  UserPermission        user_permissions[]
+  user_permission        user_permissions[]
   SystemLog             SystemLogs[]
   BulkUpload            BulkUploads[]
   Resignation           Resignations[]
@@ -166,7 +166,7 @@ model Roles {
   name           String           @unique
   description    String?
   users          Users[]
-  RolePermission role_permissions[]
+  role_permission role_permissions[]
 
 }
 
