@@ -4,3 +4,6 @@ node_modules
 uploads
 
 dist
+migrations
+*.sql
+/prisma/migrations
