@@ -299,7 +299,7 @@ model AttendanceFixRequests {
   reason      String
   status      String // "Pending", "Approved", "Rejected"
   requested_at DateTime @default(now())
-
+`
   reviewed_by   Users?     @relation(fields: [reviewed_by_id], references: [id])
   reviewed_by_id String?
   reviewed_at   DateTime?
