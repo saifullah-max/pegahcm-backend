@@ -140,7 +140,7 @@ export const checkIn = async (
         status,
         late_minutes,
       },
-      include: { shifts: true },
+      include: { shift: true },
     });
 
     const clockInTimeLocal = now.format("hh:mm A"); // local time
@@ -160,7 +160,7 @@ export const checkIn = async (
         createScopedNotification({
           scope: "TEAMLEADS_SUBDEPT",
           data: baseNotification,
-          targetIds: { sub_department_id },
+          target_ids: { sub_department_id },
           visibilityLevel: 3,
           excludeUserId: user_id,
         })
@@ -170,7 +170,7 @@ export const checkIn = async (
         createScopedNotification({
           scope: "MANAGERS_DEPT",
           data: baseNotification,
-          targetIds: { department_id },
+          target_ids: { department_id },
           visibilityLevel: 2,
           excludeUserId: user_id,
         })
@@ -302,7 +302,7 @@ export const checkOut = async (
         createScopedNotification({
           scope: "TEAMLEADS_SUBDEPT",
           data: baseNotification,
-          targetIds: { sub_department_id },
+          target_ids: { sub_department_id },
           visibilityLevel: 3,
           excludeUserId: user_id,
         })
@@ -312,7 +312,7 @@ export const checkOut = async (
         createScopedNotification({
           scope: "MANAGERS_DEPT",
           data: baseNotification,
-          targetIds: { department_id },
+          target_ids: { department_id },
           visibilityLevel: 2,
           excludeUserId: user_id,
         })
@@ -847,7 +847,7 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             : `Your leave request from ${fromDate} to ${toDate} was rejected.`,
         type: "LeaveRequest",
       },
-      targetIds: {
+      target_ids: {
         user_id: employeeUser.id,
       },
       visibilityLevel: 0,
@@ -864,7 +864,7 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             } ${status.toLowerCase()} the leave request of ${full_name}.`,
           type: "LeaveRequest",
         },
-        targetIds: {
+        target_ids: {
           department_id: targetLeaveRequest.employee.department_id,
         },
         visibilityLevel: 1,
@@ -883,7 +883,7 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
             } ${status.toLowerCase()} the leave request of ${full_name}.`,
           type: "LeaveRequest",
         },
-        targetIds: {
+        target_ids: {
           sub_department_id: targetLeaveRequest.employee.sub_department_id,
         },
         visibilityLevel: 1,
@@ -908,7 +908,7 @@ export const getAllAttendance = async (req: Request, res: Response) => {
     const allAttendance = await prisma.attendance_records.findMany({
       include: {
         employee: true,
-        shifts: true,
+        shift: true,
         breaks: true,
       },
     });
