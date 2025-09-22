@@ -1,8 +1,17 @@
-import e, { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { Request, Response } from "express";
+import bcrypt from "bcryptjs";
+
+import { createScopedNotification } from "../utils/notificationUtils";
+import { JwtPayload } from "jsonwebtoken";
+import prisma from "../utils/Prisma";
+
+enum RoleTag {
+  HR = "HR",
+  INTERVIEWER = "INTERVIEWER",
+  RECRUITER = "RECRUITER",
+  TRAINER = "TRAINER",
+  FINANCE = "FINANCE",
+}
 
 // Add multer type definitions
 declare global {
@@ -15,37 +24,60 @@ declare global {
   }
 }
 
-const prisma = new PrismaClient();
+export enum EmployeeStatus {
+  ACTIVE = "active",
+  INACTIVE = "inactive",
+  TERMINATED = "terminated",
+  RESIGNED = "resigned",
+  RETIRED = "retired",
+  ON_LEAVE = "onLeave",
+  PROBATION = "probation",
+}
 
+export const statusOptions = [
+  { value: EmployeeStatus.ACTIVE, label: "Active" },
+  { value: EmployeeStatus.INACTIVE, label: "Inactive" },
+  { value: EmployeeStatus.TERMINATED, label: "Terminated" },
+  { value: EmployeeStatus.RESIGNED, label: "Resigned" },
+  { value: EmployeeStatus.RETIRED, label: "Retired" },
+  { value: EmployeeStatus.ON_LEAVE, label: "On Leave" },
+  { value: EmployeeStatus.PROBATION, label: "Probation" },
+];
 interface CreateEmployeeRequest {
   // User details
-  fullName: string;
+  full_name: string;
   email: string;
-  phoneNumber: number;
+  phone_number: number;
   password: string;
   gender: string;
-  dateOfBirth: Date;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
+  date_of_birth: Date;
+  emergency_contact_name: string;
+  emergency_contact_phone: string;
   address: string;
 
-  roleId: string;
+  role_id: string;
+  sub_role_id?: string;
+  role_tag?: string;
 
   // Employee details
-  departmentId: string;
-  subDepartmentId?: string;
+  department_id: string;
+  sub_department_id?: string;
   designation: string;
-  joiningDate: Date;
-  status: 'active' | 'inactive' | 'onLeave';
+  joining_date: Date;
+  status: EmployeeStatus;
   salary: number;
 
   skills?: string; // Comma-separated string of skills
 
-  workLocation: 'Onsite' | 'Remote' | 'Hybrid';
-  shiftId: string;
+  work_location: "Onsite" | "Remote" | "Hybrid";
+  shift_id: string;
 
-  fatherName: string;
+  father_name: string;
   // managerId?: string;
+}
+
+interface CustomJwtPayload extends JwtPayload {
+  id: string;
 }
 
 // Function to generate employee number
@@ -54,175 +86,273 @@ async function generateEmployeeNumber(): Promise<string> {
   const currentYear = new Date().getFullYear().toString().slice(-2);
 
   // Get the latest employee number for the current year
-  const latestEmployee = await prisma.employee.findFirst({
+  const latestEmployee = await prisma.employees.findFirst({
     where: {
-      employeeNumber: {
-        startsWith: `EMP${currentYear}`
-      }
+      employee_number: {
+        startsWith: `EMP${currentYear}`,
+      },
     },
     orderBy: {
-      employeeNumber: 'desc'
-    }
+      employee_number: "desc",
+    },
   });
 
   let sequence = 1;
   if (latestEmployee) {
     // Extract the sequence number from the latest employee number
-    const latestSequence = parseInt(latestEmployee.employeeNumber.slice(-4));
+    const latestSequence = parseInt(latestEmployee.employee_number.slice(-4));
     sequence = latestSequence + 1;
   }
 
   // Format: EMPYY#### (e.g., EMP240001)
-  return `EMP${currentYear}${sequence.toString().padStart(4, '0')}`;
+  return `EMP${currentYear}${sequence.toString().padStart(4, "0")}`;
 }
 
 export const createEmployee = async (req: Request, res: Response) => {
   try {
     const {
-      fullName,
+      full_name,
       email,
-      phoneNumber,
+      phone_number,
       password,
       gender,
-      dateOfBirth,
-      emergencyContactName,
-      emergencyContactPhone,
+      date_of_birth,
+      emergency_contact_name,
+      emergency_contact_phone,
       address,
-      roleId,
-      departmentId,
-      subDepartmentId,
+      role_id,
+      department_id,
+      sub_department_id,
       designation,
-      joiningDate,
+      joining_date,
       status,
       salary,
       skills,
-      workLocation,
-      shiftId,
-      fatherName,
+      work_location,
+      shift_id,
+      father_name,
     }: CreateEmployeeRequest = req.body;
 
-    const files = (req.files || {}) as { [fieldname: string]: Express.Multer.File[] };
-
-    const profileImage = files.profileImage?.[0]
-      ? path.join('uploads', 'profiles', files.profileImage[0].filename)
-      : undefined;
-
-    const documents = files.documents?.map(file => ({
-      name: file.originalname,
-      url: path.join('uploads', 'documents', file.filename),
-      type: file.mimetype
-    }));
-
-    // Validate workLocation
-    if (!['Onsite', 'Remote', 'Hybrid'].includes(workLocation)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid work location. Must be one of: Onsite, Remote, Hybrid',
-        received: workLocation
-      });
-    }
-
-    const processedSkills = Array.isArray(skills)
-      ? skills
-      : typeof skills === 'string'
-        ? skills.split(',').map(s => s.trim())
-        : [];
-
-    // Check if user with same email already exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-
+    // ✅ Check for existing user by email
+    const existingUser = await prisma.users.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(409).json({
         success: false,
-        message: 'A user with this email already exists.'
+        message: "A user with this email already exists.",
       });
     }
 
-    const employeeNumber = await generateEmployeeNumber();
+    const files = (req.files || {}) as {
+      [fieldname: string]: Express.Multer.File[];
+    };
 
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
+    // ✅ Build profile image object if uploaded
+    const profileImageObj = files.profileImage?.[0]
+      ? [
+        {
+          name: files.profileImage[0].originalname,
+          url: getFileUrl(req, "profiles", files.profileImage[0].filename),
+          mime_type: files.profileImage[0].mimetype,
+          uploaded_at: new Date(),
+        },
+      ]
+      : [];
 
-    // Transaction: create user and employee
-    const result = await prisma.$transaction(async (prismaTx) => {
-      const newUser = await prismaTx.user.create({
+    // ✅ Build documents object if uploaded
+    const documentsObj =
+      files.documents?.map((file) => ({
+        name: file.originalname,
+        url: getFileUrl(req, "documents", file.filename),
+        mime_type: file.mimetype,
+        type: file.mimetype,
+        uploaded_at: new Date(),
+      })) || [];
+
+    // ✅ Validate work location
+    if (!["Onsite", "Remote", "Hybrid"].includes(work_location)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid work location. Must be one of: Onsite, Remote, Hybrid",
+        received: work_location,
+      });
+    }
+
+    // ✅ Convert skills from string (FormData sends arrays as strings)
+    const processedSkills = Array.isArray(skills)
+      ? skills
+      : typeof skills === "string"
+        ? skills.split(",").map((s) => s.trim())
+        : [];
+
+    // ✅ Generate Employee Number & Hash Password
+    const employee_number = await generateEmployeeNumber();
+    const password_hash = await bcrypt.hash(password, 10);
+
+    // ✅ Transaction: Create User & Employee
+    const result = await prisma.$transaction(async (prismaTx: any) => {
+      // Create User
+      const newUser = await prismaTx.users.create({
         data: {
           username: email,
           email,
-          passwordHash,
-          fullName,
-          roleId,
+          password_hash,
+          full_name,
+          role_id,
           status,
-          dateJoined: new Date()
-        }
+          date_joined: new Date(),
+        },
       });
 
-      const newEmployee = await prismaTx.employee.create({
+      // ✅ Assign subRole permissions
+      if (role_id) {
+        const subRolePermissions = await prismaTx.role_permissions.findMany({
+          where: { role_id },
+          select: { permission_id: true },
+        });
+
+        if (subRolePermissions.length > 0) {
+          await prismaTx.user_permissions.createMany({
+            data: subRolePermissions.map((sp: any) => ({
+              user_id: newUser.id,
+              permission_id: sp.permission_id,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      const Role = role_id
+        ? await prismaTx.roles.findUnique({
+          where: { id: role_id },
+          select: { name: true },
+        })
+        : null;
+
+      // ✅ Create Employee
+      const newEmployee = await prismaTx.employees.create({
         data: {
-          userId: newUser.id,
-          phoneNumber: String(phoneNumber),
-          employeeNumber,
-          shiftId,
-          departmentId,
-          subDepartmentId,
+          user_id: newUser.id,
+          phone_number: phone_number ? String(phone_number) : undefined,
+          employee_number,
+          shift_id,
+          department_id: department_id,
+          sub_department_id: sub_department_id,
           position: designation,
-          fatherName: fatherName ?? undefined,
-          dateOfBirth: new Date(dateOfBirth),
-          hireDate: new Date(joiningDate),
+          father_name: father_name ?? undefined,
+          date_of_birth: new Date(date_of_birth),
+          hire_date: new Date(joining_date),
           status,
-          // profileImage,
-          // documents: documents ? JSON.stringify(documents) : null,
-          skills: processedSkills.length > 0 ? processedSkills.join(',') : null,
-          workLocation,
+          skills: processedSkills.length > 0 ? processedSkills.join(",") : null,
+          work_location,
           gender,
           address,
-          emergencyContactName,
-          emergencyContactPhone,
-          salary
-        }
+          emergency_contact_name,
+          emergency_contact_phone,
+          salary,
+          images: profileImageObj,
+          documents: documentsObj,
+          profile_image_url: profileImageObj[0]?.url,
+        },
       });
 
-      return {
-        user: newUser,
-        employee: newEmployee
-      };
+      return { user: newUser, employee: newEmployee };
     });
 
+    try {
+      await Promise.all([
+        createScopedNotification({
+          scope: "ADMIN_ONLY",
+          data: {
+            title: "New Employee Joined",
+            message: `${full_name} has joined the company.`,
+            type: "Employee",
+          },
+          visibilityLevel: 0,
+        }),
+        createScopedNotification({
+          scope: "DIRECTORS_HR",
+          data: {
+            title: "New Employee Joined",
+            message: `${full_name} has joined the company.`,
+            type: "Employee",
+          },
+          visibilityLevel: 1,
+        }),
+        department_id &&
+        createScopedNotification({
+          scope: "MANAGERS_DEPT",
+          data: {
+            title: "New Department Member",
+            message: `${full_name} has joined your department.`,
+            type: "Employee",
+          },
+          target_ids: { department_id: department_id, employee_id: result.employee.id },
+          visibilityLevel: 2,
+          excludeUserId: result.user.id,
+        }),
+        sub_department_id &&
+        createScopedNotification({
+          scope: "TEAMLEADS_SUBDEPT",
+          data: {
+            title: "New Team Member",
+            message: `${full_name} has joined your sub-department.`,
+            type: "Employee",
+          },
+          target_ids: { sub_department_id: sub_department_id, employee_id: result.employee.id },
+          visibilityLevel: 3,
+          excludeUserId: result.user.id,
+        }),
+        createScopedNotification({
+          scope: "EMPLOYEE_ONLY",
+          data: {
+            title: "Welcome to the Team 🎉",
+            message: `Hey ${full_name}, we're excited to have you onboard!`,
+            type: "Employee",
+          },
+          target_ids: { user_id: result.user.id },
+          visibilityLevel: 3,
+        }),
+      ]);
+    } catch (err) {
+      console.error("Notification error:", err);
+    }
+
+    // ✅ Final Response
     return res.status(201).json({
       success: true,
-      message: 'Employee and user created successfully.',
+      message: "Employee and user created successfully.",
       data: {
         employee: {
           id: result.employee.id,
-          employeeNumber: result.employee.employeeNumber,
-          fullName,
+          employee_number: result.employee.employee_number,
+          full_name,
           email,
           designation: result.employee.position,
-          department: departmentId,
+          department: department_id,
           status: result.employee.status,
-          // profileImage: result.employee.profileImage,
-          // documents: result.employee.documents ? JSON.parse(result.employee.documents) : [],
-          skills: result.employee.skills
-            ? result.employee.skills.split(',').map(skill => skill.trim())
-            : [],
-          workLocation: result.employee.workLocation,
+          skills:
+            result.employee.skills?.split(",").map((s: any) => s.trim()) || [],
+          work_location: result.employee.work_location,
           gender: result.employee.gender,
           address: result.employee.address,
-          emergencyContact: {
-            name: result.employee.emergencyContactName,
-            phone: result.employee.emergencyContactPhone
+          emergency_contact: {
+            name: result.employee.emergency_contact_name,
+            phone: result.employee.emergency_contact_phone,
           },
-          salary: result.employee.salary
-        }
-      }
+          salary: result.employee.salary,
+          profile_image_url: result.employee.profile_image_url,
+          images: result.employee.images || [],
+          documents: result.employee.documents || [],
+        },
+      },
     });
-
   } catch (error: any) {
-    console.error('Create employee error:', error);
+    console.error("Create employee error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error?.message || error
+      message: "Internal server error",
+      error: error?.message || error,
     });
   }
 };
@@ -230,12 +360,12 @@ export const createEmployee = async (req: Request, res: Response) => {
 export const listEmployees = async (req: Request, res: Response) => {
   try {
     const {
-      page = '1',
-      limit = '10',
+      page = "1",
+      limit = "10",
       search,
       department,
       status,
-      workLocation
+      work_location,
     } = req.query;
 
     const pageNumber = parseInt(page as string);
@@ -247,92 +377,84 @@ export const listEmployees = async (req: Request, res: Response) => {
 
     if (search) {
       where.OR = [
-        { employeeNumber: { contains: search as string } },
+        { employee_number: { contains: search as string } },
         { position: { contains: search as string } },
-        { user: { fullName: { contains: search as string } } }
+        { user: { full_name: { contains: search as string } } },
       ];
     }
 
-    if (department) {
-      where.departmentId = department;
-    }
+    if (department) where.department_id = department;
+    if (status) where.status = status;
+    if (work_location) where.work_location = work_location;
 
-    if (status) {
-      where.status = status;
-    }
+    const total = await prisma.employees.count({ where });
 
-    if (workLocation) {
-      where.workLocation = workLocation;
-    }
-
-    // Get total count for pagination
-    const total = await prisma.employee.count({ where });
-
-    // Get employees with related data
-    const employees = await prisma.employee.findMany({
+    const employees = await prisma.employees.findMany({
       where,
       skip,
       take: limitNumber,
       include: {
         user: {
           select: {
-            fullName: true,
+            id: true,
+            full_name: true,
             email: true,
-            status: true
-          }
+            status: true,
+            role: { select: { name: true } },
+            sub_role: { select: { name: true } },
+          },
         },
-        department: {
-          select: {
-            name: true
-          }
-        },
-        subDepartment: {
-          select: {
-            name: true
-          }
-        },
-        manager: {
-          select: {
-            user: {
-              select: {
-                fullName: true
-              }
-            }
-          }
-        }
+        department: { select: { name: true } },
+        sub_department: { select: { name: true } },
+        manager: { select: { user: { select: { full_name: true } } } },
       },
-      orderBy: {
-        hireDate: 'desc'
-      }
+      orderBy: { hire_date: "desc" },
     });
 
-    // Format the response
-    const formattedEmployees = employees.map(emp => ({
-      id: emp.id,
-      employeeNumber: emp.employeeNumber,
-      fullName: emp.user.fullName,
-      email: emp.user.email,
-      designation: emp.position,
-      department: emp.department?.name,
-      subDepartment: emp.subDepartment?.name,
-      manager: emp.manager?.user.fullName,
-      status: emp.status,
-      // profileImage: emp.profileImage,
-      workLocation: emp.workLocation,
-      gender: emp.gender,
-      address: emp.address,
-      emergencyContact: {
-        name: emp.emergencyContactName,
-        phone: emp.emergencyContactPhone
-      },
-      salary: emp.salary,
-      skills: emp.skills ? emp.skills.split(',').map(skill => skill.trim()) : [],
-      hireDate: emp.hireDate
-      // documents: emp.documents ? JSON.parse(emp.documents) : []
-    }));
+    const formattedEmployees = employees.map((emp: any) => {
+      // ✅ Parse JSON safely
+      const images = Array.isArray(emp.images) ? emp.images : [];
+      const documents = Array.isArray(emp.documents) ? emp.documents : [];
 
-    // console.log("Data:", employees);
-    console.log("DATA", formattedEmployees);
+      const profile_image_url =
+        images.length > 0 &&
+          typeof images[0] === "object" &&
+          "url" in images[0]!
+          ? (images[0] as { url: string }).url
+          : emp.profile_image_url || null;
+
+      return {
+        id: emp.id,
+        employee_number: emp.employee_number,
+        full_name: emp.user.full_name,
+        email: emp.user.email,
+        role: emp.user.role.name,
+        sub_role: emp.user.sub_role?.name,
+        designation: emp.position,
+        department: emp.department?.name,
+        sub_department: emp.sub_department?.name,
+        manager: emp.manager?.user.full_name,
+        status: emp.status,
+        work_location: emp.work_location,
+        gender: emp.gender,
+        address: emp.address,
+        emergency_contact: {
+          name: emp.emergency_contact_name,
+          phone: emp.emergency_contact_phone,
+        },
+        salary: emp.salary,
+        skills: emp.skills
+          ? emp.skills.split(",").map((skill: any) => skill.trim())
+          : [],
+        hire_date: emp.hire_date,
+
+        // ✅ New fields
+        profile_image_url,
+        images, // Full image objects
+        documents, // Full document objects
+      };
+    });
+
     return res.json({
       success: true,
       data: {
@@ -341,17 +463,15 @@ export const listEmployees = async (req: Request, res: Response) => {
           total,
           page: pageNumber,
           limit: limitNumber,
-          totalPages: Math.ceil(total / limitNumber)
-        }
-      }
+          totalPages: Math.ceil(total / limitNumber),
+        },
+      },
     });
-
   } catch (error) {
-    console.error('List employees error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+    console.error("List employees error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -359,64 +479,78 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   try {
-    const employee = await prisma.employee.findFirst({
-      where: {
-        OR: [
-          { id },
-          { userId: id }
-        ]
-      },
+    // admin isnt related to employee admin - that's why checking for both user and admin
+    const employee = await prisma.employees.findFirst({
+      where: { OR: [{ id }, { user_id: id }] },
       include: {
         user: true,
         shift: true,
-      }
+      },
     });
 
     if (!employee || !employee.user) {
       return res.status(404).json({
         success: false,
-        message: 'Employee or related user not found',
+        message: "Employee or related user not found",
       });
     }
+
+    // Parse images and documents
+    const images = Array.isArray(employee.images) ? employee.images : [];
+    const documents = Array.isArray(employee.documents)
+      ? employee.documents
+      : [];
+
+    const profile_image_url =
+      images.length > 0 && typeof images[0] === "object" && "url" in images[0]!
+        ? (images[0] as { url: string }).url
+        : employee.profile_image_url || null;
 
     return res.status(200).json({
       success: true,
       data: {
         user: {
           id: employee.user.id,
-          fullName: employee.user.fullName,
+          full_name: employee.user.full_name,
           email: employee.user.email,
-          roleId: employee.user.roleId,
+          role_id: employee.user.role_id,
+          sub_role_id: employee.user.sub_role_id,
           status: employee.user.status,
-          dateJoined: employee.user.dateJoined,
+          date_joined: employee.user.date_joined,
         },
         employee: {
           id: employee.id,
-          employeeNumber: employee.employeeNumber,
+          employee_number: employee.employee_number,
           designation: employee.position,
-          departmentId: employee.departmentId,
-          subDepartmentId: employee.subDepartmentId,
+          department_id: employee.department_id,
+          phone_number: employee.phone_number,
+          sub_department_id: employee.sub_department_id,
           gender: employee.gender,
-          fatherName: employee.fatherName,
+          father_name: employee.father_name,
           address: employee.address,
           salary: employee.salary,
-          shiftId: employee.shiftId,
+          shift_id: employee.shift_id,
           shift: employee.shift?.name,
           status: employee.status,
-          dateOfBirth: employee.dateOfBirth,
-          hireDate: employee.hireDate,
-          skills: employee.skills?.split(',').map(s => s.trim()) || [],
-          workLocation: employee.workLocation,
-          emergencyContactName: employee.emergencyContactName,
-          emergencyContactPhone: employee.emergencyContactPhone,
+          date_of_birth: employee.date_of_birth,
+          hire_date: employee.hire_date,
+          skills: employee.skills?.split(",").map((s: any) => s.trim()) || [],
+          work_location: employee.work_location,
+          emergency_contact_name: employee.emergency_contact_name,
+          emergency_contact_phone: employee.emergency_contact_phone,
+
+          // Updated fields
+          profile_image_url,
+          images,
+          documents,
         },
       },
     });
   } catch (error: any) {
-    console.error('ListSingleEmployee error:', error);
+    console.error("ListSingleEmployee error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Internal server error',
+      message: "Internal server error",
       error: error.message || error,
     });
   }
@@ -426,239 +560,528 @@ export const updateEmployee = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // Parse incoming fields
-    const {
-      fullName,
-      email,
-      phoneNumber,
-      gender,
-      dateOfBirth,
-      emergencyContactName,
-      emergencyContactPhone,
-      address,
-      roleId,
-      departmentId,
-      subDepartmentId,
-      designation,
-      joiningDate,
-      status,
-      salary,
-      skills,
-      workLocation,
-      shift,
-      fatherName
-    } = req.body;
-
-    const files = (req.files || {}) as { [fieldname: string]: Express.Multer.File[] };
-
-    const profileImage = files.profileImage?.[0]
-      ? path.join('uploads', 'profiles', files.profileImage[0].filename)
-      : undefined;
-
-    const documents = files.documents?.map(file => ({
-      name: file.originalname,
-      url: path.join('uploads', 'documents', file.filename),
-      type: file.mimetype
-    }));
-
-    // Validate workLocation
-    if (workLocation && !['Onsite', 'Remote', 'Hybrid'].includes(workLocation)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid work location. Must be one of: Onsite, Remote, Hybrid',
-        received: workLocation
-      });
-    }
-
-    const processedSkills = Array.isArray(skills)
-      ? skills
-      : typeof skills === 'string'
-        ? skills.split(',').map(s => s.trim())
-        : [];
-
-    // Check if employee exists
-    const existingEmployee = await prisma.employee.findUnique({ where: { id } });
+    // Fetch existing employee
+    const existingEmployee = await prisma.employees.findUnique({
+      where: { id },
+    });
     if (!existingEmployee) {
       return res.status(404).json({
         success: false,
-        message: 'Employee not found'
+        message: "Employee not found",
       });
     }
 
-    const updatedEmployee = await prisma.employee.update({
+    const {
+      full_name,
+      email,
+      phone_number,
+      gender,
+      date_of_birth,
+      emergency_contact_name,
+      emergency_contact_phone,
+      address,
+      role_id,
+      department_id,
+      sub_department_id,
+      designation,
+      joining_date,
+      status,
+      salary,
+      skills,
+      work_location,
+      father_name,
+    } = req.body;
+
+    // Handle file uploads
+    const files = (req.files || {}) as {
+      [fieldname: string]: Express.Multer.File[];
+    };
+
+    // Parse existing documents metadata sent by frontend
+    let existingDocsFromFrontend: Document[] = [];
+    if (req.body.documents_metadata) {
+      try {
+        existingDocsFromFrontend = JSON.parse(req.body.documents_metadata);
+      } catch (err) {
+        console.error(
+          "Failed to parse documents_metadata:",
+          req.body.documents_metadata,
+          err
+        );
+      }
+    } else {
+      console.log("No existing documents metadata sent from frontend");
+    }
+
+    // Build new profile image object if uploaded
+    const newProfileImageObj = files.profileImage?.[0]
+      ? [
+        {
+          name: files.profileImage[0].originalname,
+          url: getFileUrl(req, "profiles", files.profileImage[0].filename),
+          mime_type: files.profileImage[0].mimetype,
+          uploaded_at: new Date(),
+        },
+      ]
+      : [];
+
+    // Build new documents object if uploaded
+    const newDocumentsObj =
+      files.documents?.map((file) => ({
+        name: file.originalname,
+        url: getFileUrl(req, "documents", file.filename),
+        mime_type: file.mimetype,
+        type: file.mimetype,
+        uploaded_at: new Date(),
+      })) || [];
+
+    if (
+      work_location &&
+      !["Onsite", "Remote", "Hybrid"].includes(work_location)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid work location. Must be one of: Onsite, Remote, Hybrid",
+        received: work_location,
+      });
+    }
+
+    // Process skills array
+    const processedSkills = Array.isArray(skills)
+      ? skills
+      : typeof skills === "string"
+        ? skills.split(",").map((s) => s.trim())
+        : [];
+
+    // Merge profile image
+    const oldProfileImages = Array.isArray(existingEmployee.images)
+      ? existingEmployee.images
+      : [];
+
+    const mergedImages =
+      newProfileImageObj.length > 0 ? newProfileImageObj : oldProfileImages;
+    const firstImage = mergedImages[0];
+
+    const profile_image_url =
+      typeof firstImage === "object" &&
+        firstImage !== null &&
+        "url" in firstImage
+        ? (firstImage as { url: string }).url
+        : existingEmployee.profile_image_url;
+
+    // Merge documents: only keep those sent from frontend + new uploads
+    const mergedDocuments = [...existingDocsFromFrontend, ...newDocumentsObj];
+
+    // Determine subRole type
+    const Role = role_id
+      ? await prisma.roles.findUnique({
+        where: { id: role_id },
+        select: { name: true },
+      })
+      : null;
+
+    // Update employee
+    const updatedEmployee = await prisma.employees.update({
       where: { id },
       data: {
-        phoneNumber: phoneNumber || undefined,
-        departmentId: departmentId || undefined,
-        subDepartmentId: subDepartmentId || undefined,
-        position: designation || undefined,
-        fatherName: fatherName || undefined,
-        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
-        hireDate: joiningDate ? new Date(joiningDate) : undefined,
-        status: status || undefined,
-        // profileImage: profileImage || undefined,
-        // documents: documents ? JSON.stringify(documents) : undefined,
-        skills: processedSkills.length > 0 ? processedSkills.join(',') : undefined,
-        workLocation: workLocation || undefined,
-        gender: gender || undefined,
-        address: address || undefined,
-        emergencyContactName: emergencyContactName || undefined,
-        emergencyContactPhone: emergencyContactPhone || undefined,
+        phone_number,
+        department_id: department_id,
+        sub_department_id: sub_department_id,
+        position: designation,
+        father_name,
+        date_of_birth: date_of_birth ? new Date(date_of_birth) : undefined,
+        hire_date: joining_date ? new Date(joining_date) : undefined,
+        status,
+        skills: processedSkills.length > 0 ? processedSkills.join(",") : null,
+        work_location,
+        gender,
+        address,
+        emergency_contact_name,
+        emergency_contact_phone,
         salary: salary ? Number(salary) : undefined,
-        // shift: shift ? shift : undefined
-      }
+        profile_image_url,
+        images:
+          mergedImages.length > 0
+            ? JSON.parse(JSON.stringify(mergedImages))
+            : null,
+        documents:
+          mergedDocuments.length > 0
+            ? JSON.parse(JSON.stringify(mergedDocuments))
+            : null,
+      },
     });
 
-    // If roleId or email/fullName change is requested, update user too
+    // Update user info
     const updateUserData: any = {};
     if (email) updateUserData.email = email;
-    if (fullName) updateUserData.fullName = fullName;
-    if (roleId) updateUserData.roleId = roleId;
+    if (full_name) updateUserData.full_name = full_name;
+    if (role_id) updateUserData.role_id = role_id;
+    if (role_id) updateUserData.role_id = role_id;
 
     if (Object.keys(updateUserData).length > 0) {
-      await prisma.user.update({
-        where: { id: updatedEmployee.userId },
-        data: updateUserData
+      await prisma.users.update({
+        where: { id: updatedEmployee.user_id },
+        data: updateUserData,
       });
     }
 
+    // Send notifications
+    try {
+      const performedBy = req.user as unknown as CustomJwtPayload;
+      const performer = await prisma.users.findUnique({
+        where: { id: performedBy.userId },
+      });
+      const updatedUser = await prisma.users.findUnique({
+        where: { id: updatedEmployee.user_id },
+      });
+
+      const performerName = performer?.full_name ?? "Someone";
+      const employeeName = full_name || updatedUser?.full_name || "An employee";
+
+      await Promise.all([
+        createScopedNotification({
+          scope: "ADMIN_ONLY",
+          data: {
+            title: "Employee Info Updated",
+            message: `${employeeName}'s info was updated by ${performerName}.`,
+            type: "Employee",
+          },
+          visibilityLevel: 0,
+        }),
+        createScopedNotification({
+          scope: "DIRECTORS_HR",
+          data: {
+            title: "Employee Info Updated",
+            message: `${employeeName}'s profile was updated.`,
+            type: "Employee",
+          },
+          visibilityLevel: 1,
+        }),
+        createScopedNotification({
+          scope: "EMPLOYEE_ONLY",
+          data: {
+            title: "Your Info Was Updated",
+            message: `Your profile was updated. Please verify the changes.`,
+            type: "Employee",
+          },
+          target_ids: { user_id: updatedEmployee.user_id },
+          visibilityLevel: 3,
+        }),
+      ]);
+    } catch (err) {
+      console.error("Notification error after updateEmployee:", err);
+    }
+
+    // Return updated employee
     return res.status(200).json({
       success: true,
-      message: 'Employee updated successfully.',
+      message: "Employee updated successfully.",
       data: {
         employee: {
           id: updatedEmployee.id,
-          employeeNumber: updatedEmployee.employeeNumber,
-          fullName: fullName || undefined,
+          employee_number: updatedEmployee.employee_number,
+          full_name: full_name || undefined,
           email: email || undefined,
           designation: updatedEmployee.position,
-          department: departmentId,
+          department: department_id,
           status: updatedEmployee.status,
-          // profileImage: updatedEmployee.profileImage,
-          // documents: updatedEmployee.documents ? JSON.parse(updatedEmployee.documents) : [],
-          skills: updatedEmployee.skills
-            ? updatedEmployee.skills.split(',').map(skill => skill.trim())
-            : [],
-          workLocation: updatedEmployee.workLocation,
+          skills:
+            updatedEmployee.skills?.split(",").map((s: any) => s.trim()) || [],
+          work_location: updatedEmployee.work_location,
           gender: updatedEmployee.gender,
           address: updatedEmployee.address,
-          emergencyContact: {
-            name: updatedEmployee.emergencyContactName,
-            phone: updatedEmployee.emergencyContactPhone
+          emergency_contact: {
+            name: updatedEmployee.emergency_contact_name,
+            phone: updatedEmployee.emergency_contact_phone,
           },
-          salary: updatedEmployee.salary
-        }
-      }
+          salary: updatedEmployee.salary,
+          profile_image_url: updatedEmployee.profile_image_url,
+          images: updatedEmployee.images || [],
+          documents: updatedEmployee.documents || [],
+        },
+      },
     });
-
   } catch (error: any) {
-    console.error('Update employee error:', error);
+    console.error("Update employee error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Internal server error',
-      error: error?.message || error
+      message: "Internal server error",
+      error: error?.message || error,
     });
   }
 };
 
-export const deleteEmployee = async (req: Request, res: Response) => {
-  const { id } = req.params;
+// export const deleteEmployee = async (req: Request, res: Response) => {
+//   const { id } = req.params;
 
+//   try {
+//     const employee = await prisma.employee.findUnique({
+//       where: { id },
+//       include: { user: true }
+//     });
+
+//     if (!employee) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Employee not found'
+//       });
+//     }
+
+//     await prisma.$transaction(async (tx) => {
+//       await tx.employee.delete({ where: { id } });
+
+//       if (employee.userId) {
+//         await tx.user.update({
+//           where: { id: employee.userId },
+//           data: { status: 'inactive' }
+//         });
+//       }
+//     });
+
+//     // 👇 Notifications
+//     try {
+//       const performedBy = req.user as unknown as CustomJwtPayload;
+//       const performer = await prisma.user.findUnique({ where: { id: performedBy.userId } });
+
+//       const performerName = performer?.fullName ?? 'Someone';
+//       const employeeName = employee.user?.fullName || 'An employee';
+
+//       await Promise.all([
+//         createScopedNotification({
+//           scope: 'ADMIN_ONLY',
+//           data: {
+//             title: 'Employee Deleted',
+//             message: `${employeeName} was removed by ${performerName}.`,
+//             type: 'Employee'
+//           },
+//           visibilityLevel: 0,
+//           showPopup: true
+//         }),
+//         createScopedNotification({
+//           scope: 'DIRECTORS_HR',
+//           data: {
+//             title: 'Employee Removed',
+//             message: `${employeeName} was removed from the company.`,
+//             type: 'Employee'
+//           },
+//           visibilityLevel: 1,
+//           showPopup: true
+//         }),
+//         employee.departmentId &&
+//         createScopedNotification({
+//           scope: 'MANAGERS_DEPT',
+//           data: {
+//             title: 'Team Member Removed',
+//             message: `${employeeName} was removed from your department.`,
+//             type: 'Employee'
+//           },
+//           targetIds: { departmentId: employee.departmentId },
+//           visibilityLevel: 2,
+//           excludeUserId: employee.userId,
+//           showPopup: true
+//         }),
+//         employee.subDepartmentId &&
+//         createScopedNotification({
+//           scope: 'TEAMLEADS_SUBDEPT',
+//           data: {
+//             title: 'Team Member Removed',
+//             message: `${employeeName} was removed from your sub-department.`,
+//             type: 'Employee'
+//           },
+//           targetIds: { subDepartmentId: employee.subDepartmentId },
+//           visibilityLevel: 3,
+//           excludeUserId: employee.userId,
+//           showPopup: true
+//         })
+//       ]);
+//     } catch (err) {
+//       console.error('Notification error after deleteEmployee:', err);
+//     }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: 'Employee deleted and user marked as inactive successfully'
+//     });
+
+//   } catch (error) {
+//     console.error('Delete employee error:', error);
+//     return res.status(500).json({
+//       success: false,
+//       message: 'Internal server error'
+//     });
+//   }
+// };
+
+// GET /users/inactive
+
+export const listInactiveUsers = async (req: Request, res: Response) => {
   try {
-    // Check if employee exists
-    const employee = await prisma.employee.findUnique({
-      where: { id },
-      include: { user: true }
-    });
-
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: 'Employee not found'
-      });
-    }
-
-    // Delete employee and user in a transaction
-    await prisma.$transaction(async (prismaTx) => {
-      await prismaTx.employee.delete({ where: { id } });
-      await prismaTx.user.delete({ where: { id: employee.userId } });
+    const inactiveUsers = await prisma.users.findMany({
+      where: { status: "inactive" },
+      select: {
+        id: true,
+        username: true,
+        full_name: true,
+        email: true,
+        role_id: true,
+        status: true,
+        date_joined: true,
+      },
+      orderBy: { full_name: "asc" },
     });
 
     return res.json({
       success: true,
-      message: 'Employee deleted successfully'
-    });
-
-  } catch (error) {
-    console.error('Delete employee error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-    });
-  }
-}
-
-// upload image
-export const uploadImage = async (req: Request, res: Response) => {
-  try {
-    const file = (req.files as any)?.profileImage?.[0];
-    const { employeeId } = req.body;
-
-    if (!file) return res.status(400).json({ message: 'No image provided' });
-    if (!employeeId) return res.status(400).json({ message: 'Employee ID is required' });
-
-    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-    if (!employee) return res.status(404).json({ message: 'Employee not found' });
-
-    const saved = await prisma.employeeImage.create({
       data: {
-        id: uuidv4(),
-        employeeId: employee.id,
-        name: file.originalname,
-        mimeType: file.mimetype,
-        url: `/uploads/${file.filename}`,
-        uploadedAt: new Date(),
+        users: inactiveUsers,
       },
     });
-
-    res.status(200).json({ message: 'Image uploaded successfully', saved });
-  } catch (err) {
-    console.error('Image upload failed:', err);
-    res.status(500).json({ message: 'Image upload failed', error: err });
+  } catch (error) {
+    console.error("List inactive users error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
 
-// upload docs
-export const uploadEmployeeDocuments = async (req: Request, res: Response) => {
+// delete user only if linked employee is deleted
+// export const deleteUser = async (req: Request, res: Response) => {
+//   const userId = req.params.userId;
+
+//   try {
+//     // Check if employee linked to user exists
+//     const employee = await prisma.employee.findUnique({ where: { userId } });
+
+//     if (employee) {
+//       return res.status(400).json({
+//         message: "Cannot delete user while linked employee exists."
+//       });
+//     }
+
+//     // Delete related data in dependent order
+
+//     await prisma.userNotification.deleteMany({ where: { userId } });
+//     await prisma.userPermission.deleteMany({ where: { userId } });
+//     await prisma.systemLog.deleteMany({ where: { userId } });
+//     await prisma.bulkUpload.deleteMany({ where: { uploadedById: userId } });
+//     await prisma.leaveRequest.deleteMany({ where: { approvedById: userId } });
+//     await prisma.vacation.deleteMany({ where: { approvedById: userId } });
+//     await prisma.onboardingProcess.deleteMany({ where: { assignedHRId: userId } });
+//     await prisma.hRProcess.deleteMany({ where: { initiatedById: userId } });
+
+//     // Resignation has two fields referencing User, delete by both
+//     await prisma.resignation.deleteMany({ where: { processedById: userId } });
+//     await prisma.resignation.deleteMany({ where: { clearanceResponsibleId: userId } });
+
+//     await prisma.notification.deleteMany({ where: { userId } });
+//     await prisma.attendanceFixRequest.deleteMany({ where: { reviewedById: userId } });
+
+//     // Finally, delete the user
+//     await prisma.user.delete({ where: { id: userId } });
+
+//     res.json({ message: "User and all related data deleted successfully." });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ message: "Server error while deleting user." });
+//   }
+// };
+
+// Helper to generate file URL
+
+const getFileUrl = (req: Request, folder: string, filename: string) => {
+  const baseUrl =
+    process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+  return `${baseUrl}/uploads/${folder}/${filename}`;
+};
+
+// info updated by employee himself - phone / email / profileImage only
+export const updateEmployeeInfoByEmployee = async (
+  req: Request,
+  res: Response
+) => {
   try {
-    const files = (req.files as any)?.documents;
-    const { employeeId } = req.body;
+    const { email, phone_number } = req.body;
+    const user_id = req.user?.userId;
 
-    if (!files || files.length === 0) return res.status(400).json({ message: 'No documents uploaded' });
-    if (!employeeId) return res.status(400).json({ message: 'Employee ID is required' });
+    const files = (req.files || {}) as {
+      [fieldname: string]: Express.Multer.File[];
+    };
 
-    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
-    if (!employee) return res.status(404).json({ message: 'Employee not found' });
+    // Build new image objects
+    let newImages: any[] = [];
+    if (files?.profileImage?.length) {
+      newImages = files.profileImage.map((file) => ({
+        name: file.originalname,
+        url: getFileUrl(req, "profiles", file.filename),
+        mime_type: file.mimetype,
+        uploaded_at: new Date(),
+      }));
+    }
 
-    const savedDocuments = await Promise.all(
-      files.map((file: Express.Multer.File) =>
-        prisma.employeeDocument.create({
-          data: {
-            id: uuidv4(),
-            employeeId,
-            name: file.originalname,
-            url: `/uploads/documents/${file.filename}`,
-            mimeType: file.mimetype,
-            type: 'other', // optionally allow client to send actual type
-            uploadedAt: new Date()
-          }
-        })
-      )
-    );
+    // Fetch existing employee
+    const existingEmployee = await prisma.employees.findUnique({
+      where: { user_id },
+    });
+    if (!existingEmployee) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Employee not found" });
+    }
 
-    res.status(200).json({ message: 'Documents uploaded successfully', savedDocuments });
-  } catch (err) {
-    console.error('Document upload failed:', err);
-    res.status(500).json({ message: 'Document upload failed', error: err });
+    // Merge images (replace old with new if uploaded)
+    const finalImages: any[] =
+      newImages.length > 0
+        ? newImages
+        : Array.isArray(existingEmployee.images)
+          ? existingEmployee.images
+          : [];
+    // Profile URL: first image or existing
+    const profile_image_url: string | undefined =
+      newImages.length > 0
+        ? newImages[0].url
+        : existingEmployee.profile_image_url || undefined;
+
+    if (!email && !phone_number && newImages.length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "No fields to update." });
+    }
+
+    // Update employee
+    const updatedEmployee = await prisma.employees.update({
+      where: { user_id },
+      data: {
+        phone_number: phone_number || undefined,
+        profile_image_url,
+        images:
+          finalImages.length > 0
+            ? JSON.parse(JSON.stringify(finalImages))
+            : null,
+      },
+    });
+
+    // Update user email
+    if (email) {
+      await prisma.users.update({
+        where: { id: user_id },
+        data: { email },
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data: {
+        email: email || undefined,
+        phone_number: updatedEmployee.phone_number,
+        profile_image_url: updatedEmployee.profile_image_url || undefined,
+        images: updatedEmployee.images || [],
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };

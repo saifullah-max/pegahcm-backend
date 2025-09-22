@@ -1,33 +1,129 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+
 const prisma = new PrismaClient();
 
 async function main() {
-    await prisma.role.upsert({
-        where: { name: 'user' },
-        update: {},
-        create: {
-            name: 'user',
-            description: 'Regular user with limited permissions',
+  // ———————————————————————————————————————————————————————————
+  // 0) Config: change if you want different defaults in prod
+  // ———————————————————————————————————————————————————————————
+  const ADMIN_EMAIL = 'admin@example.com';
+  const ADMIN_USERNAME = 'admin';
+  const ADMIN_FULLNAME = 'System Admin';
+  const ADMIN_PASSWORD = 'admin123'; // rotate in prod / env var
+  const ADMIN_STATUS = 'ACTIVE';
+
+  const password_hash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+
+  // ———————————————————————————————————————————————————————————
+  // 1) Role: 'admin' (case-sensitive)
+  // ———————————————————————————————————————————————————————————
+  const adminRole = await prisma.roles.upsert({
+    where: { name: 'admin' },
+    update: {},
+    create: {
+      name: 'admin',
+      description: 'Admin role with All access',
+    },
+  });
+
+  await prisma.roles.upsert({
+    where: { name: 'user' },
+    update: {},
+    create: {
+      name: 'user',
+      description: 'User role with limited access',
+    },
+  });
+
+  // ———————————————————————————————————————————————————————————
+  // 2) Permissions (module + action composite unique)
+  // Only seed-time perms; later perms created via dashboard
+  // ———————————————————————————————————————————————————————————
+  const permissionsData: Array<{
+    module: string;
+    action: string;
+    description?: string | null;
+  }> = [
+      { module: 'Dashboard', action: 'view', description: 'Access Dashboard' },
+      { module: 'Permission', action: 'view', description: 'View permissions' },
+      { module: 'Permission', action: 'create', description: 'Create permissions' },
+      { module: 'Permission', action: 'update', description: 'Update permissions' },
+      { module: 'Permission', action: 'delete', description: 'Delete permissions' },
+    ];
+
+  // Explicitly type to avoid never[] issues; we only need id later
+  const seededPermissions: Array<{ id: string }> = [];
+
+  for (const perm of permissionsData) {
+    const created = await prisma.permissions.upsert({
+      where: { module_action: { module: perm.module, action: perm.action } },
+      update: {},
+      create: perm,
+    });
+    seededPermissions.push({ id: created.id });
+  }
+
+  // ———————————————————————————————————————————————————————————
+  // 3) Admin user (no subRole for admin)
+  // ———————————————————————————————————————————————————————————
+  const adminUser = await prisma.users.upsert({
+    where: { email: ADMIN_EMAIL },
+    update: {},
+    create: {
+      username: ADMIN_USERNAME,
+      full_name: ADMIN_FULLNAME,
+      email: ADMIN_EMAIL,
+      password_hash,
+      role_id: adminRole.id,
+      status: ADMIN_STATUS,
+    },
+  });
+
+  // ———————————————————————————————————————————————————————————
+  // 4) Assign permissions to admin role & admin user
+  // (only the permissions seeded above)
+  // ———————————————————————————————————————————————————————————
+  for (const perm of seededPermissions) {
+    // Role -> Permission
+    await prisma.role_permissions.upsert({
+      where: {
+        roleId_permissionId: {
+          role_id: adminRole.id,
+          permission_id: perm.id,
         },
+      },
+      update: {},
+      create: {
+        role_id: adminRole.id,
+        permission_id: perm.id,
+      },
     });
 
-    await prisma.role.upsert({
-        where: { name: 'hr' },
-        update: {},
-        create: {
-            name: 'hr',
-            description: 'Human Resources staff with specific permissions',
+    // User -> Permission
+    await prisma.user_permissions.upsert({
+      where: {
+        userId_permissionId: {
+          user_id: adminUser.id,
+          permission_id: perm.id,
         },
+      },
+      update: {},
+      create: {
+        user_id: adminUser.id,
+        permission_id: perm.id,
+      },
     });
+  }
 
-    console.log('Roles seeded successfully.');
+  console.log('Seeding done: admin role/user created, base permissions seeded & assigned.');
 }
 
 main()
-    .catch((e) => {
-        console.error(e);
-        process.exit(1);
-    })
-    .finally(() => {
-        prisma.$disconnect();
-    });
+  .catch((e) => {
+    console.error('❌ Seeding error:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

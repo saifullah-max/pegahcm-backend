@@ -7,6 +7,7 @@ import {
   updateDepartment,
   deleteDepartment
 } from '../controllers/departmentController';
+import { checkPermission } from '../middlewares/checkPermissions';
 
 const router = express.Router();
 
@@ -14,10 +15,10 @@ const router = express.Router();
 router.use(authenticateToken as any);
 
 // Department routes
-router.post('/', createDepartment as any);
-router.get('/', getAllDepartments as any);
-router.get('/:id', getDepartmentById as any);
-router.put('/:id', updateDepartment as any);
-router.delete('/:id', deleteDepartment as any);
+router.post('/', checkPermission("Department", "create"), createDepartment as any);
+router.get('/', checkPermission("Department", "view"), getAllDepartments as any);
+router.get('/:id', checkPermission("Department", "view"), getDepartmentById as any);
+router.put('/:id', checkPermission("Department", "update"), updateDepartment as any);
+router.delete('/:id', checkPermission("Department", "delete"), deleteDepartment as any);
 
 export default router; 

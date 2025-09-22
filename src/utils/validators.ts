@@ -3,18 +3,18 @@ export const validateShift = (data: any): string | null => {
     return 'Shift name is required and must be a string';
   }
 
-  if (!data.startTime || !isValidDate(data.startTime)) {
+  if (!data.start_time || !isValidDate(data.start_time)) {
     return 'Valid start time is required';
   }
 
-  if (!data.endTime || !isValidDate(data.endTime)) {
+  if (!data.end_time || !isValidDate(data.end_time)) {
     return 'Valid end time is required';
   }
 
-  const startTime = new Date(data.startTime);
-  const endTime = new Date(data.endTime);
+  const start_time = new Date(data.start_time);
+  const end_time = new Date(data.end_time);
 
-  if (startTime >= endTime) {
+  if (start_time >= end_time) {
     return 'End time must be after start time';
   }
 

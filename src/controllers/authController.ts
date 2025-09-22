@@ -1,93 +1,88 @@
+// controllers/authController.ts
+
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import EmailService from '../utils/emailService'; // You'll create this email helper
+import prisma from '../utils/Prisma';
 
-const prisma = new PrismaClient();
-
-interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-interface RegisterRequest {
-  username?: string; // optional
-  password: string;
-  email: string;
-  fullName: string;
-  roleId: string;
-}
 
 export const register = async (req: Request, res: Response) => {
   try {
-    const { username = '', password, email, fullName, roleId }: RegisterRequest = req.body;
+    const {
+      username = '',
+      password,
+      email,
+      fullName,
+      roleName = 'user', // <- Use roleName instead of role
+      subRoleId
+    } = req.body;
 
-    // Validate input
-    if (!password || !email || !fullName || !roleId) {
-      return res.status(400).json({
-        success: false,
-        message: 'All fields are required'
-      });
+    if (!password || !email || !fullName || !roleName) {
+      return res.status(400).json({ success: false, message: 'Required fields missing' });
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findFirst({
+    const existingUser = await prisma.users.findFirst({
       where: {
         OR: [
-          { username: username || undefined }, // only check if username is provided
+          { username: username || undefined },
           { email }
         ]
       }
     });
 
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'Username or email already exists'
-      });
+      return res.status(400).json({ success: false, message: 'Username or email already exists' });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    const role = await prisma.roles.findUnique({
+      where: { name: roleName }
+    });
 
-    // Create user
-    const user = await prisma.user.create({
+    if (!role) {
+      return res.status(400).json({ success: false, message: `Role '${roleName}' not found` });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await prisma.users.create({
       data: {
-        username: username || '', // default to empty string
-        passwordHash,
+        username,
+        password_hash: passwordHash,
         email,
-        fullName,
-        roleId,
+        full_name: fullName,
+        role_id: role.id, // Use roleId from fetched role
+        sub_role_id: subRoleId || null,
         status: 'active',
-        dateJoined: new Date()
+        date_joined: new Date()
       },
       include: {
-        role: true
+        sub_role: true,
+        role: true // 👈 include role.name for JWT and response
       }
     });
 
-    // Generate JWT token
     const token = jwt.sign(
       {
         userId: user.id,
-        username: user.username,
-        role: user.role.name
-      },
+        role: user.role.name,
+        sub_role_id: user.sub_role_id
+      } as any,
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
     );
 
-    // Return user data and token
     return res.status(201).json({
       success: true,
       data: {
         user: {
           id: user.id,
-          username: user.username,
           email: user.email,
-          fullName: user.fullName,
+          username: user.username,
+          full_name: user.full_name,
           role: user.role.name,
+          sub_role: user.sub_role,
           status: user.status
         },
         token
@@ -96,77 +91,62 @@ export const register = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Registration error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };
 
 export const login = async (req: Request, res: Response) => {
   try {
-    const { email, password }: LoginRequest = req.body;
+    const { email, password } = req.body;
 
-    // Validate input
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required'
-      });
+      return res.status(400).json({ success: false, message: 'Email and password required' });
     }
 
-    // Find user
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { email },
       include: {
-        role: true,
+        role: true,     // 👈 include full role
+        sub_role: true,
         employee: true
       }
     });
 
-    if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-    if (!isValidPassword) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid credentials'
-      });
-    }
-
-    // Generate JWT token
     const token = jwt.sign(
       {
         userId: user.id,
+        role: user.role.name,
         email: user.email,
-        role: user.role.name
-      },
-      process.env.JWT_SECRET || 'your-secret-key',
+        full_name: user.full_name,
+        employee: user.employee,
+        sub_role: {
+          id: user.sub_role_id,
+          name: user.sub_role?.name || null
+        }
+      } as any,
+      process.env.JWT_SECRET || 'poiuytrewasdfghjkl0998877!!!3?><>:&^&hjn',
       { expiresIn: '24h' }
     );
 
-    // Update last login
-    await prisma.user.update({
+    await prisma.users.update({
       where: { id: user.id },
-      data: { lastLogin: new Date() }
+      data: { last_login: new Date() }
     });
 
-    // Return user data and token
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       data: {
         user: {
           id: user.id,
-          username: user.username,
           email: user.email,
-          fullName: user.fullName,
+          username: user.username,
+          full_name: user.full_name,
           role: user.role.name,
+          sub_role: user.sub_role,
           status: user.status,
           employee: user.employee
         },
@@ -176,9 +156,76 @@ export const login = async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Login error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error'
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+
+  try {
+    const user = await prisma.users.findUnique({ where: { email } });
+    if (!user) {
+      // Respond generically
+      return res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    await prisma.users.update({
+      where: { email },
+      data: {
+        reset_password_token: hashedToken,
+        reset_password_expires: new Date(Date.now() + 3600000), // 1 hour expiry
+      },
     });
+
+    // Use your EmailService here
+    await EmailService.sendPasswordResetEmail(email, resetToken);
+
+    return res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
+  } catch (error) {
+    console.error('Forgot Password error:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  const { token } = req.params;
+  const { password } = req.body;
+
+  if (!password) return res.status(400).json({ success: false, message: 'Password is required' });
+
+  try {
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+    const user = await prisma.users.findFirst({
+      where: {
+        reset_password_token: hashedToken,
+        reset_password_expires: { gt: new Date() }
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await prisma.users.update({
+      where: { id: user.id },
+      data: {
+        password_hash: passwordHash,
+        reset_password_token: null,
+        reset_password_expires: null,
+      }
+    });
+
+    return res.status(200).json({ success: true, message: 'Password has been reset successfully' });
+  } catch (error) {
+    console.error('Reset Password error:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
 };

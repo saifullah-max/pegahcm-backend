@@ -1,36 +1,40 @@
 import { Router } from "express";
-import { checkIn, checkOut, checkTodayAttendance, createBreak, createLeaveType, endBreak, getAllAttendance, getAllAttendanceRecords, getAllLeaveTypes, getBreaksByAttendanceRecord, getEmployeeHoursSummary, getEmployeeLeaves, leaveRequest } from "../controllers/attendanceController";
+import { checkIn, checkOut, checkTodayAttendance, createBreak, createLeaveType, endBreak, getAllAttendance, getAllAttendanceRecords, getAllLeaveTypes, getBreaksByAttendanceRecord, getEmployeeDailyHoursSummary, getEmployeeHoursSummary, getEmployeeLeaves, leaveRequest } from "../controllers/attendanceController";
 import { authenticateToken } from "../middlewares/authMiddleware";
 import { isAdmin } from "../middlewares/roleMiddleware";
+import { checkPermission } from "../middlewares/checkPermissions";
 
 const router = Router();
 
 router.use(authenticateToken as any);
 
-router.get('/today', checkTodayAttendance as any)
+router.get('/today', checkPermission("Attendance", "view"), checkTodayAttendance as any)
 
-router.get('/employee/all', getAllAttendanceRecords as any)
+router.get('/employee/all', checkPermission("Attendance", "view"), getAllAttendanceRecords as any)
 
-router.post('/check-in', checkIn as any);
+router.post('/check-in', checkPermission("Attendance", "create"), checkIn as any);
 
-router.post('/check-out', checkOut as any);
+router.post('/check-out', checkPermission("Attendance", "create"), checkOut as any);
 
-router.post('/leave', leaveRequest as any)
+router.post('/leave', checkPermission("Attendance", "create"), leaveRequest as any)
 
-router.get('/leave', getEmployeeLeaves as any);
+router.get('/leave', checkPermission("Attendance", "view"), getEmployeeLeaves as any);
 
 // router.use(isAdmin as any);
-router.post('/leave-type', createLeaveType as any);
+router.post('/leave-type', checkPermission("Attendance", "create"), createLeaveType as any);
 
-router.get('/leave-type', getAllLeaveTypes as any);
+router.get('/leave-type', checkPermission("Attendance", "view"), getAllLeaveTypes as any);
 
-router.get('/all', getAllAttendance as any);
+router.get('/all', checkPermission("Attendance", "view"), getAllAttendance as any);
 
-router.get('/hours-lock', getEmployeeHoursSummary as any)
+router.get('/hours-lock/', checkPermission("Attendance", "view"), getEmployeeHoursSummary as any)
 
-router.post('/break/create', createBreak as any);
+router.get('/hours-lock/:employeeId', checkPermission("Attendance", "view"), getEmployeeDailyHoursSummary as any)
 
-router.post('/break/end', endBreak as any);
+router.post('/break/create', checkPermission("Attendance", "create"), createBreak as any);
 
-router.get('/break/all/:attendanceRecordId', getBreaksByAttendanceRecord as any);
+router.post('/break/end', checkPermission("Attendance", "create"), endBreak as any);
+
+router.get('/break/all/:attendanceRecordId', checkPermission("Attendance", "create"), getBreaksByAttendanceRecord as any);
+
 export default router;
