@@ -690,7 +690,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
       },
     });
 
-    // Update user info
+    // Update user 
     const updateUserData: any = {};
     if (email) updateUserData.email = email;
     if (fullName) updateUserData.fullName = fullName;
