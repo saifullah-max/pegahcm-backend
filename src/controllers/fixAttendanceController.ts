@@ -10,23 +10,23 @@ interface CustomJwtPayload extends JwtPayload {
 export const submitFixAttendanceRequest = async (req: Request, res: Response) => {
     try {
         const {
-            employeeId,
+            employee_id,
             date,
-            requestType,
-            requestedCheckIn,
-            requestedCheckOut,
+            request_type,
+            requested_check_in,
+            requested_check_out,
             reason
         } = req.body;
 
         const parsedDate = new Date(date);
 
         // Step 1: Check if employee was on leave on that day
-        const leaveExists = await prisma.leaveRequest.findFirst({
+        const leaveExists = await prisma.leave_requests.findFirst({
             where: {
-                employeeId,
+                employee_id,
                 status: 'Approved',
-                startDate: { lte: parsedDate },
-                endDate: { gte: parsedDate }
+                start_date: { lte: parsedDate },
+                end_date: { gte: parsedDate }
             }
         });
 
@@ -39,18 +39,18 @@ export const submitFixAttendanceRequest = async (req: Request, res: Response) =>
         // Step 3: Insert AttendanceFixRequest
         // Validate requestedCheckIn and requestedCheckOut before using them
         const validCheckIn =
-            requestType === 'CheckIn' || requestType === 'Both'
-                ? requestedCheckIn && !isNaN(new Date(`${date}T${requestedCheckIn}`).getTime())
-                    ? new Date(`${date}T${requestedCheckIn}`)
+            request_type === 'CheckIn' || request_type === 'Both'
+                ? requested_check_in && !isNaN(new Date(`${date}T${requested_check_in}`).getTime())
+                    ? new Date(`${date}T${requested_check_in}`)
                     : null
                 : null;
 
         const validCheckOut =
-            requestType === 'CheckOut' || requestType === 'Both'
-                ? requestedCheckOut
+            request_type === 'CheckOut' || request_type === 'Both'
+                ? requested_check_out
                     ? (() => {
-                        let out = new Date(`${date}T${requestedCheckOut}`);
-                        if (requestedCheckOut === '00:00') {
+                        let out = new Date(`${date}T${requested_check_out}`);
+                        if (requested_check_out === '00:00') {
                             // interpret as midnight of next day
                             out.setDate(out.getDate() + 1);
                         }
@@ -60,34 +60,34 @@ export const submitFixAttendanceRequest = async (req: Request, res: Response) =>
                 : null;
 
 
-        if (!employeeId) {
+        if (!employee_id) {
             return res.status(400).json({ message: 'Employee ID is required.' });
         }
 
 
-        const attendanceFix = await prisma.attendanceFixRequest.create({
+        const attendanceFix = await prisma.attendance_fix_requests.create({
             data: {
                 employee: {
-                    connect: { id: employeeId }
+                    connect: { id: employee_id }
                 },
-                requestType,
-                requestedCheckIn: validCheckIn,
-                requestedCheckOut: validCheckOut,
+                request_type,
+                requested_check_in: validCheckIn,
+                requested_check_out: validCheckOut,
                 reason,
                 status: 'Pending',
             },
         });
-        const emp = await prisma.employee.findUnique({ where: { id: employeeId } })
+        const emp = await prisma.employees.findUnique({ where: { id: employee_id } })
 
-        const user = await prisma.user.findUnique({
-            where: { id: emp?.userId }
+        const user = await prisma.users.findUnique({
+            where: { id: emp?.user_id }
         })
 
         // ✅ Notify relevant users
         await notifyLeaveApprovers({
-            employeeId,
-            title: `Attendance Fix Request (${requestType})`,
-            message: `An attendance fix request has been submitted by (${user?.fullName}). Reason: ${reason}`,
+            employee_id,
+            title: `Attendance Fix Request (${request_type})`,
+            message: `An attendance fix request has been submitted by (${user?.full_name}). Reason: ${reason}`,
             showPopup: true,
         });
 
@@ -101,7 +101,7 @@ export const submitFixAttendanceRequest = async (req: Request, res: Response) =>
 
 export const updateFixRequestStatus = async (req: Request, res: Response) => {
     const requestId = req.params.id;
-    const reviewerId = req.user?.userId;
+    const reviewer_id = req.user?.userId;
     const { status, remarks } = req.body;
 
     if (!["Approved", "Rejected"].includes(status)) {
@@ -109,7 +109,7 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
     }
 
     try {
-        const request = await prisma.attendanceFixRequest.findUnique({
+        const request = await prisma.attendance_fix_requests.findUnique({
             where: { id: requestId },
             include: {
                 employee: true,
@@ -124,81 +124,81 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
             return res.status(400).json({ message: "Only pending requests can be approved or rejected." });
         }
 
-        let attendanceRecordId = request.attendanceRecordId;
+        let attendance_record_id = request.attendance_record_id;
         let updatedOrCreatedRecord = null;
 
         // ✅ If Approved: create or update attendance record
         if (status === "Approved") {
-            if (!attendanceRecordId) {
+            if (!attendance_record_id) {
                 // No attendance record yet → create one
-                const newRecord = await prisma.attendanceRecord.create({
+                const newRecord = await prisma.attendance_records.create({
                     data: {
-                        employeeId: request.employeeId,
-                        date: request.requestedCheckIn ?? request.requestedCheckOut ?? new Date(),
-                        clockIn: request.requestedCheckIn ?? new Date(),
-                        clockOut: request.requestedCheckOut ?? null,
-                        shiftId: request.employee.shiftId!,
+                        employee_id: request.employee_id,
+                        date: request.requested_check_in ?? request.requested_check_out ?? new Date(),
+                        clock_in: request.requested_check_in ?? new Date(),
+                        clock_out: request.requested_check_out ?? null,
+                        shift_id: request.employee.shift_id!,
                         status: 'Present',
                     },
                 });
 
-                attendanceRecordId = newRecord.id;
+                attendance_record_id = newRecord.id;
                 updatedOrCreatedRecord = newRecord;
 
-                await prisma.attendanceFixRequest.update({
+                await prisma.attendance_fix_requests.update({
                     where: { id: requestId },
-                    data: { attendanceRecordId }
+                    data: { attendance_record_id }
                 });
             } else {
                 // Update existing record
-                updatedOrCreatedRecord = await prisma.attendanceRecord.update({
-                    where: { id: attendanceRecordId },
+                updatedOrCreatedRecord = await prisma.attendance_records.update({
+                    where: { id: attendance_record_id },
                     data: {
-                        clockIn: request.requestedCheckIn ?? undefined,
-                        clockOut: request.requestedCheckOut ?? undefined,
+                        clock_in: request.requested_check_in ?? undefined,
+                        clock_out: request.requested_check_out ?? undefined,
                     },
                 });
             }
 
             // ✅ Handle requested breaks
-            const parsedBreaks = Array.isArray(request.requestedBreaks)
-                ? request.requestedBreaks
+            const parsedBreaks = Array.isArray(request.requested_breaks)
+                ? request.requested_breaks
                 : [];
 
-            if (parsedBreaks.length > 0 && attendanceRecordId) {
-                await prisma.break.deleteMany({ where: { attendanceRecordId } });
+            if (parsedBreaks.length > 0 && attendance_record_id) {
+                await prisma.breaks.deleteMany({ where: { attendance_record_id } });
 
 
-                await prisma.break.createMany({
+                await prisma.breaks.createMany({
                     data: parsedBreaks.map((br: any) => ({
-                        attendanceRecordId: attendanceRecordId as string, // ✅ ensured to be string
-                        breakStart: new Date(br.breakStart),
-                        breakEnd: br.breakEnd ? new Date(br.breakEnd) : null,
-                        breakTypeId: br.breakTypeId ?? null,
+                        attendance_record_id: attendance_record_id as string, // ✅ ensured to be string
+                        break_start: new Date(br.break_start),
+                        break_end: br.break_end ? new Date(br.break_end) : null,
+                        break_type_id: br.break_type_id ?? null,
                     })),
                 });
             }
         }
 
-        const user = await prisma.user.findUnique({ where: { id: request.employee.userId } })
+        const user = await prisma.users.findUnique({ where: { id: request.employee.user_id } })
 
         try {
             // 🔔 Prepare notification title and message
-            const employeeName = `${user?.fullName}`;
-            const approverName = await prisma.user.findUnique({ where: { id: reviewerId } });
+            const employeeName = `${user?.full_name}`;
+            const approverName = await prisma.users.findUnique({ where: { id: reviewer_id } });
             const isApproved = status === 'Approved';
 
             const baseNotification = {
                 title: `Attendance Fix Request ${status}`,
                 message: isApproved
-                    ? `Your attendance fix request was approved by ${approverName?.fullName}. Your attendance has been updated.`
+                    ? `Your attendance fix request was approved by ${approverName?.full_name}. Your attendance has been updated.`
                     : `Your attendance fix request was rejected.`,
             };
 
             // 🔔 Notify EMPLOYEE_ONLY
             await createScopedNotification({
                 scope: 'EMPLOYEE_ONLY',
-                targetIds: { userId: request.employee.userId },
+                targetIds: { user_id: request.employee.user_id },
                 data: {
                     title: baseNotification.title,
                     message: baseNotification.message,
@@ -221,28 +221,28 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
                 targetIds: {},
                 data: commonData,
                 visibilityLevel: 1,
-                excludeUserId: reviewerId, // reviewer shouldn’t get self-notification
+                excludeUserId: reviewer_id, // reviewer shouldn’t get self-notification
             });
 
             // notify managers in same dept
-            if (request.employee.departmentId) {
+            if (request.employee.department_id) {
                 await createScopedNotification({
                     scope: 'MANAGERS_DEPT',
-                    targetIds: { departmentId: request.employee.departmentId },
+                    targetIds: { department_id: request.employee.department_id },
                     data: commonData,
                     visibilityLevel: 2,
-                    excludeUserId: reviewerId,
+                    excludeUserId: reviewer_id,
                 });
             }
 
             // notify team leads in same sub-dept
-            if (request.employee.subDepartmentId) {
+            if (request.employee.sub_department_id) {
                 await createScopedNotification({
                     scope: 'TEAMLEADS_SUBDEPT',
-                    targetIds: { subDepartmentId: request.employee.subDepartmentId },
+                    targetIds: { sub_department_id: request.employee.sub_department_id },
                     data: commonData,
                     visibilityLevel: 2,
-                    excludeUserId: reviewerId,
+                    excludeUserId: reviewer_id,
                 });
             }
 
@@ -251,12 +251,12 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
         }
 
         // ✅ Update fix request status
-        const updatedRequest = await prisma.attendanceFixRequest.update({
+        const updatedRequest = await prisma.attendance_fix_requests.update({
             where: { id: requestId },
             data: {
                 status,
-                reviewedById: reviewerId,
-                reviewedAt: new Date(),
+                reviewed_by_id: reviewer_id,
+                reviewed_at: new Date(),
                 remarks: remarks ?? undefined,
             },
         });
@@ -280,7 +280,7 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
     const limitNumber = parseInt(limit as string)
 
     try {
-        const reviewer = await prisma.user.findUnique({
+        const reviewer = await prisma.users.findUnique({
             where: { id: reviewerId },
             include: {
                 role: true,
@@ -294,8 +294,8 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
 
         // Admin can see all
         if (reviewer.role?.name === "admin") {
-            const total = await prisma.attendanceFixRequest.count({})
-            const allRequests = await prisma.attendanceFixRequest.findMany({
+            const total = await prisma.attendance_fix_requests.count({})
+            const allRequests = await prisma.attendance_fix_requests.findMany({
                 skip: lastCursorId ? 1 : 0,
                 take: limitNumber,
                 cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
@@ -323,7 +323,7 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
 
         // Sub-role-based access (get requests of users with lower level)
         if (reviewer.subRole?.level !== undefined) {
-            const requests = await prisma.attendanceFixRequest.findMany({
+            const requests = await prisma.attendance_fix_requests.findMany({
                 take: limitNumber,
                 skip: lastCursorId ? 1 : 0,
                 cursor: localStorage ? { id: lastCursorId as string } : undefined,
@@ -350,7 +350,7 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
                     requestedAt: 'desc',
                 },
             });
-            const total = await prisma.attendanceFixRequest.count({})
+            const total = await prisma.attendance_fix_requests.count({})
 
             const pagination = {
                 limit,
@@ -378,7 +378,7 @@ export const getFixRequestsByEmployee = async (req: Request, res: Response) => {
     }
 
     try {
-        const fixRequests = await prisma.attendanceFixRequest.findMany({
+        const fixRequests = await prisma.attendance_fix_requests.findMany({
             where: { employeeId },
             include: {
                 reviewedBy: {
@@ -410,7 +410,7 @@ export const editFixRequest = async (req: Request, res: Response) => {
     const { status, reason, requestType, requestedCheckIn, requestedCheckOut, remarks } = req.body;
 
     try {
-        const existingRequest = await prisma.attendanceFixRequest.findUnique({
+        const existingRequest = await prisma.attendance_fix_requests.findUnique({
             where: { id: requestId },
             include: {
                 employee: {
@@ -430,18 +430,18 @@ export const editFixRequest = async (req: Request, res: Response) => {
         const wasApproved = existingRequest.status === 'Approved';
 
         // If previously approved and now not approved, delete linked attendance record
-        if (wasApproved && status !== 'Approved' && existingRequest.attendanceRecordId) {
-            await prisma.attendanceRecord.delete({
-                where: { id: existingRequest.attendanceRecordId },
+        if (wasApproved && status !== 'Approved' && existingRequest.attendance_record_id) {
+            await prisma.attendance_records.delete({
+                where: { id: existingRequest.attendance_record_id },
             });
 
-            await prisma.attendanceFixRequest.update({
+            await prisma.attendance_fix_requests.update({
                 where: { id: requestId },
-                data: { attendanceRecordId: null },
+                data: { attendance_record_id: null },
             });
         }
 
-        const updatedRequest = await prisma.attendanceFixRequest.update({
+        const updatedRequest = await prisma.attendance_fix_requests.update({
             where: { id: requestId },
             data: {
                 status,
@@ -466,7 +466,7 @@ export const deleteFixRequest = async (req: Request, res: Response) => {
     const requestId = req.params.id;
 
     try {
-        const request = await prisma.attendanceFixRequest.findUnique({
+        const request = await prisma.attendance_fix_requests.findUnique({
             where: { id: requestId },
         });
 
@@ -475,14 +475,14 @@ export const deleteFixRequest = async (req: Request, res: Response) => {
         }
 
         // Delete linked attendance record if any
-        if (request.attendanceRecordId) {
-            await prisma.attendanceRecord.delete({
-                where: { id: request.attendanceRecordId },
+        if (request.attendance_record_id) {
+            await prisma.attendance_records.delete({
+                where: { id: request.attendance_record_id },
             });
         }
 
         // Delete the fix request itself
-        await prisma.attendanceFixRequest.delete({
+        await prisma.attendance_fix_requests.delete({
             where: { id: requestId },
         });
 
@@ -498,7 +498,7 @@ export const getFixRequestById = async (req: Request, res: Response) => {
     const id = req.params.id;
 
     try {
-        const request = await prisma.attendanceFixRequest.findUnique({
+        const request = await prisma.attendance_fix_requests.findUnique({
             where: { id },
             include: {
                 employee: {

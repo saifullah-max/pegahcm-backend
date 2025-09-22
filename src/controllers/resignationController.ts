@@ -10,25 +10,25 @@ interface CustomJwtPayload extends JwtPayload {
 export const submitResignation = async (req: Request, res: Response) => {
     try {
         const {
-            employeeId,
-            resignationDate,
-            lastWorkingDay,
+            employee_id,
+            resignation_date,
+            last_working_day,
             reason,
         } = req.body;
 
-        if (!employeeId || !resignationDate || !lastWorkingDay || !reason) {
+        if (!employee_id || !resignation_date || !last_working_day || !reason) {
             return res.status(400).json({ error: 'All fields are required.' });
         }
 
-        const resignation = await prisma.resignation.create({
+        const resignation = await prisma.resignations.create({
             data: {
-                employeeId,
-                resignationDate: new Date(resignationDate),
-                lastWorkingDay: new Date(lastWorkingDay),
+                employee_id,
+                resignation_date: new Date(resignation_date),
+                last_working_day: new Date(last_working_day),
                 reason,
                 status: 'Pending',
-                clearanceStatus: 'NotStarted',
-                assetReturnStatus: 'NotReturned',
+                clearance_status: 'NotStarted',
+                asset_return_status: 'NotReturned',
             },
         });
 
@@ -48,28 +48,28 @@ export const getResignations = async (req: Request, res: Response) => {
 
         let whereClause = {};
 
-        const resignations = await prisma.resignation.findMany({
+        const resignations = await prisma.resignations.findMany({
             where: whereClause,
             include: {
                 employee: {
                     include: {
                         user: {
                             select: {
-                                fullName: true,
+                                full_name: true,
                                 email: true,
                             },
                         },
                     },
                 },
-                processedBy: {
+                processed_by: {
                     select: {
-                        fullName: true,
+                        full_name: true,
                         email: true,
                     },
                 },
             },
             orderBy: {
-                resignationDate: 'desc',
+                resignation_date: 'desc',
             },
         });
 
@@ -86,20 +86,20 @@ export const getResignations = async (req: Request, res: Response) => {
 export const processResignation = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { status, remarks, lastWorkingDay } = req.body;
+        const { status, remarks, last_working_day } = req.body;
 
         if (!['Approved', 'Rejected'].includes(status)) {
             return res.status(400).json({ message: 'Invalid status. Use "Approved" or "Rejected".' });
         }
 
-        const currentUserId = (req.user as unknown as CustomJwtPayload).userId;
+        const current_user_id = (req.user as unknown as CustomJwtPayload).userId;
 
         // Step 1: Get the approver's role and sub-role level
-        const approver = await prisma.user.findUnique({
-            where: { id: currentUserId },
+        const approver = await prisma.users.findUnique({
+            where: { id: current_user_id },
             include: {
                 role: true,
-                subRole: true,
+                sub_role: true,
             },
         });
 
@@ -114,14 +114,14 @@ export const processResignation = async (req: Request, res: Response) => {
         }
 
         // Step 2: Get the resignation request and requester's level
-        const existingResignation = await prisma.resignation.findUnique({
+        const existingResignation = await prisma.resignations.findUnique({
             where: { id },
             include: {
                 employee: {
                     include: {
                         user: {
                             include: {
-                                subRole: true,
+                                sub_role: true,
                             },
                         },
                     },
@@ -139,8 +139,8 @@ export const processResignation = async (req: Request, res: Response) => {
 
         // If not admin, enforce hierarchy level check
         if (roleName !== 'admin') {
-            const approverLevel = approver.subRole?.level;
-            const requesterLevel = existingResignation.employee?.user?.subRole?.level;
+            const approverLevel = approver.sub_role?.level;
+            const requesterLevel = existingResignation.employee?.user?.sub_role?.level;
 
             if (approverLevel === undefined || requesterLevel === undefined) {
                 return res.status(403).json({ message: 'Sub-role level missing for either approver or requester.' });
@@ -157,26 +157,26 @@ export const processResignation = async (req: Request, res: Response) => {
         // ✅ Prepare update data
         const dataToUpdate: {
             status: string;
-            processedById: string;
-            processedAt: Date;
-            reviewComments: string;
-            lastWorkingDay?: Date;
+            processed_by_id: string;
+            processed_at: Date;
+            review_comments: string;
+            last_working_day?: Date;
         } = {
             status,
-            processedById: currentUserId,
-            processedAt: new Date(),
-            reviewComments: remarks,
+            processed_by_id: current_user_id,
+            processed_at: new Date(),
+            review_comments: remarks,
         };
 
         // ✅ Optional: Parse and validate lastWorkingDay
-        if (typeof lastWorkingDay === 'string') {
-            const parsed = new Date(lastWorkingDay);
+        if (typeof last_working_day === 'string') {
+            const parsed = new Date(last_working_day);
             if (!isNaN(parsed.getTime())) {
-                dataToUpdate.lastWorkingDay = parsed;
+                dataToUpdate.last_working_day = parsed;
             }
         }
 
-        const updatedResignation = await prisma.resignation.update({
+        const updatedResignation = await prisma.resignations.update({
             where: { id },
             data: dataToUpdate,
         });
@@ -197,18 +197,18 @@ export const getResignationById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
-        const resignation = await prisma.resignation.findUnique({
+        const resignation = await prisma.resignations.findUnique({
             where: { id },
             include: {
                 employee: {
                     include: {
                         user: {
-                            select: { fullName: true, email: true },
+                            select: { full_name: true, email: true },
                         },
                     },
                 },
-                processedBy: {
-                    select: { fullName: true, email: true },
+                processed_by: {
+                    select: { full_name: true, email: true },
                 },
             },
         });
@@ -228,9 +228,9 @@ export const getResignationById = async (req: Request, res: Response) => {
 export const updateResignation = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { reason, lastWorkingDay } = req.body;
+        const { reason, last_working_day } = req.body;
 
-        const existingResignation = await prisma.resignation.findUnique({
+        const existingResignation = await prisma.resignations.findUnique({
             where: { id },
         });
 
@@ -245,23 +245,23 @@ export const updateResignation = async (req: Request, res: Response) => {
         // Build update object dynamically to avoid sending invalid values
         const updateData: {
             reason?: string;
-            lastWorkingDay?: Date;
+            last_working_day?: Date;
         } = {};
 
         if (typeof reason === 'string') {
             updateData.reason = reason.trim();
         }
 
-        if (lastWorkingDay) {
-            const parsedDate = new Date(lastWorkingDay);
+        if (last_working_day) {
+            const parsedDate = new Date(last_working_day);
             if (!isNaN(parsedDate.getTime())) {
-                updateData.lastWorkingDay = parsedDate;
-            } else {
-                console.warn('Invalid lastWorkingDay provided. Skipping update for lastWorkingDay.');
+                updateData.last_working_day = parsedDate;
             }
+        } else {
+            console.warn('Invalid last_working_day provided. Skipping update for last_working_day.');
         }
 
-        const updatedResignation = await prisma.resignation.update({
+        const updatedResignation = await prisma.resignations.update({
             where: { id },
             data: updateData,
         });
@@ -284,7 +284,7 @@ export const deleteResignation = async (req: Request, res: Response) => {
 
         const { role } = req.user;
 
-        const resignation = await prisma.resignation.findUnique({
+        const resignation = await prisma.resignations.findUnique({
             where: { id },
         });
 
@@ -298,7 +298,7 @@ export const deleteResignation = async (req: Request, res: Response) => {
             });
         }
 
-        await prisma.resignation.delete({
+        await prisma.resignations.delete({
             where: { id },
         });
 
@@ -313,33 +313,33 @@ export const deleteResignation = async (req: Request, res: Response) => {
 export const updateClearanceStatus = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { clearanceStatus, assetReturnStatus, status, reviewComments } = req.body;
+        const { clearance_status, asset_return_status, status, review_comments } = req.body;
 
         const validClearance = ['NotStarted', 'InProgress', 'Cleared'];
         const validAsset = ['NotReturned', 'PartiallyReturned', 'Returned'];
         const validStatus = ['Pending', 'Approved', 'Rejected'];
 
         if (
-            !validClearance.includes(clearanceStatus) ||
-            !validAsset.includes(assetReturnStatus) ||
+            !validClearance.includes(clearance_status) ||
+            !validAsset.includes(asset_return_status) ||
             !validStatus.includes(status)
         ) {
             return res.status(400).json({ message: 'Invalid status, clearance, or asset return status.' });
         }
 
-        const resignation = await prisma.resignation.findUnique({ where: { id } });
+        const resignation = await prisma.resignations.findUnique({ where: { id } });
 
         if (!resignation) {
             return res.status(404).json({ message: 'Resignation not found.' });
         }
 
-        const updated = await prisma.resignation.update({
+        const updated = await prisma.resignations.update({
             where: { id },
             data: {
-                clearanceStatus,
-                assetReturnStatus,
+                clearance_status,
+                asset_return_status,
                 status,
-                reviewComments: reviewComments || null,
+                review_comments: review_comments || null,
             },
         });
 
@@ -353,11 +353,11 @@ export const updateClearanceStatus = async (req: Request, res: Response) => {
 // GET MY Resignation
 export const getMyResignation = async (req: Request, res: Response) => {
     try {
-        const userId = (req.user as unknown as CustomJwtPayload).userId;
+        const user_id = (req.user as unknown as CustomJwtPayload).userId;
 
         // Fetch resignation of the employee linked to this user
-        const employee = await prisma.employee.findUnique({
-            where: { userId },
+        const employee = await prisma.employees.findUnique({
+            where: { user_id },
             select: { id: true },
         });
 
@@ -365,16 +365,16 @@ export const getMyResignation = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Employee record not found.' });
         }
 
-        const resignation = await prisma.resignation.findFirst({
-            where: { employeeId: employee.id },
+        const resignation = await prisma.resignations.findFirst({
+            where: { employee_id: employee.id },
             include: {
                 employee: {
                     include: {
-                        user: { select: { fullName: true, email: true } },
+                        user: { select: { full_name: true, email: true } },
                     },
                 },
-                processedBy: {
-                    select: { fullName: true, email: true },
+                processed_by: {
+                    select: { full_name: true, email: true },
                 },
             },
         });

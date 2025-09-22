@@ -28,82 +28,83 @@ enum NotificationScope {
   DIRECTORS_HR
 }
 
-model SubRole {
+model sub_roles {
   id          String              @id @default(cuid())
   name        String              @unique
   description String?
-  users       User[]              @relation("UserSubRole")
+  users       Users[]              @relation("UserSubRole")
   level       Int
-  permissions SubRolePermission[] // 👈 This is the join relation
+  permissions sub_role_permissions[] // 👈 This is the join relation
+
 }
 
-model Permission {
+model permissions {
   id          String              @id @default(uuid())
   module      String
   action      String
   description String?
-  roles       RolePermission[]
-  users       UserPermission[]
-  subRoles    SubRolePermission[] // 👈 Join relation only
+  roles       role_permissions[]
+  users       user_permissions[]
+  sub_roles    sub_role_permissions[] // 👈 Join relation only
 
   @@unique([module, action], name: "module_action")
 }
 
-model RolePermission {
+model role_permissions {
   id           String     @id @default(uuid())
-  role         Role       @relation(fields: [roleId], references: [id])
-  roleId       String
-  permission   Permission @relation(fields: [permissionId], references: [id])
-  permissionId String
+  role         Roles       @relation(fields: [role_id], references: [id])
+  role_id       String
+  permission   permissions @relation(fields: [permission_id], references: [id])
+  permission_id String
 
-  @@unique([roleId, permissionId], name: "roleId_permissionId")
+  @@unique([role_id, permission_id], name: "roleId_permissionId")
 }
 
-model SubRolePermission {
+model sub_role_permissions {
   id           String @id @default(cuid())
-  subRoleId    String
-  permissionId String
+  sub_role_id    String
+  permission_id String
 
-  subRole    SubRole    @relation(fields: [subRoleId], references: [id])
-  permission Permission @relation(fields: [permissionId], references: [id])
+  sub_role    sub_roles    @relation(fields: [sub_role_id], references: [id])
+  permission permissions @relation(fields: [permission_id], references: [id])
 
-  @@unique([subRoleId, permissionId], name: "subRole_permission")
+  @@unique([sub_role_id, permission_id], name: "subRole_permission")
 }
 
-model UserPermission {
+model user_permissions {
   id           String     @id @default(uuid())
-  user         User       @relation(fields: [userId], references: [id])
-  userId       String
-  permission   Permission @relation(fields: [permissionId], references: [id])
-  permissionId String
+  user         Users       @relation(fields: [user_id], references: [id])
+  user_id       String
+  permission   permissions @relation(fields: [permission_id], references: [id])
+  permission_id String
 
-  @@unique([userId, permissionId], name: "userId_permissionId")
+  @@unique([user_id, permission_id], name: "userId_permissionId")
 }
 
-model User {
+model Users {
   id                   String    @id @default(uuid())
   username             String    @unique
-  passwordHash         String
+  password_hash         String
   email                String    @unique
-  fullName             String
-  role                 Role      @relation(fields: [roleId], references: [id])
-  roleId               String
+  full_name             String
+  role                 Roles      @relation(fields: [role_id], references: [id])
+  role_id               String
   status               String
-  dateJoined           DateTime  @default(now())
-  lastLogin            DateTime?
-  subRoleId            String?
-  subRole              SubRole?  @relation("UserSubRole", fields: [subRoleId], references: [id])
-  roleTag              RoleTag?
-  resetPasswordToken   String?   @unique
-  resetPasswordExpires DateTime?
-  employee             Employee?
+  date_joined           DateTime  @default(now())
+  last_login            DateTime?
+  sub_role_id            String?
+  sub_role              sub_roles?  @relation("UserSubRole", fields: [sub_role_id], references: [id])
+  role_tag              RoleTag?
+  reset_password_token   String?   @unique
+  reset_password_expires DateTime?
+  employee             Employees?
 
   approved_leaves        LeaveRequests[]         @relation("ApprovedBy")
   approved_vacations     Vacations[]             @relation("ApprovedBy")
   assigned_onboarding    OnboardingProcesses[]    @relation("AssignedHR")
   processed_resignations Resignations[]          @relation("ProcessedBy")
   initiated_hr_processes  HrProcesses[]            @relation("InitiatedBy")
-  UserPermission        user_permissions[]
+  user_permission        user_permissions[]
   SystemLog             SystemLogs[]
   BulkUpload            BulkUploads[]
   Resignation           Resignations[]
@@ -113,382 +114,410 @@ model User {
 
 }
 
-model Employee {
+model Employees {
   id                    String         @id @default(uuid())
-  user                  User           @relation(fields: [userId], references: [id])
-  userId                String         @unique
-  employeeNumber        String         @unique
-  department            Department?    @relation(fields: [departmentId], references: [id])
-  departmentId          String?
+  user                  Users           @relation(fields: [user_id], references: [id])
+  user_id                String         @unique
+  employee_number        String         @unique
+  department            Departments?    @relation(fields: [department_id], references: [id])
+  department_id          String?
   position              String
-  dateOfBirth           DateTime
-  hireDate              DateTime
+  date_of_birth           DateTime
+  hire_date              DateTime
   status                String
-  fatherName            String?
-  manager               Employee?      @relation("EmployeeManager", fields: [managerId], references: [id])
-  managerId             String?
+  father_name            String?
+  manager               Employees?      @relation("EmployeeManager", fields: [manager_id], references: [id])
+  manager_id             String?
   skills                String? // JSON string of skills array
-  subDepartment         SubDepartment? @relation(fields: [subDepartmentId], references: [id])
-  subDepartmentId       String?
+  sub_department         SubDepartments? @relation(fields: [sub_department_id], references: [id])
+  sub_department_id       String?
   address               String
-  emergencyContactName  String
-  emergencyContactPhone String
+  emergency_contact_name  String
+  emergency_contact_phone String
   gender                String
   salary                Decimal        @db.Decimal(10, 2)
-  workLocation          String // Onsite, Remote, Hybrid
-  phoneNumber           String?
-  shiftId               String?
-  shift                 Shift?         @relation(fields: [shiftId], references: [id])
+  work_location          String // Onsite, Remote, Hybrid
+  phone_number           String?
+  shift_id               String?
+  shift                 Shifts?         @relation(fields: [shift_id], references: [id])
 
-  profileImageUrl String?
+  profile_image_url String?
   images          Json? // Stores array of image objects [{name, url, mimeType, uploadedAt}]
   documents       Json? // Stores array of document objects [{name, url, mimeType, type, uploadedAt, categoryId}]
 
-  managedEmployees     Employee[]             @relation("EmployeeManager")
-  attendanceRecords    AttendanceRecord[]
-  leaveRequests        LeaveRequest[]
-  vacations            Vacation[]
-  onboardingProcesses  OnboardingProcess[]
-  resignations         Resignation[]
-  assets               Asset[]
-  hrProcesses          HRProcess[]
-  LeaveBalance         LeaveBalance[]
-  AttendanceFixRequest AttendanceFixRequest[]
-  salaryDetails        SalaryDetail[]
-  employeeDocument     employeeDocument[]
-  employeeImage        employeeImage[]
+  managed_employees     Employees[]             @relation("EmployeeManager")
+  attendance_records    AttendanceRecords[]
+  leave_requests        LeaveRequests[]
+  vacations            Vacations[]
+  onboarding_processes  OnboardingProcesses[]
+  resignations         Resignations[]
+  assets               Assets[]
+  hr_processes          HrProcesses[]
+  LeaveBalance         LeaveBalances[]
+  AttendanceFixRequest AttendanceFixRequests[]
+  salary_details        SalaryDetails[]
+  employee_documents     EmployeeDocuments[]
+  employee_images        EmployeeImages[]
+
 }
 
-model Role {
+model Roles {
   id             String           @id @default(uuid())
   name           String           @unique
   description    String?
   users          Users[]
-  RolePermission role_permissions[]
+  role_permission role_permissions[]
 
 }
 
-model SubDepartment {
+model SubDepartments {
   id           String     @id @default(uuid())
   name         String     @unique
   description  String?
-  department   Department @relation(fields: [departmentId], references: [id])
-  departmentId String
-  employees    Employee[]
+  department   Departments @relation(fields: [department_id], references: [id])
+  department_id String
+  employees    Employees[]
+
 }
 
-model Department {
+model Departments {
   id             String          @id @default(uuid())
   name           String          @unique
   description    String?
-  employees      Employee[]
-  subDepartments SubDepartment[]
+  employees      Employees[]
+  sub_departments SubDepartments[]
+
 }
 
-model AttendanceRecord {
+model AttendanceRecords {
   id                   String                 @id @default(uuid())
-  employee             Employee               @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId           String
+  employee             Employees               @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id           String
   date                 DateTime
-  clockIn              DateTime
-  clockOut             DateTime?
-  shift                Shift                  @relation(fields: [shiftId], references: [id])
-  shiftId              String
-  absenceReason        String?
-  netWorkingMinutes    Int? // <-- Add this
-  lateMinutes          Int?
+  clock_in              DateTime
+  clock_out             DateTime?
+  shift                Shifts                  @relation(fields: [shift_id], references: [id])
+  shift_id              String
+  absence_reason        String?
+  net_working_minutes    Int? // <-- Add this
+  late_minutes          Int?
   status               String
-  breaks               Break[]
-  AttendanceFixRequest AttendanceFixRequest[]
+  breaks               Breaks[]
+  AttendanceFixRequest AttendanceFixRequests[]
+
 }
 
-model Shift {
+model Shifts {
   id                String             @id @default(uuid())
   name              String             @unique
-  startTime         DateTime
-  endTime           DateTime
+  start_time         DateTime
+  end_time           DateTime
   description       String?
-  attendanceRecords AttendanceRecord[]
-  employees         Employee[]
+  attendance_records AttendanceRecords[]
+  employees         Employees[]
+
 }
 
-model LeaveRequest {
+model LeaveRequests {
   id           String    @id @default(uuid())
-  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId   String
-  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id])
-  leaveTypeId  String
-  startDate    DateTime
-  endDate      DateTime
+  employee     Employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id   String
+  leave_type    LeaveTypes @relation(fields: [leave_type_id], references: [id])
+  leave_type_id  String
+  start_date    DateTime
+  end_date      DateTime
   reason       String
   status       String
-  requestedAt  DateTime  @default(now())
-  approvedBy   User?     @relation("ApprovedBy", fields: [approvedById], references: [id])
-  approvedById String?
-  approvedAt   DateTime?
+  requested_at  DateTime  @default(now())
+  approved_by   Users?     @relation("ApprovedBy", fields: [approved_by_id], references: [id])
+  approved_by_id String?
+  approved_at   DateTime?
+
 }
 
-model LeaveType {
+model LeaveTypes {
   id            String         @id @default(uuid())
   name          String         @unique
   description   String?
-  isPaid        Boolean        @default(true)
-  leaveRequests LeaveRequest[]
-  LeaveBalance  LeaveBalance[]
-  totalDays     Int
+  is_paid        Boolean        @default(true)
+  leave_requests LeaveRequests[]
+  LeaveBalance  LeaveBalances[]
+  total_days     Int
+
 }
 
-model Break {
+model Breaks {
   id                 String           @id @default(uuid())
-  attendanceRecord   AttendanceRecord @relation(fields: [attendanceRecordId], references: [id])
-  attendanceRecordId String
-  breakStart         DateTime
-  breakEnd           DateTime?
-  breakTypeId        String?
-  breakType          BreakType?       @relation(fields: [breakTypeId], references: [id])
+  attendance_record   AttendanceRecords @relation(fields: [attendance_record_id], references: [id])
+  attendance_record_id String
+  break_start         DateTime
+  break_end           DateTime?
+  break_type_id        String?
+  break_type          BreakTypes?       @relation(fields: [break_type_id], references: [id])
+
 }
 
-model Notification {
+model Notifications {
   id              String             @id @default(uuid())
   title           String
   message         String
   type            String
-  createdAt       DateTime           @default(now())
-  visibilityLevel Int?
-  departmentId    String?
-  subDepartmentId String?
-  employeeId      String?
+  created_at       DateTime           @default(now())
+  visibility_level Int?
+  department_id    String?
+  sub_department_id String?
+  employee_id      String?
   scope           NotificationScope?
 
-  userNotifications UserNotification[] // 👈 new relation
-  User              User?              @relation(fields: [userId], references: [id])
-  userId            String?
+  user_notifications UserNotifications[] // 👈 new relation
+  User              Users?              @relation(fields: [user_id], references: [id])
+  user_id            String?
+
 }
 
-model UserNotification {
+model UserNotifications {
   id             String       @id @default(uuid())
-  user           User         @relation(fields: [userId], references: [id])
-  userId         String
-  notification   Notification @relation(fields: [notificationId], references: [id])
-  notificationId String
+  user           Users         @relation(fields: [user_id], references: [id])
+  user_id         String
+  notification   Notifications @relation(fields: [notification_id], references: [id])
+  notification_id String
   read           Boolean      @default(false)
-  readAt         DateTime?
+  read_at         DateTime?
+
 }
 
-model AttendanceFixRequest {
+model AttendanceFixRequests {
   id         String   @id @default(uuid())
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId String
+  employee   Employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id String
 
-  requestType       String // "CheckIn", "CheckOut", "Both", etc.
-  requestedCheckIn  DateTime? // Optional: requested fixed clockIn
-  requestedCheckOut DateTime? // Optional: requested fixed clockOut
-  requestedBreaks   Json? // Optional JSON for break updates if needed
+  request_type       String // "CheckIn", "CheckOut", "Both", etc.
+  requested_check_in  DateTime? // Optional: requested fixed clockIn
+  requested_check_out DateTime? // Optional: requested fixed clockOut
+  requested_breaks   Json? // Optional JSON for break updates if needed
 
   reason      String
   status      String // "Pending", "Approved", "Rejected"
-  requestedAt DateTime @default(now())
+  requested_at DateTime @default(now())
 
-  reviewedBy   User?     @relation(fields: [reviewedById], references: [id])
-  reviewedById String?
-  reviewedAt   DateTime?
+  reviewed_by   Users?     @relation(fields: [reviewed_by_id], references: [id])
+  reviewed_by_id String?
+  reviewed_at   DateTime?
 
   remarks            String? // Optional comment from reviewer
-  AttendanceRecord   AttendanceRecord? @relation(fields: [attendanceRecordId], references: [id])
-  attendanceRecordId String?
+  AttendanceRecord   AttendanceRecords? @relation(fields: [attendance_record_id], references: [id])
+  attendance_record_id String?
+
 }
 
-model SalaryDetail {
+model SalaryDetails {
   id         String   @id @default(uuid())
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId String
+  employee   Employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id String
 
-  baseSalary Decimal @db.Decimal(10, 2)
+  base_salary Decimal @db.Decimal(10, 2)
   deductions Decimal @default(0.00) @db.Decimal(10, 2)
   bonuses    Decimal @default(0.00) @db.Decimal(10, 2)
-  totalPay   Decimal @db.Decimal(10, 2)
+  total_pay   Decimal @db.Decimal(10, 2)
 
-  allowances Allowance[] // 👈 One-to-many
+  allowances Allowances[] // 👈 One-to-many
 
-  effectiveFrom DateTime
-  effectiveTo   DateTime?
+  effective_from DateTime
+  effective_to   DateTime?
 
-  createdBy String
-  updatedBy String?
+  created_by String
+  updated_by String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
 }
 
-model Allowance {
+model Allowances {
   id       String       @id @default(uuid())
-  salary   SalaryDetail @relation(fields: [salaryId], references: [id], onDelete: Cascade)
-  salaryId String
+  salary   SalaryDetails @relation(fields: [salary_id], references: [id], onDelete: Cascade)
+  salary_id String
 
   type   String
   amount Decimal @db.Decimal(10, 2)
 
-  createdAt DateTime @default(now())
+  created_at DateTime @default(now())
+
 }
 
-model DocumentCategory {
+model DocumentCategories {
   id          String             @id @default(uuid())
   name        String             @unique
   description String?
-  documents   employeeDocument[]
+  documents   EmployeeDocuments[]
+
 }
 
-model employeeDocument {
+model EmployeeDocuments {
   id         String   @id @default(uuid())
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId String
+  employee   Employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id String
   name       String
   url        String // File path or external link
-  mimeType   String
-  uploadedAt DateTime @default(now())
+  mime_type   String
+  uploaded_at DateTime @default(now())
   type       String // e.g. "resume", "certificate", etc.
 
-  categoryId String?
-  category   DocumentCategory? @relation(fields: [categoryId], references: [id])
+  category_id String?
+  category   DocumentCategories? @relation(fields: [category_id], references: [id])
+
 }
 
-model SystemSetting {
+model SystemSettings {
   id          String   @id @default(uuid())
   key         String   @unique
   value       String // store as string or JSON
   description String?
-  updatedAt   DateTime @updatedAt
+  updated_at   DateTime @updatedAt
+
 }
 
-model Holiday {
+model Holidays {
   id          String   @id @default(uuid())
   title       String
   date        DateTime
   description String?
+
 }
 
-model SystemLog {
+model SystemLogs {
   id        String   @id @default(uuid())
-  user      User?    @relation(fields: [userId], references: [id])
-  userId    String?
+  user      Users?    @relation(fields: [user_id], references: [id])
+  user_id    String?
   action    String // e.g., "Updated Shift", "Approved Leave"
   module    String // e.g., "Attendance"
   metadata  String? // optional JSON (e.g. { recordId: "xyz" })
   timestamp DateTime @default(now())
+
 }
 
-model LeaveBalance {
+model LeaveBalances {
   id          String    @id @default(uuid())
-  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId  String
-  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id])
-  leaveTypeId String
+  employee    Employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id  String
+  leave_type   LeaveTypes @relation(fields: [leave_type_id], references: [id])
+  leave_type_id String
   balance     Int
-  updatedAt   DateTime  @updatedAt
+  updated_at   DateTime  @updatedAt
+
 }
 
-model BulkUpload {
+model BulkUploads {
   id           String   @id @default(uuid())
-  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
-  uploadedById String
-  fileUrl      String
+  uploaded_by   Users     @relation(fields: [uploaded_by_id], references: [id])
+  uploaded_by_id String
+  file_url      String
   type         String // e.g., "attendance"
   status       String // Processed, Failed, Pending
-  uploadedAt   DateTime @default(now())
+  uploaded_at   DateTime @default(now())
+
 }
 
-model employeeImage {
+model EmployeeImages {
   id         String   @id @default(uuid())
-  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId String
+  employee   Employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id String
   name       String
   url        String // File path or external link (Cloudinary, S3, etc.)
-  mimeType   String
-  uploadedAt DateTime @default(now())
+  mime_type   String
+  uploaded_at DateTime @default(now())
+
 }
 
-model BreakType {
+model BreakTypes {
   id          String  @id @default(uuid())
   name        String  @unique
   duration    Int // duration in minutes (optional for fixed-length breaks)
   description String?
-  breaks      Break[]
+  breaks      Breaks[]
+
 }
 
-model Vacation {
+model Vacations {
   id           String    @id @default(uuid())
-  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId   String
-  startDate    DateTime
-  endDate      DateTime
-  vacationType String
+  employee     Employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id   String
+  start_date    DateTime
+  end_date      DateTime
+  vacation_type String
   status       String
-  approvedBy   User      @relation("ApprovedBy", fields: [approvedById], references: [id])
-  approvedById String
-  approvedAt   DateTime?
+  approved_by   Users      @relation("ApprovedBy", fields: [approved_by_id], references: [id])
+  approved_by_id String
+  approved_at   DateTime?
+
 }
 
-model OnboardingProcess {
+model OnboardingProcesses {
   id           String    @id @default(uuid())
-  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId   String    @unique
-  startDate    DateTime
-  endDate      DateTime?
+  employee     Employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id   String    @unique
+  start_date    DateTime
+  end_date      DateTime?
   status       String
-  assignedHR   User      @relation("AssignedHR", fields: [assignedHRId], references: [id])
-  assignedHRId String
+  assigned_hr   Users      @relation("AssignedHR", fields: [assigned_hr_id], references: [id])
+  assigned_hr_id String
   notes        String?
+
 }
 
-model Resignation {
+model Resignations {
   id                     String             @id @default(uuid())
-  employee               Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId             String
-  resignationDate        DateTime
-  lastWorkingDay         DateTime
+  employee               Employees           @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id             String
+  resignation_date        DateTime
+  last_working_day         DateTime
   reason                 String
-  reviewComments         String?
+  review_comments         String?
   status                 String
-  clearanceStatus        String
-  assetReturnStatus      String
-  processedBy            User?              @relation("ProcessedBy", fields: [processedById], references: [id])
-  processedById          String?
-  processedAt            DateTime?
-  clearanceResponsible   User?              @relation(fields: [clearanceResponsibleId], references: [id])
-  clearanceResponsibleId String?
-  assets                 ResignationAsset[]
+  clearance_status        String
+  asset_return_status      String
+  processed_by            Users?              @relation("ProcessedBy", fields: [processed_by_id], references: [id])
+  processed_by_id          String?
+  processed_at            DateTime?
+  clearance_responsible   Users?              @relation(fields: [clearance_responsible_id], references: [id])
+  clearance_responsible_id String?
+  assets                 ResignationAssets[]
+
 }
 
-model Asset {
+model Assets {
   id                String             @id @default(uuid())
   name              String
   description       String?
-  serialNumber      String             @unique
-  assignedTo        Employee           @relation(fields: [assignedToId], references: [id], onDelete: Cascade)
-  assignedToId      String
+  serial_number      String             @unique
+  assigned_to        Employees           @relation(fields: [assigned_to_id], references: [id], onDelete: Cascade)
+  assigned_to_id      String
   status            String
-  resignationAssets ResignationAsset[]
+  resignation_assets ResignationAssets[]
+
 }
 
-model ResignationAsset {
+model ResignationAssets {
   id            String      @id @default(uuid())
-  resignation   Resignation @relation(fields: [resignationId], references: [id])
-  resignationId String
-  asset         Asset       @relation(fields: [assetId], references: [id])
-  assetId       String
-  returnStatus  String
-  returnDate    DateTime?
+  resignation   Resignations @relation(fields: [resignation_id], references: [id])
+  resignation_id String
+  asset         Assets       @relation(fields: [asset_id], references: [id])
+  asset_id       String
+  return_status  String
+  return_date    DateTime?
+
 }
 
-model HRProcess {
+model HrProcesses {
   id            String    @id @default(uuid())
-  processType   String
-  employee      Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  employeeId    String
-  initiatedBy   User      @relation("InitiatedBy", fields: [initiatedById], references: [id])
-  initiatedById String
-  startDate     DateTime
-  endDate       DateTime?
+  process_type   String
+  employee      Employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id    String
+  initiated_by   Users      @relation("InitiatedBy", fields: [initiated_by_id], references: [id])
+  initiated_by_id String
+  start_date     DateTime
+  end_date       DateTime?
   status        String
   notes         String?
+
 }

@@ -4,16 +4,16 @@ import prisma from '../utils/Prisma';
 
 export const createOnboarding = async (req: Request, res: Response) => {
     try {
-        const { employeeId, assignedHRId, startDate, notes, status } = req.body;
+        const { employee_id, assigned_hr_id, start_date, notes, status } = req.body;
 
-        if (!employeeId || !assignedHRId || !startDate) {
+        if (!employee_id || !assigned_hr_id || !start_date) {
             return res.status(400).json({ message: 'Missing required fields' });
         }
 
         // ✅ Check for existing onboarding
-        const existing = await prisma.onboardingProcess.findUnique({
+        const existing = await prisma.onboarding_processes.findUnique({
             where: {
-                id: employeeId as string,
+                id: employee_id as string,
             },
         });
 
@@ -21,11 +21,11 @@ export const createOnboarding = async (req: Request, res: Response) => {
             return res.status(400).json({ message: 'This employee is already assigned to an onboarding process.' });
         }
 
-        const onboarding = await prisma.onboardingProcess.create({
+        const onboarding = await prisma.onboarding_processes.create({
             data: {
-                employeeId,
-                assignedHRId,
-                startDate: new Date(startDate),
+                employee_id,
+                assigned_hr_id,
+                start_date: new Date(start_date),
                 notes,
                 status: status || 'Pending',
             },
@@ -37,7 +37,7 @@ export const createOnboarding = async (req: Request, res: Response) => {
             error instanceof Prisma.PrismaClientKnownRequestError &&
             error.code === 'P2002' &&
             Array.isArray(error.meta?.target) &&
-            error.meta.target.includes('employeeId')
+            error.meta.target.includes('employee_id')
         ) {
             return res.status(400).json({ message: 'This employee is already onboarded.' });
         }
@@ -49,10 +49,10 @@ export const createOnboarding = async (req: Request, res: Response) => {
 
 export const getAllHREmployees = async (req: Request, res: Response) => {
     try {
-        const hrEmployees = await prisma.employee.findMany({
+        const hrEmployees = await prisma.employees.findMany({
             where: {
                 user: {
-                    roleTag: {
+                    role_tag: {
                         equals: 'HR'
                     },
                 },
@@ -60,7 +60,7 @@ export const getAllHREmployees = async (req: Request, res: Response) => {
             include: {
                 user: {
                     select: {
-                        fullName: true,
+                        full_name: true,
                         email: true,
                         username: true,
                         role: {
@@ -71,7 +71,7 @@ export const getAllHREmployees = async (req: Request, res: Response) => {
                     },
                 },
                 department: true,
-                subDepartment: true,
+                sub_department: true,
             },
         });
 
@@ -86,31 +86,31 @@ export const getAllHREmployees = async (req: Request, res: Response) => {
 export const getAllOnboardings = async (req: Request, res: Response) => {
     try {
         // ✅ FIXED: getAllOnboardings
-        const onboardings = await prisma.onboardingProcess.findMany({
+        const onboardings = await prisma.onboarding_processes.findMany({
             include: {
                 employee: {
                     include: {
                         user: {
                             select: {
                                 id: true,
-                                fullName: true,
+                                full_name: true,
                                 email: true,
                                 username: true,
                             },
                         },
                     },
                 },
-                assignedHR: {
+                assigned_hr: {
                     select: {
                         id: true,
-                        fullName: true,
+                        full_name: true,
                         email: true,
                         username: true,
                     },
                 },
             },
             orderBy: {
-                startDate: 'desc',
+                start_date: 'desc',
             },
         });
 
@@ -126,7 +126,7 @@ export const getOnboardingById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
-        const onboarding = await prisma.onboardingProcess.findUnique({
+        const onboarding = await prisma.onboarding_processes.findUnique({
             where: { id },
             include: {
                 employee: {
@@ -134,17 +134,17 @@ export const getOnboardingById = async (req: Request, res: Response) => {
                         user: {
                             select: {
                                 id: true,
-                                fullName: true,
+                                full_name: true,
                                 email: true,
                                 username: true,
                             },
                         },
                     },
                 },
-                assignedHR: {
+                assigned_hr: {
                     select: {
                         id: true,
-                        fullName: true,
+                        full_name: true,
                         email: true,
                         username: true,
                     },
@@ -167,14 +167,14 @@ export const getOnboardingById = async (req: Request, res: Response) => {
 export const updateOnboarding = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { employeeId, assignedHRId, startDate, notes, status } = req.body;
+        const { employee_id, assigned_hr_id, start_date, notes, status } = req.body;
 
-        const updated = await prisma.onboardingProcess.update({
+        const updated = await prisma.onboarding_processes.update({
             where: { id },
             data: {
-                employeeId,
-                assignedHRId,
-                startDate: new Date(startDate),
+                employee_id,
+                assigned_hr_id,
+                start_date: new Date(start_date),
                 notes,
                 status,
             },
@@ -191,7 +191,7 @@ export const deleteOnboarding = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
-        await prisma.onboardingProcess.delete({
+        await prisma.onboarding_processes.delete({
             where: { id },
         });
 
@@ -204,13 +204,13 @@ export const deleteOnboarding = async (req: Request, res: Response) => {
 
 export const getNotOnboardedEmployees = async (req: Request, res: Response) => {
     try {
-        const onboardedEmployeeIds = await prisma.onboardingProcess.findMany({
-            select: { employeeId: true },
+        const onboarded_employee_ids = await prisma.onboarding_processes.findMany({
+            select: { employee_id: true },
         });
 
-        const onboardedIds = onboardedEmployeeIds.map(e => e.employeeId);
+        const onboardedIds = onboarded_employee_ids.map(e => e.employee_id);
 
-        const employees = await prisma.employee.findMany({
+        const employees = await prisma.employees.findMany({
             where: {
                 id: { notIn: onboardedIds },
             },

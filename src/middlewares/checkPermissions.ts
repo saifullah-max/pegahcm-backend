@@ -11,25 +11,25 @@ export const checkPermission = (module: string, action: string) => {
                 return;
             }
 
-            const user = await prisma.user.findUnique({
+            const user = await prisma.users.findUnique({
                 where: { id: userId },
                 include: {
                     role: {
                         include: {
-                            RolePermission: {
+                            role_permission: {
                                 include: { permission: true },
                             },
                         },
                     },
-                    UserPermission: {
+                    user_permission: {
                         include: { permission: true },
                     },
                 },
             });
 
             const permissions = [
-                ...(user?.role?.RolePermission?.map(rp => `${rp.permission.module}:${rp.permission.action}`) || []),
-                ...(user?.UserPermission?.map(up => `${up.permission.module}:${up.permission.action}`) || []),
+                ...(user?.role?.role_permission?.map((rp: any) => `${rp.permission.module}:${rp.permission.action}`) || []),
+                ...(user?.user_permission?.map((up: any) => `${up.permission.module}:${up.permission.action}`) || []),
             ];
             // console.log("permission:", permissions);
 
