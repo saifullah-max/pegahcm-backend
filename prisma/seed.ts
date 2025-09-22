@@ -13,12 +13,12 @@ async function main() {
   const ADMIN_PASSWORD = 'admin123'; // rotate in prod / env var
   const ADMIN_STATUS = 'ACTIVE';
 
-  const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+  const password_hash = await bcrypt.hash(ADMIN_PASSWORD, 10);
 
   // ———————————————————————————————————————————————————————————
   // 1) Role: 'admin' (case-sensitive)
   // ———————————————————————————————————————————————————————————
-  const adminRole = await prisma.role.upsert({
+  const adminRole = await prisma.roles.upsert({
     where: { name: 'admin' },
     update: {},
     create: {
@@ -27,7 +27,7 @@ async function main() {
     },
   });
 
-  await prisma.role.upsert({
+  await prisma.roles.upsert({
     where: { name: 'user' },
     update: {},
     create: {
@@ -56,7 +56,7 @@ async function main() {
   const seededPermissions: Array<{ id: string }> = [];
 
   for (const perm of permissionsData) {
-    const created = await prisma.permission.upsert({
+    const created = await prisma.permissions.upsert({
       where: { module_action: { module: perm.module, action: perm.action } },
       update: {},
       create: perm,
@@ -67,15 +67,15 @@ async function main() {
   // ———————————————————————————————————————————————————————————
   // 3) Admin user (no subRole for admin)
   // ———————————————————————————————————————————————————————————
-  const adminUser = await prisma.user.upsert({
+  const adminUser = await prisma.users.upsert({
     where: { email: ADMIN_EMAIL },
     update: {},
     create: {
       username: ADMIN_USERNAME,
-      fullName: ADMIN_FULLNAME,
+      full_name: ADMIN_FULLNAME,
       email: ADMIN_EMAIL,
-      passwordHash,
-      roleId: adminRole.id,
+      password_hash,
+      role_id: adminRole.id,
       status: ADMIN_STATUS,
     },
   });
@@ -86,32 +86,32 @@ async function main() {
   // ———————————————————————————————————————————————————————————
   for (const perm of seededPermissions) {
     // Role -> Permission
-    await prisma.rolePermission.upsert({
+    await prisma.role_permissions.upsert({
       where: {
         roleId_permissionId: {
-          roleId: adminRole.id,
-          permissionId: perm.id,
+          role_id: adminRole.id,
+          permission_id: perm.id,
         },
       },
       update: {},
       create: {
-        roleId: adminRole.id,
-        permissionId: perm.id,
+        role_id: adminRole.id,
+        permission_id: perm.id,
       },
     });
 
     // User -> Permission
-    await prisma.userPermission.upsert({
+    await prisma.user_permissions.upsert({
       where: {
         userId_permissionId: {
-          userId: adminUser.id,
-          permissionId: perm.id,
+          user_id: adminUser.id,
+          permission_id: perm.id,
         },
       },
       update: {},
       create: {
-        userId: adminUser.id,
-        permissionId: perm.id,
+        user_id: adminUser.id,
+        permission_id: perm.id,
       },
     });
   }
