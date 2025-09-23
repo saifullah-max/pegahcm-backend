@@ -23,15 +23,26 @@ export const createSalary = async (req: Request, res: Response) => {
 
         const createdSalary = await prisma.salary_details.create({
             data: {
-                employee_id,
                 base_salary,
                 deductions,
                 bonuses,
-                total_pay: 0, // will update after allowances
+                total_pay: 0,
                 effective_from,
                 effective_to,
-                created_by: req.user?.userId || 'system',
-            }
+                created_by: req.user?.userId || "system",
+                employee: {
+                    connect: { id: employee_id },
+                },
+                allowances: allowances && allowances.length > 0
+                    ? {
+                        create: allowances.map((a: any) => ({
+                            type: a.type,
+                            amount: Number(a.amount) || 0,
+                        })),
+                    }
+                    : undefined,
+                created_at: new Date(),
+            },
         });
 
         if (allowances && allowances.length > 0) {
