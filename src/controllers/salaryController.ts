@@ -45,15 +45,15 @@ export const createSalary = async (req: Request, res: Response) => {
             },
         });
 
-        if (allowances && allowances.length > 0) {
-            await prisma.allowances.createMany({
-                data: allowances.map((a: any) => ({
-                    salary_id: createdSalary.id,
-                    type: a.type,
-                    amount: Number(a.amount) || 0
-                }))
-            });
-        }
+        // if (allowances && allowances.length > 0) {
+        //     await prisma.allowances.createMany({
+        //         data: allowances.map((a: any) => ({
+        //             salary_id: createdSalary.id,
+        //             type: a.type,
+        //             amount: Number(a.amount) || 0
+        //         }))
+        //     });
+        // }
 
         // Calculate total
         const totalAllowances = allowances?.reduce((sum: number, a: any) => sum + Number(a.amount || 0), 0) || 0;
