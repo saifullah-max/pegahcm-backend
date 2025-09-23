@@ -20,6 +20,9 @@ import impersonateRoutes from './routes/impersonateRoutes'
 import fixAttendanceRoutes from './routes/fixAttendanceRoutes'
 import notificationRoutes from './routes/notificationRoutes'
 import salaryRoutes from './routes/salaryRoutes'
+import bidRoutes from './routes/bidRoutes';
+import projectRoutes from './routes/projectRoutes';
+import milestoneRoutes from './routes/milestoneRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -55,6 +58,9 @@ app.use('/api/permissions', permissionRoutes)
 app.use('/api/impersonate', impersonateRoutes)
 app.use('/api/notifications', notificationRoutes)
 app.use('/api/salary', salaryRoutes);
+app.use('/api/bids', bidRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/milestones', milestoneRoutes);
 
 // Basic route
 app.get('/', (req, res) => {

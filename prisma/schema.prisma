@@ -520,3 +520,44 @@ model hr_processes {
   notes         String?
 
 }
+
+model bids {
+  id              String    @id @default(cuid())
+  created_at      DateTime  @default(now())
+  url           String
+  profile         String
+  connects        Int
+  boosted_connects Int
+  total           Int
+  cost            String
+  bid_status       String
+  id_name          String
+  description     String?
+  client_name      String
+  project_type     String
+  price           String
+  attend_by      String
+  project        projects? @relation("BidToProject")
+}
+
+model projects {
+  id          String     @id @default(uuid())
+  name        String
+  description String?
+  start_date  DateTime
+  end_date    DateTime?
+  status      String
+  bid_id      String?    @unique
+  bid         bids?       @relation("BidToProject", fields: [bid_id], references: [id])
+  milestones  milestones[]
+}
+
+model milestones {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  due_date    DateTime
+  status      String
+  project_id  String
+  project     projects  @relation(fields: [project_id], references: [id])
+}
