@@ -158,6 +158,7 @@ model employees {
   salary_details        salary_details[]
   employee_documents     employee_documents[]
   employee_images        employee_images[]
+  targets                target[] // Add this line
 
 }
 
@@ -560,4 +561,15 @@ model milestones {
   status      String
   project_id  String
   project     projects  @relation(fields: [project_id], references: [id])
+}
+
+model target {
+  id              String    @id @default(uuid())
+  opening_target  Int
+  closing_target  Int
+  daily_bids      Int
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+  employee_id     String?
+  employee        employees? @relation(fields: [employee_id], references: [id])
 }

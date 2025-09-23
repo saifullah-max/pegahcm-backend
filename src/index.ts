@@ -23,6 +23,7 @@ import salaryRoutes from './routes/salaryRoutes'
 import bidRoutes from './routes/bidRoutes';
 import projectRoutes from './routes/projectRoutes';
 import milestoneRoutes from './routes/milestoneRoutes';
+import targetRoutes from './routes/targetRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -61,6 +62,7 @@ app.use('/api/salary', salaryRoutes);
 app.use('/api/bids', bidRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/milestones', milestoneRoutes);
+app.use('/api/targets', targetRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
