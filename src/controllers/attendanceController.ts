@@ -630,7 +630,7 @@ export const getAllLeaveRequestsForAdmin = async (
     const cursor = last_cursor_id ? { id: last_cursor_id } : undefined
     console.log("Cursor passed to db:", cursor);
 
-    const leaveRequests = await prisma.leave_requests.findMany({
+    const leave_requests = await prisma.leave_requests.findMany({
       skip: cursor ? 1 : 0,
       take: limitNumber,
       cursor: last_cursor_id ? { id: last_cursor_id as string } : undefined,
@@ -656,11 +656,11 @@ export const getAllLeaveRequestsForAdmin = async (
 
     return res.status(200).json({
       success: true, data: {
-        leaveRequests,
+        leave_requests,
         pagination: {
           limit,
           total,
-          totalPages: Math.ceil(total / limitNumber)
+          total_pages: Math.ceil(total / limitNumber)
         }
       }
     });
@@ -1281,19 +1281,19 @@ export const getEmployeesAttendanceSummary = async (
           },
         });
 
-        let todayStatus = "Absent";
-        if (onLeaveToday) todayStatus = "OnLeave"
-        else if (todayAttendance?.status === "Late") todayStatus = "Late";
-        else if (todayAttendance?.status === "Present") todayStatus = "Present";
+        let today_status = "Absent";
+        if (onLeaveToday) today_status = "OnLeave"
+        else if (todayAttendance?.status === "Late") today_status = "Late";
+        else if (todayAttendance?.status === "Present") today_status = "Present";
 
-        const totalLeaves = await prisma.leave_requests.count({
+        const total_leaves = await prisma.leave_requests.count({
           where: {
             employee_id: emp.id,
             status: "Approved",
           },
         });
 
-        const lateArrivals = await prisma.attendance_records.count({
+        const late_arrivals = await prisma.attendance_records.count({
           where: {
             employee_id: emp.id,
             status: "Late",
@@ -1304,9 +1304,9 @@ export const getEmployeesAttendanceSummary = async (
           full_name: emp.user.full_name,
           email: emp.user.email,
           department: emp.department?.name || "N/A",
-          todayStatus,
-          totalLeaves,
-          lateArrivals
+          today_status,
+          total_leaves,
+          late_arrivals
         };
       })
     );
@@ -1317,7 +1317,7 @@ export const getEmployeesAttendanceSummary = async (
       pagination: {
         limit,
         total,
-        totalPages: Math.ceil(total / limitNumber)
+        total_pages: Math.ceil(total / limitNumber)
       }
     });
   } catch (error) {
