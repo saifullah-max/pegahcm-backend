@@ -5,7 +5,6 @@ import prisma from '../utils/Prisma';
 export const create_bid = async (req: Request, res: Response) => {
     try {
         const {
-            created_at,
             url,
             profile,
             connects,
@@ -23,7 +22,6 @@ export const create_bid = async (req: Request, res: Response) => {
 
         const newBid = await prisma.bids.create({
             data: {
-                created_at: new Date(created_at),
                 url,
                 profile,
                 connects: parseInt(connects),

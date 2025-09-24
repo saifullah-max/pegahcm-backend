@@ -7,6 +7,7 @@ export const create_target = async (req: Request, res: Response) => {
         const { opening_target, closing_target, daily_bids, employee_id } = req.body;
 
         let employeeData = {};
+
         if (employee_id) {
             const employee = await prisma.employees.findUnique({
                 where: { id: employee_id },
@@ -23,6 +24,8 @@ export const create_target = async (req: Request, res: Response) => {
                 return res.status(400).json({ error: 'Employee does not belong to the Sales department' });
             }
             employeeData = { connect: { id: employee_id } };
+        } else {
+            return res.status(404).json({ error: "No Employee Id Found" })
         }
 
         const newTarget = await prisma.target.create({
@@ -31,6 +34,7 @@ export const create_target = async (req: Request, res: Response) => {
                 closing_target: parseInt(closing_target),
                 daily_bids: parseInt(daily_bids),
                 employee: employeeData,
+                created_by: employee_id
             },
         });
 
@@ -78,6 +82,7 @@ export const update_target = async (req: Request, res: Response) => {
         const { opening_target, closing_target, daily_bids, employee_id } = req.body;
 
         let employeeData = {};
+
         if (employee_id) {
             const employee = await prisma.employees.findUnique({
                 where: { id: employee_id },
@@ -105,6 +110,7 @@ export const update_target = async (req: Request, res: Response) => {
                 closing_target: closing_target ? parseInt(closing_target) : undefined,
                 daily_bids: daily_bids ? parseInt(daily_bids) : undefined,
                 employee: Object.keys(employeeData).length > 0 ? employeeData : undefined,
+                updated_by: employee_id
             },
         });
 
