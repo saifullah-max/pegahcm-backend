@@ -29,296 +29,372 @@ enum NotificationScope {
 }
 
 model sub_roles {
-  id          String              @id @default(cuid())
-  name        String              @unique
+  id          String                 @id @default(cuid())
+  name        String                 @unique
   description String?
-  users       users[]              @relation("UserSubRole")
+  users       users[]                @relation("UserSubRole")
   level       Int
   permissions sub_role_permissions[] // 👈 This is the join relation
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model permissions {
-  id          String              @id @default(uuid())
+  id          String                 @id @default(uuid())
   module      String
   action      String
   description String?
   roles       role_permissions[]
   users       user_permissions[]
-  sub_roles    sub_role_permissions[] // 👈 Join relation only
+  sub_roles   sub_role_permissions[] // 👈 Join relation only
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 
   @@unique([module, action], name: "module_action")
 }
 
 model role_permissions {
-  id           String     @id @default(uuid())
-  role         roles       @relation(fields: [role_id], references: [id])
-  role_id       String
-  permission   permissions @relation(fields: [permission_id], references: [id])
+  id         String      @id @default(uuid())
+  role       roles       @relation(fields: [role_id], references: [id])
+  role_id    String
+  permission permissions @relation(fields: [permission_id], references: [id])
+
+  created_at    DateTime? @default(now())
+  created_by    String?
+  updated_at    DateTime? @updatedAt
+  updated_by    String?
   permission_id String
 
   @@unique([role_id, permission_id], name: "roleId_permissionId")
 }
 
 model sub_role_permissions {
-  id           String @id @default(cuid())
-  sub_role_id    String
+  id            String @id @default(cuid())
+  sub_role_id   String
   permission_id String
 
-  sub_role    sub_roles    @relation(fields: [sub_role_id], references: [id])
+  sub_role   sub_roles   @relation(fields: [sub_role_id], references: [id])
   permission permissions @relation(fields: [permission_id], references: [id])
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 
   @@unique([sub_role_id, permission_id], name: "subRole_permission")
 }
 
 model user_permissions {
-  id           String     @id @default(uuid())
-  user         users       @relation(fields: [user_id], references: [id])
-  user_id       String
-  permission   permissions @relation(fields: [permission_id], references: [id])
+  id         String      @id @default(uuid())
+  user       users       @relation(fields: [user_id], references: [id])
+  user_id    String
+  permission permissions @relation(fields: [permission_id], references: [id])
+
+  created_at    DateTime? @default(now())
+  created_by    String?
+  updated_at    DateTime? @updatedAt
+  updated_by    String?
   permission_id String
 
   @@unique([user_id, permission_id], name: "userId_permissionId")
 }
 
 model users {
-  id                   String    @id @default(uuid())
-  username             String    @unique
-  password_hash         String
-  email                String    @unique
-  full_name             String
-  role                 roles      @relation(fields: [role_id], references: [id])
-  role_id               String
-  status               String
-  date_joined           DateTime  @default(now())
-  last_login            DateTime?
+  id                     String     @id @default(uuid())
+  username               String     @unique
+  password_hash          String
+  email                  String     @unique
+  full_name              String
+  role                   roles      @relation(fields: [role_id], references: [id])
+  role_id                String
+  status                 String
+  date_joined            DateTime   @default(now())
+  last_login             DateTime?
   sub_role_id            String?
-  sub_role              sub_roles?  @relation("UserSubRole", fields: [sub_role_id], references: [id])
-  role_tag              RoleTag?
-  reset_password_token   String?   @unique
+  sub_role               sub_roles? @relation("UserSubRole", fields: [sub_role_id], references: [id])
+  role_tag               RoleTag?
+  reset_password_token   String?    @unique
   reset_password_expires DateTime?
-  employee             employees?
+  employee               employees?
 
-  approved_leaves        leave_requests[]         @relation("ApprovedBy")
-  approved_vacations     vacations[]             @relation("ApprovedBy")
+  approved_leaves        leave_requests[]          @relation("ApprovedBy")
+  approved_vacations     vacations[]               @relation("ApprovedBy")
   assigned_onboarding    onboarding_processes[]    @relation("AssignedHR")
-  processed_resignations resignations[]          @relation("ProcessedBy")
-  initiated_hr_processes  hr_processes[]            @relation("InitiatedBy")
+  processed_resignations resignations[]            @relation("ProcessedBy")
+  initiated_hr_processes hr_processes[]            @relation("InitiatedBy")
   user_permission        user_permissions[]
-  SystemLog             system_logs[]
-  BulkUpload            bulk_uploads[]
-  Resignation           resignations[]
-  Notification          notifications[]
-  AttendanceFixRequest  attendance_fix_requests[]
-  UserNotification      user_notifications[]
+  SystemLog              system_logs[]
+  BulkUpload             bulk_uploads[]
+  Resignation            resignations[]
+  Notification           notifications[]
+  AttendanceFixRequest   attendance_fix_requests[]
+  UserNotification       user_notifications[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model employees {
-  id                    String         @id @default(uuid())
-  user                  users           @relation(fields: [user_id], references: [id])
-  user_id                String         @unique
-  employee_number        String         @unique
-  department            departments?    @relation(fields: [department_id], references: [id])
-  department_id          String?
-  position              String
+  id                      String           @id @default(uuid())
+  user                    users            @relation(fields: [user_id], references: [id])
+  user_id                 String           @unique
+  employee_number         String           @unique
+  department              departments?     @relation(fields: [department_id], references: [id])
+  department_id           String?
+  position                String
   date_of_birth           DateTime
-  hire_date              DateTime
-  status                String
-  father_name            String?
-  manager               employees?      @relation("EmployeeManager", fields: [manager_id], references: [id])
-  manager_id             String?
-  skills                String? // JSON string of skills array
-  sub_department         sub_departments? @relation(fields: [sub_department_id], references: [id])
+  hire_date               DateTime
+  status                  String
+  father_name             String?
+  manager                 employees?       @relation("EmployeeManager", fields: [manager_id], references: [id])
+  manager_id              String?
+  skills                  String? // JSON string of skills array
+  sub_department          sub_departments? @relation(fields: [sub_department_id], references: [id])
   sub_department_id       String?
-  address               String
+  address                 String
   emergency_contact_name  String
   emergency_contact_phone String
-  gender                String
-  salary                Decimal        @db.Decimal(10, 2)
-  work_location          String // Onsite, Remote, Hybrid
-  phone_number           String?
-  shift_id               String?
-  shift                 shifts?         @relation(fields: [shift_id], references: [id])
+  gender                  String
+  salary                  Decimal          @db.Decimal(10, 2)
+  work_location           String // Onsite, Remote, Hybrid
+  phone_number            String?
+  shift_id                String?
+  shift                   shifts?          @relation(fields: [shift_id], references: [id])
 
   profile_image_url String?
-  images          Json? // Stores array of image objects [{name, url, mimeType, uploadedAt}]
-  documents       Json? // Stores array of document objects [{name, url, mimeType, type, uploadedAt, categoryId}]
+  images            Json? // Stores array of image objects [{name, url, mimeType, uploadedAt}]
+  documents         Json? // Stores array of document objects [{name, url, mimeType, type, uploadedAt, categoryId}]
 
-  managed_employees     employees[]             @relation("EmployeeManager")
-  attendance_records    attendance_records[]
-  leave_requests        leave_requests[]
+  managed_employees    employees[]               @relation("EmployeeManager")
+  attendance_records   attendance_records[]
+  leave_requests       leave_requests[]
   vacations            vacations[]
-  onboarding_processes  onboarding_processes[]
+  onboarding_processes onboarding_processes[]
   resignations         resignations[]
   assets               assets[]
-  hr_processes          hr_processes[]
+  hr_processes         hr_processes[]
   LeaveBalance         leave_balances[]
   AttendanceFixRequest attendance_fix_requests[]
-  salary_details        salary_details[]
-  employee_documents     employee_documents[]
-  employee_images        employee_images[]
-  targets                target[] // Add this line
+  salary_details       salary_details[]
+  employee_documents   employee_documents[]
+  employee_images      employee_images[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
+
+  target target[]
 }
 
 model roles {
-  id             String           @id @default(uuid())
-  name           String           @unique
-  description    String?
-  users          users[]
+  id              String             @id @default(uuid())
+  name            String             @unique
+  description     String?
+  users           users[]
   role_permission role_permissions[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model sub_departments {
-  id           String     @id @default(uuid())
-  name         String     @unique
-  description  String?
-  department   departments @relation(fields: [department_id], references: [id])
+  id            String      @id @default(uuid())
+  name          String      @unique
+  description   String?
+  department    departments @relation(fields: [department_id], references: [id])
   department_id String
-  employees    employees[]
+  employees     employees[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model departments {
-  id             String          @id @default(uuid())
-  name           String          @unique
-  description    String?
-  employees      employees[]
+  id              String            @id @default(uuid())
+  name            String            @unique
+  description     String?
+  employees       employees[]
   sub_departments sub_departments[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model attendance_records {
-  id                   String                 @id @default(uuid())
-  employee             employees               @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  employee_id           String
+  id                   String                    @id @default(uuid())
+  employee             employees                 @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id          String
   date                 DateTime
-  clock_in              DateTime
-  clock_out             DateTime?
-  shift                shifts                  @relation(fields: [shift_id], references: [id])
-  shift_id              String
-  absence_reason        String?
-  net_working_minutes    Int? // <-- Add this
-  late_minutes          Int?
+  clock_in             DateTime
+  clock_out            DateTime?
+  shift                shifts                    @relation(fields: [shift_id], references: [id])
+  shift_id             String
+  absence_reason       String?
+  net_working_minutes  Int? // <-- Add this
+  late_minutes         Int?
   status               String
   breaks               breaks[]
   AttendanceFixRequest attendance_fix_requests[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model shifts {
-  id                String             @id @default(uuid())
-  name              String             @unique
+  id                 String               @id @default(uuid())
+  name               String               @unique
   start_time         DateTime
   end_time           DateTime
-  description       String?
+  description        String?
   attendance_records attendance_records[]
-  employees         employees[]
+  employees          employees[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model leave_requests {
-  id           String    @id @default(uuid())
-  employee     employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  employee_id   String
-  leave_type    leave_types @relation(fields: [leave_type_id], references: [id])
+  id             String      @id @default(uuid())
+  employee       employees   @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id    String
+  leave_type     leave_types @relation(fields: [leave_type_id], references: [id])
   leave_type_id  String
-  start_date    DateTime
-  end_date      DateTime
-  reason       String
-  status       String
-  requested_at  DateTime  @default(now())
-  approved_by   users?     @relation("ApprovedBy", fields: [approved_by_id], references: [id])
+  start_date     DateTime
+  end_date       DateTime
+  reason         String
+  status         String
+  requested_at   DateTime    @default(now())
+  approved_by    users?      @relation("ApprovedBy", fields: [approved_by_id], references: [id])
   approved_by_id String?
-  approved_at   DateTime?
+  approved_at    DateTime?
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model leave_types {
-  id            String         @id @default(uuid())
-  name          String         @unique
-  description   String?
-  is_paid        Boolean        @default(true)
+  id             String           @id @default(uuid())
+  name           String           @unique
+  description    String?
+  is_paid        Boolean          @default(true)
   leave_requests leave_requests[]
-  LeaveBalance  leave_balances[]
+  LeaveBalance   leave_balances[]
   total_days     Int
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model breaks {
-  id                 String           @id @default(uuid())
-  attendance_record   attendance_records @relation(fields: [attendance_record_id], references: [id])
+  id                   String             @id @default(uuid())
+  attendance_record    attendance_records @relation(fields: [attendance_record_id], references: [id])
   attendance_record_id String
-  break_start         DateTime
-  break_end           DateTime?
+  break_start          DateTime
+  break_end            DateTime?
   break_type_id        String?
-  break_type          break_types?       @relation(fields: [break_type_id], references: [id])
+  break_type           break_types?       @relation(fields: [break_type_id], references: [id])
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model notifications {
-  id              String             @id @default(uuid())
-  title           String
-  message         String
-  type            String
-  created_at       DateTime           @default(now())
-  visibility_level Int?
-  department_id    String?
+  id                String             @id @default(uuid())
+  title             String
+  message           String
+  type              String
+  visibility_level  Int?
+  department_id     String?
   sub_department_id String?
-  employee_id      String?
-  scope           NotificationScope?
+  employee_id       String?
+  scope             NotificationScope?
 
   user_notifications user_notifications[] // 👈 new relation
-  User              users?              @relation(fields: [user_id], references: [id])
+  User               users?               @relation(fields: [user_id], references: [id])
   user_id            String?
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model user_notifications {
-  id             String       @id @default(uuid())
-  user           users         @relation(fields: [user_id], references: [id])
+  id              String        @id @default(uuid())
+  user            users         @relation(fields: [user_id], references: [id])
   user_id         String
-  notification   notifications @relation(fields: [notification_id], references: [id])
+  notification    notifications @relation(fields: [notification_id], references: [id])
   notification_id String
-  read           Boolean      @default(false)
+  read            Boolean       @default(false)
   read_at         DateTime?
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model attendance_fix_requests {
-  id         String   @id @default(uuid())
-  employee   employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  employee    employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
   employee_id String
 
-  request_type       String // "CheckIn", "CheckOut", "Both", etc.
+  request_type        String // "CheckIn", "CheckOut", "Both", etc.
   requested_check_in  DateTime? // Optional: requested fixed clockIn
   requested_check_out DateTime? // Optional: requested fixed clockOut
-  requested_breaks   Json? // Optional JSON for break updates if needed
+  requested_breaks    Json? // Optional JSON for break updates if needed
 
-  reason      String
-  status      String // "Pending", "Approved", "Rejected"
+  reason       String
+  status       String // "Pending", "Approved", "Rejected"
   requested_at DateTime @default(now())
 
-  reviewed_by   users?     @relation(fields: [reviewed_by_id], references: [id])
+  reviewed_by    users?    @relation(fields: [reviewed_by_id], references: [id])
   reviewed_by_id String?
-  reviewed_at   DateTime?
+  reviewed_at    DateTime?
 
-  remarks            String? // Optional comment from reviewer
-  AttendanceRecord   attendance_records? @relation(fields: [attendance_record_id], references: [id])
+  remarks              String? // Optional comment from reviewer
+  AttendanceRecord     attendance_records? @relation(fields: [attendance_record_id], references: [id])
   attendance_record_id String?
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model salary_details {
-  id         String   @id @default(uuid())
-  employee   employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  employee    employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
   employee_id String
 
   base_salary Decimal @db.Decimal(10, 2)
-  deductions Decimal @default(0.00) @db.Decimal(10, 2)
-  bonuses    Decimal @default(0.00) @db.Decimal(10, 2)
+  deductions  Decimal @default(0.00) @db.Decimal(10, 2)
+  bonuses     Decimal @default(0.00) @db.Decimal(10, 2)
   total_pay   Decimal @db.Decimal(10, 2)
 
   allowances allowances[] // 👈 One-to-many
@@ -326,56 +402,68 @@ model salary_details {
   effective_from DateTime
   effective_to   DateTime?
 
-  created_by String
+  created_by String?
   updated_by String?
 
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
-
+  created_at DateTime? @default(now())
+  updated_at DateTime? @updatedAt
 }
 
 model allowances {
-  id       String       @id @default(uuid())
-  salary   salary_details @relation(fields: [salary_id], references: [id], onDelete: Cascade)
+  id        String         @id @default(uuid())
+  salary    salary_details @relation(fields: [salary_id], references: [id], onDelete: Cascade)
   salary_id String
 
   type   String
   amount Decimal @db.Decimal(10, 2)
 
-  created_at DateTime @default(now())
-
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model document_categories {
-  id          String             @id @default(uuid())
-  name        String             @unique
+  id          String               @id @default(uuid())
+  name        String               @unique
   description String?
   documents   employee_documents[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model employee_documents {
-  id         String   @id @default(uuid())
-  employee   employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  employee    employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
   employee_id String
-  name       String
-  url        String // File path or external link
+  name        String
+  url         String // File path or external link
   mime_type   String
-  uploaded_at DateTime @default(now())
-  type       String // e.g. "resume", "certificate", etc.
+  uploaded_at DateTime  @default(now())
+  type        String // e.g. "resume", "certificate", etc.
 
   category_id String?
-  category   document_categories? @relation(fields: [category_id], references: [id])
+  category    document_categories? @relation(fields: [category_id], references: [id])
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model system_settings {
-  id          String   @id @default(uuid())
-  key         String   @unique
+  id          String  @id @default(uuid())
+  key         String  @unique
   value       String // store as string or JSON
   description String?
-  updated_at   DateTime @updatedAt
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model holidays {
@@ -384,173 +472,228 @@ model holidays {
   date        DateTime
   description String?
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model system_logs {
   id        String   @id @default(uuid())
-  user      users?    @relation(fields: [user_id], references: [id])
-  user_id    String?
+  user      users?   @relation(fields: [user_id], references: [id])
+  user_id   String?
   action    String // e.g., "Updated Shift", "Approved Leave"
   module    String // e.g., "Attendance"
   metadata  String? // optional JSON (e.g. { recordId: "xyz" })
   timestamp DateTime @default(now())
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model leave_balances {
-  id          String    @id @default(uuid())
-  employee    employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  employee_id  String
-  leave_type   leave_types @relation(fields: [leave_type_id], references: [id])
+  id            String      @id @default(uuid())
+  employee      employees   @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id   String
+  leave_type    leave_types @relation(fields: [leave_type_id], references: [id])
   leave_type_id String
-  balance     Int
-  updated_at   DateTime  @updatedAt
+  balance       Int
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model bulk_uploads {
-  id           String   @id @default(uuid())
-  uploaded_by   users     @relation(fields: [uploaded_by_id], references: [id])
+  id             String @id @default(uuid())
+  uploaded_by    users  @relation(fields: [uploaded_by_id], references: [id])
   uploaded_by_id String
-  file_url      String
-  type         String // e.g., "attendance"
-  status       String // Processed, Failed, Pending
-  uploaded_at   DateTime @default(now())
+  file_url       String
+  type           String // e.g., "attendance"
+  status         String // Processed, Failed, Pending
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model employee_images {
-  id         String   @id @default(uuid())
-  employee   employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  employee    employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
   employee_id String
-  name       String
-  url        String // File path or external link (Cloudinary, S3, etc.)
+  name        String
+  url         String // File path or external link (Cloudinary, S3, etc.)
   mime_type   String
-  uploaded_at DateTime @default(now())
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model break_types {
-  id          String  @id @default(uuid())
-  name        String  @unique
+  id          String   @id @default(uuid())
+  name        String   @unique
   duration    Int // duration in minutes (optional for fixed-length breaks)
   description String?
   breaks      breaks[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model vacations {
-  id           String    @id @default(uuid())
-  employee     employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  employee_id   String
-  start_date    DateTime
-  end_date      DateTime
-  vacation_type String
-  status       String
-  approved_by   users      @relation("ApprovedBy", fields: [approved_by_id], references: [id])
+  id             String    @id @default(uuid())
+  employee       employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id    String
+  start_date     DateTime
+  end_date       DateTime
+  vacation_type  String
+  status         String
+  approved_by    users     @relation("ApprovedBy", fields: [approved_by_id], references: [id])
   approved_by_id String
-  approved_at   DateTime?
+  approved_at    DateTime?
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model onboarding_processes {
-  id           String    @id @default(uuid())
-  employee     employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  employee_id   String    @unique
-  start_date    DateTime
-  end_date      DateTime?
-  status       String
-  assigned_hr   users      @relation("AssignedHR", fields: [assigned_hr_id], references: [id])
+  id             String    @id @default(uuid())
+  employee       employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id    String    @unique
+  start_date     DateTime
+  end_date       DateTime?
+  status         String
+  assigned_hr    users     @relation("AssignedHR", fields: [assigned_hr_id], references: [id])
   assigned_hr_id String
-  notes        String?
+  notes          String?
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model resignations {
-  id                     String             @id @default(uuid())
-  employee               employees           @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  employee_id             String
-  resignation_date        DateTime
+  id                       String               @id @default(uuid())
+  employee                 employees            @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id              String
+  resignation_date         DateTime
   last_working_day         DateTime
-  reason                 String
-  review_comments         String?
-  status                 String
-  clearance_status        String
+  reason                   String
+  review_comments          String?
+  status                   String
+  clearance_status         String
   asset_return_status      String
-  processed_by            users?              @relation("ProcessedBy", fields: [processed_by_id], references: [id])
+  processed_by             users?               @relation("ProcessedBy", fields: [processed_by_id], references: [id])
   processed_by_id          String?
-  processed_at            DateTime?
-  clearance_responsible   users?              @relation(fields: [clearance_responsible_id], references: [id])
+  processed_at             DateTime?
+  clearance_responsible    users?               @relation(fields: [clearance_responsible_id], references: [id])
   clearance_responsible_id String?
-  assets                 resignation_assets[]
+  assets                   resignation_assets[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model assets {
-  id                String             @id @default(uuid())
-  name              String
-  description       String?
-  serial_number      String             @unique
-  assigned_to        employees           @relation(fields: [assigned_to_id], references: [id], onDelete: Cascade)
-  assigned_to_id      String
-  status            String
+  id                 String               @id @default(uuid())
+  name               String
+  description        String?
+  serial_number      String               @unique
+  assigned_to        employees            @relation(fields: [assigned_to_id], references: [id], onDelete: Cascade)
+  assigned_to_id     String
+  status             String
   resignation_assets resignation_assets[]
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model resignation_assets {
-  id            String      @id @default(uuid())
-  resignation   resignations @relation(fields: [resignation_id], references: [id])
+  id             String       @id @default(uuid())
+  resignation    resignations @relation(fields: [resignation_id], references: [id])
   resignation_id String
-  asset         assets       @relation(fields: [asset_id], references: [id])
+  asset          assets       @relation(fields: [asset_id], references: [id])
   asset_id       String
   return_status  String
   return_date    DateTime?
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model hr_processes {
-  id            String    @id @default(uuid())
-  process_type   String
-  employee      employees  @relation(fields: [employee_id], references: [id], onDelete: Cascade)
-  employee_id    String
-  initiated_by   users      @relation("InitiatedBy", fields: [initiated_by_id], references: [id])
+  id              String    @id @default(uuid())
+  process_type    String
+  employee        employees @relation(fields: [employee_id], references: [id], onDelete: Cascade)
+  employee_id     String
+  initiated_by    users     @relation("InitiatedBy", fields: [initiated_by_id], references: [id])
   initiated_by_id String
-  start_date     DateTime
-  end_date       DateTime?
-  status        String
-  notes         String?
+  start_date      DateTime
+  end_date        DateTime?
+  status          String
+  notes           String?
 
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model bids {
-  id              String    @id @default(cuid())
-  created_at      DateTime  @default(now())
-  url           String
-  profile         String
-  connects        Int
+  id               String    @id @default(cuid())
+  url              String
+  profile          String
+  connects         Int
   boosted_connects Int
-  total           Int
-  cost            String
+  total            Int
+  cost             String
   bid_status       String
   id_name          String
-  description     String?
+  description      String?
   client_name      String
   project_type     String
-  price           String
-  attend_by      String
-  project        projects? @relation("BidToProject")
+  price            String
+  attend_by        String
+  project          projects? @relation("BidToProject")
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model projects {
-  id          String     @id @default(uuid())
+  id          String       @id @default(uuid())
   name        String
   description String?
   start_date  DateTime
   end_date    DateTime?
   status      String
-  bid_id      String?    @unique
-  bid         bids?       @relation("BidToProject", fields: [bid_id], references: [id])
+  bid_id      String?      @unique
+  bid         bids?        @relation("BidToProject", fields: [bid_id], references: [id])
   milestones  milestones[]
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model milestones {
@@ -560,16 +703,24 @@ model milestones {
   due_date    DateTime
   status      String
   project_id  String
-  project     projects  @relation(fields: [project_id], references: [id])
+  project     projects @relation(fields: [project_id], references: [id])
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
 
 model target {
-  id              String    @id @default(uuid())
-  opening_target  Int
-  closing_target  Int
-  daily_bids      Int
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @updatedAt
-  employee_id     String?
-  employee        employees? @relation(fields: [employee_id], references: [id])
+  id             String     @id @default(uuid())
+  opening_target Int
+  closing_target Int
+  daily_bids     Int
+  employee_id    String?
+  employee       employees? @relation(fields: [employee_id], references: [id])
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
 }
