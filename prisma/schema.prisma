@@ -663,7 +663,7 @@ model bids {
   connects         Int
   boosted_connects Int
   total            Int
-  cost             String
+  cost             Int
   bid_status       String
   id_name          String
   description      String?
