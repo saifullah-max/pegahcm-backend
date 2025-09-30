@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
+import { connect } from 'http2';
 
 const getFileUrl = (req: Request, folder: string, filename: string) => {
     const baseUrl =
@@ -84,8 +85,18 @@ export const create_project = async (req: Request, res: Response) => {
 export const get_all_projects = async (req: Request, res: Response) => {
     try {
         const projects = await prisma.projects.findMany({
-            include: { bid: true, milestones: true },
+            include: {
+                sales_person: {
+                    select: { id: true, user: true }, // get only needed fields
+                },
+                assignee: {
+                    select: { id: true, user: true },
+                },
+                bid: true,
+                milestones: true,
+            },
         });
+        ;
         res.status(200).json(projects);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
