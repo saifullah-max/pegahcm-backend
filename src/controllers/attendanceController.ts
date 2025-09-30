@@ -722,7 +722,7 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
               },
             },
             department: true,
-            sub_department: true,
+            // sub_department: true,
           },
         },
       },

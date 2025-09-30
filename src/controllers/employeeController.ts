@@ -405,7 +405,7 @@ export const listEmployees = async (req: Request, res: Response) => {
           },
         },
         department: { select: { name: true } },
-        sub_department: { select: { name: true } },
+        // sub_department: { select: { name: true } },
         manager: { select: { user: { select: { full_name: true } } } },
       },
       orderBy: { hire_date: "desc" },

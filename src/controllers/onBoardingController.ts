@@ -71,7 +71,7 @@ export const getAllHREmployees = async (req: Request, res: Response) => {
                     },
                 },
                 department: true,
-                sub_department: true,
+                // sub_department: true,
             },
         });
 

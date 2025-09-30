@@ -417,7 +417,7 @@ export const editFixRequest = async (req: Request, res: Response) => {
                     include: {
                         user: true,
                         department: true,
-                        sub_department: true
+                        // sub_department: true
                     }
                 }
             }

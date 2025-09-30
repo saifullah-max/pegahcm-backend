@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
 
-// Create a new department
+// Create a new department or sub-department
 export const createDepartment = async (req: Request, res: Response) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, parent_id } = req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -28,7 +28,8 @@ export const createDepartment = async (req: Request, res: Response) => {
     const department = await prisma.departments.create({
       data: {
         name,
-        description
+        description,
+        parent_id: parent_id || null // null for top-level
       }
     });
 
@@ -45,10 +46,11 @@ export const createDepartment = async (req: Request, res: Response) => {
   }
 };
 
-// Get all departments
+// Get all top-level departments with sub-departments
 export const getAllDepartments = async (req: Request, res: Response) => {
   try {
     const departments = await prisma.departments.findMany({
+      where: { parent_id: null }, // only top-level
       include: {
         sub_departments: true
       }
@@ -75,7 +77,8 @@ export const getDepartmentById = async (req: Request, res: Response) => {
     const department = await prisma.departments.findUnique({
       where: { id },
       include: {
-        sub_departments: true
+        sub_departments: true,
+        employees: true
       }
     });
 
@@ -99,11 +102,11 @@ export const getDepartmentById = async (req: Request, res: Response) => {
   }
 };
 
-// Update department
+// Update department or sub-department
 export const updateDepartment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { name, description, parent_id } = req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -112,7 +115,6 @@ export const updateDepartment = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if department exists
     const existingDepartment = await prisma.departments.findUnique({
       where: { id }
     });
@@ -124,7 +126,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if new name conflicts with other departments
+    // Check if new name conflicts
     if (name !== existingDepartment.name) {
       const nameConflict = await prisma.departments.findUnique({
         where: { name }
@@ -142,7 +144,8 @@ export const updateDepartment = async (req: Request, res: Response) => {
       where: { id },
       data: {
         name,
-        description
+        description,
+        parent_id: parent_id || null
       }
     });
 
@@ -159,12 +162,11 @@ export const updateDepartment = async (req: Request, res: Response) => {
   }
 };
 
-// Delete department
+// Delete department or sub-department
 export const deleteDepartment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
-    // Check if department exists
     const department = await prisma.departments.findUnique({
       where: { id },
       include: {
@@ -180,7 +182,7 @@ export const deleteDepartment = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if department has employees or sub-departments
+    // Prevent deletion if has employees or sub-departments
     if (department.employees.length > 0 || department.sub_departments.length > 0) {
       return res.status(400).json({
         success: false,
@@ -188,9 +190,7 @@ export const deleteDepartment = async (req: Request, res: Response) => {
       });
     }
 
-    await prisma.departments.delete({
-      where: { id }
-    });
+    await prisma.departments.delete({ where: { id } });
 
     res.status(204).send();
   } catch (error) {
@@ -200,4 +200,4 @@ export const deleteDepartment = async (req: Request, res: Response) => {
       message: 'Failed to delete department'
     });
   }
-}; 
+};

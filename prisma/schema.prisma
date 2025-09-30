@@ -147,9 +147,10 @@ model employees {
   user                    users            @relation(fields: [user_id], references: [id])
   user_id                 String           @unique
   employee_number         String           @unique
-  department              departments?     @relation(fields: [department_id], references: [id])
+  department              departments? @relation(fields: [department_id], references: [id])
   department_id           String?
   position                String
+  sub_department_id       String?  
   date_of_birth           DateTime
   hire_date               DateTime
   status                  String
@@ -157,8 +158,6 @@ model employees {
   manager                 employees?       @relation("EmployeeManager", fields: [manager_id], references: [id])
   manager_id              String?
   skills                  String? // JSON string of skills array
-  sub_department          sub_departments? @relation(fields: [sub_department_id], references: [id])
-  sub_department_id       String?
   address                 String
   emergency_contact_name  String
   emergency_contact_phone String
@@ -210,26 +209,17 @@ model roles {
   updated_by String?
 }
 
-model sub_departments {
-  id            String      @id @default(uuid())
-  name          String      @unique
-  description   String?
-  department    departments @relation(fields: [department_id], references: [id])
-  department_id String
-  employees     employees[]
-
-  created_at DateTime? @default(now())
-  created_by String?
-  updated_at DateTime? @updatedAt
-  updated_by String?
-}
-
 model departments {
-  id              String            @id @default(uuid())
-  name            String            @unique
-  description     String?
-  employees       employees[]
-  sub_departments sub_departments[]
+  id          String       @id @default(uuid())
+  name        String       @unique
+  description String?
+
+  // Self-relation for hierarchy
+  parent_id   String?      // Null for top-level departments
+  parent      departments? @relation("SubDepartments", fields: [parent_id], references: [id])
+  sub_departments departments[] @relation("SubDepartments")
+
+  employees   employees[]  // Employees belonging to this department
 
   created_at DateTime? @default(now())
   created_by String?

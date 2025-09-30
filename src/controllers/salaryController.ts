@@ -296,7 +296,9 @@ export const getSalarySlip = async (req: Request, res: Response) => {
         const employee = await prisma.employees.findUnique({
             where: { id: employee_id }
             ,
-            include: { user: true, department: true, sub_department: true, salary_details: { include: { allowances: true } } }
+            include: { user: true, department: true, 
+                // sub_department: true, 
+                salary_details: { include: { allowances: true } } }
         });
 
         if (!employee) return res.status(404).send('Employee not found');
@@ -344,7 +346,7 @@ export const getSalarySlip = async (req: Request, res: Response) => {
         doc.text(`Employee No: ${employee.employee_number}`);
         doc.text(`Designation: ${employee.position}`);
         doc.text(`Department: ${employee.department?.name || 'N/A'}`);
-        doc.text(`Sub Department: ${employee.sub_department?.name || 'N/A'}`);
+        // doc.text(`Sub Department: ${employee.sub_department?.name || 'N/A'}`);
         doc.text(`Hire Date: ${employee.hire_date.toLocaleDateString()}`);
         doc.text(`Work Location: ${employee.work_location}`);
         doc.moveDown();

@@ -10,7 +10,7 @@ import subRoleRoutes from './routes/subRolesRoutes'
 import employeeRoutes from './routes/employeeRoutes';
 import shiftRoutes from './routes/shift.routes';
 import departmentRoutes from './routes/department.routes';
-import subDepartmentRoutes from './routes/subDepartment.routes';
+// import subDepartmentRoutes from './routes/subDepartment.routes';
 import userRoutes from './routes/userRoutes'
 import attendanceRoutes from './routes/attendanceRoutes'
 import adminAttendanceRoutes from './routes/adminAttendanceRoutes';
@@ -49,7 +49,7 @@ app.use('/api/sub-roles', subRoleRoutes)
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shifts', shiftRoutes);
 app.use('/api/departments', departmentRoutes);
-app.use('/api/sub-departments', subDepartmentRoutes);
+// app.use('/api/sub-departments', subDepartmentRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/attendance', attendanceRoutes)
 app.use('/api/fix-attendance', fixAttendanceRoutes)
