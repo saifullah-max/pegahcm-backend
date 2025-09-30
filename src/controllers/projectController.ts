@@ -1,27 +1,84 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
 
-// Create a new project
+const getFileUrl = (req: Request, folder: string, filename: string) => {
+    const baseUrl =
+        process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+    return `${baseUrl}/uploads/${folder}/${filename}`;
+};
+
 export const create_project = async (req: Request, res: Response) => {
     try {
-        const { name, description, start_date, end_date, status, bid_id } = req.body;
+        const {
+            client_name,
+            name,
+            upwork_id,
+            description,
+            start_date,
+            end_date,
+            deadline,
+            number_of_hours,
+            sales_person_id,
+            assignee_id,
+            status,
+            bid_id,
+            documents,
+        } = req.body;
+
+        const empId = await prisma.employees.findUnique({
+            where: {
+                user_id: req.user?.userId
+            }
+        })
+
+        const files = (req.files || {}) as {
+            [fieldname: string]: Express.Multer.File[];
+        };
+
+        const documentsObj =
+            files.documents?.map((file) => ({
+                name: file.originalname,
+                url: getFileUrl(req, "documents", file.filename),
+                mime_type: file.mimetype,
+                type: file.mimetype,
+                uploaded_at: new Date(),
+            })) || [];
 
         const newProject = await prisma.projects.create({
             data: {
+                client_name,
                 name,
+                upwork_id,
                 description,
                 start_date: new Date(start_date),
                 end_date: end_date ? new Date(end_date) : undefined,
+                deadline: deadline ? new Date(deadline) : undefined,
+                number_of_hours,
                 status,
-                bid: bid_id ? { connect: { id: bid_id } } : undefined,
+                sales_person: sales_person_id
+                    ? { connect: { id: sales_person_id } }
+                    : undefined,
+                assignee: assignee_id
+                    ? { connect: { id: assignee_id } }
+                    : undefined,
+                bid: bid_id
+                    ? { connect: { id: bid_id } }
+                    : undefined,
+                documents: documentsObj,
+                created_by: empId?.id
             },
         });
 
-        res.status(201).json(newProject);
+        res.status(201).json({
+            success: true,
+            message: "Project created successfully.",
+            newProject
+        });
     } catch (error: any) {
         res.status(400).json({ error: error.message });
     }
 };
+
 
 // Get all projects
 export const get_all_projects = async (req: Request, res: Response) => {

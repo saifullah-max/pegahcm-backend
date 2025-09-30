@@ -192,7 +192,9 @@ model employees {
   updated_at DateTime? @updatedAt
   updated_by String?
 
-  target target[]
+  target        target[]
+  salesProjects projects[] @relation("ProjectToSalesPerson")
+  assigned      projects[] @relation("projectToAssignee")
 }
 
 model roles {
@@ -680,15 +682,27 @@ model bids {
 }
 
 model projects {
-  id          String       @id @default(uuid())
-  name        String
-  description String?
-  start_date  DateTime
-  end_date    DateTime?
-  status      String
-  bid_id      String?      @unique
-  bid         bids?        @relation("BidToProject", fields: [bid_id], references: [id])
-  milestones  milestones[]
+  id              String    @id @default(uuid())
+  client_name     String
+  name            String
+  upwork_id       String
+  description     String?
+  start_date      DateTime
+  end_date        DateTime?
+  deadline        DateTime?
+  number_of_hours Int?
+
+  sales_person_id String?
+  assignee_id     String?
+
+  sales_person employees? @relation("ProjectToSalesPerson", fields: [sales_person_id], references: [id])
+  assignee     employees? @relation("projectToAssignee", fields: [assignee_id], references: [id])
+
+  status     String
+  bid_id     String?      @unique
+  bid        bids?        @relation("BidToProject", fields: [bid_id], references: [id])
+  milestones milestones[]
+  documents  Json?
 
   created_at DateTime? @default(now())
   created_by String?
