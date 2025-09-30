@@ -123,8 +123,11 @@ export const update_bid = async (req: Request, res: Response) => {
 export const delete_bid = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        await prisma.bids.delete({
+        await prisma.bids.update({
             where: { id },
+            data: {
+                bid_status: "deleted"
+            }
         });
         res.status(204).send(); // No content
     } catch (error: any) {

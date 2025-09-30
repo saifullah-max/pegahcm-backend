@@ -18,6 +18,6 @@ router
     .route('/:id')
     .get(get_project_by_id)
     .put(update_project)
-    .delete(delete_project);
+    .put(delete_project);
 
 export default router;

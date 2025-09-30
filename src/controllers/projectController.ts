@@ -23,7 +23,6 @@ export const create_project = async (req: Request, res: Response) => {
             assignee_id,
             status,
             bid_id,
-            documents,
         } = req.body;
 
         const empId = await prisma.employees.findUnique({
@@ -80,7 +79,6 @@ export const create_project = async (req: Request, res: Response) => {
     }
 };
 
-
 // Get all projects
 export const get_all_projects = async (req: Request, res: Response) => {
     try {
@@ -96,7 +94,6 @@ export const get_all_projects = async (req: Request, res: Response) => {
                 milestones: true,
             },
         });
-        ;
         res.status(200).json(projects);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
@@ -109,7 +106,16 @@ export const get_project_by_id = async (req: Request, res: Response) => {
         const { id } = req.params;
         const project = await prisma.projects.findUnique({
             where: { id },
-            include: { bid: true, milestones: true },
+            include: {
+                sales_person: {
+                    select: { id: true, user: true }
+                },
+                assignee: {
+                    select: { id: true, user: true }
+                },
+                bid: true,
+                milestones: true
+            },
         });
 
         if (!project) {
@@ -126,17 +132,47 @@ export const get_project_by_id = async (req: Request, res: Response) => {
 export const update_project = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { name, description, start_date, end_date, status, bid_id } = req.body;
+        const {
+            client_name,
+            name,
+            upwork_id,
+            description,
+            start_date,
+            end_date,
+            deadline,
+            number_of_hours,
+            sales_person_id,
+            assignee_id,
+            status,
+            bid_id,
+        } = req.body;
+
+        const empId = await prisma.employees.findUnique({
+            where: {
+                user_id: req.user?.userId
+            }
+        })
 
         const updatedProject = await prisma.projects.update({
             where: { id },
             data: {
+                client_name,
+                upwork_id,
                 name,
                 description,
                 start_date: start_date ? new Date(start_date) : undefined,
                 end_date: end_date ? new Date(end_date) : undefined,
+                deadline: deadline ? new Date(deadline) : undefined,
                 status,
+                sales_person: sales_person_id
+                    ? { connect: { id: sales_person_id } }
+                    : undefined,
+                assignee: assignee_id
+                    ? { connect: { id: assignee_id } }
+                    : undefined,
+                number_of_hours,
                 bid: bid_id ? { connect: { id: bid_id } } : undefined,
+                updated_by: empId?.id
             },
         });
 
@@ -150,10 +186,25 @@ export const update_project = async (req: Request, res: Response) => {
 export const delete_project = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        await prisma.projects.delete({
-            where: { id },
-        });
-        res.status(204).send(); // No content
+
+        const empId = await prisma.employees.findUnique({
+            where: {
+                user_id: req.user?.userId
+            }
+        })
+
+        if (empId) {
+            await prisma.projects.update({
+                where: { id },
+                data: {
+                    status: "deleted",
+                    updated_by: empId.id
+                }
+            });
+            res.status(204).json({ message: "Deletion Successful" }); // No content
+        } else {
+            res.status(404).json({ message: "Employee ID not found - you must have a valid employee Id to delete this project" })
+        }
     } catch (error: any) {
         res.status(400).json({ error: error.message });
     }
