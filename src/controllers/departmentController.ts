@@ -1,27 +1,45 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
 
-// Create a new department or sub-department
+// Create a new department under a head department
 export const createDepartment = async (req: Request, res: Response) => {
   try {
-    const { name, description, parent_id } = req.body;
+    const { name, description, head_id } = req.body;
 
-    if (!name) {
+    if (!name || !head_id) {
       return res.status(400).json({
         success: false,
-        message: 'Department name is required'
+        message: 'Department name and head_id are required'
       });
     }
 
-    // Check if department with same name exists
+    const userId = req.user?.userId
+
+    const empId = await prisma.employees.findUnique({
+      where: { user_id: userId },
+    })
+
+    // Check if head department exists
+    const headDept = await prisma.head_departments.findUnique({
+      where: { id: head_id }
+    });
+
+    if (!headDept) {
+      return res.status(404).json({
+        success: false,
+        message: 'Head department not found'
+      });
+    }
+
+    // Check if department with same name under this head exists
     const existingDepartment = await prisma.departments.findUnique({
-      where: { name }
+      where: { name_head_id: { name, head_id } }
     });
 
     if (existingDepartment) {
       return res.status(400).json({
         success: false,
-        message: 'Department with this name already exists'
+        message: 'Department with this name already exists under this head department'
       });
     }
 
@@ -29,8 +47,11 @@ export const createDepartment = async (req: Request, res: Response) => {
       data: {
         name,
         description,
-        parent_id: parent_id || null // null for top-level
-      }
+        head_id,
+        created_by: empId?.id ? empId.id : userId
+
+      },
+      include: { head: true }
     });
 
     res.status(201).json({
@@ -46,13 +67,13 @@ export const createDepartment = async (req: Request, res: Response) => {
   }
 };
 
-// Get all top-level departments with sub-departments
+// Get all departments with their head department
 export const getAllDepartments = async (req: Request, res: Response) => {
   try {
     const departments = await prisma.departments.findMany({
-      where: { parent_id: null }, // only top-level
       include: {
-        sub_departments: true
+        head: true,
+        employees: true
       }
     });
 
@@ -77,7 +98,7 @@ export const getDepartmentById = async (req: Request, res: Response) => {
     const department = await prisma.departments.findUnique({
       where: { id },
       include: {
-        sub_departments: true,
+        head: true,
         employees: true
       }
     });
@@ -102,16 +123,16 @@ export const getDepartmentById = async (req: Request, res: Response) => {
   }
 };
 
-// Update department or sub-department
+// Update department
 export const updateDepartment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, description, parent_id } = req.body;
+    const { name, description, head_id } = req.body;
 
-    if (!name) {
+    if (!name || !head_id) {
       return res.status(400).json({
         success: false,
-        message: 'Department name is required'
+        message: 'Department name and head_id are required'
       });
     }
 
@@ -126,16 +147,15 @@ export const updateDepartment = async (req: Request, res: Response) => {
       });
     }
 
-    // Check if new name conflicts
-    if (name !== existingDepartment.name) {
-      const nameConflict = await prisma.departments.findUnique({
-        where: { name }
+    // Check for name conflict under the same head
+    if (name !== existingDepartment.name || head_id !== existingDepartment.head_id) {
+      const conflict = await prisma.departments.findUnique({
+        where: { name_head_id: { name, head_id } }
       });
-
-      if (nameConflict) {
+      if (conflict) {
         return res.status(400).json({
           success: false,
-          message: 'Department with this name already exists'
+          message: 'Department with this name already exists under this head department'
         });
       }
     }
@@ -145,8 +165,9 @@ export const updateDepartment = async (req: Request, res: Response) => {
       data: {
         name,
         description,
-        parent_id: parent_id || null
-      }
+        head_id
+      },
+      include: { head: true }
     });
 
     res.json({
@@ -162,17 +183,14 @@ export const updateDepartment = async (req: Request, res: Response) => {
   }
 };
 
-// Delete department or sub-department
+// Delete department
 export const deleteDepartment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
     const department = await prisma.departments.findUnique({
       where: { id },
-      include: {
-        employees: true,
-        sub_departments: true
-      }
+      include: { employees: true }
     });
 
     if (!department) {
@@ -182,11 +200,11 @@ export const deleteDepartment = async (req: Request, res: Response) => {
       });
     }
 
-    // Prevent deletion if has employees or sub-departments
-    if (department.employees.length > 0 || department.sub_departments.length > 0) {
+    // Prevent deletion if has employees
+    if (department.employees.length > 0) {
       return res.status(400).json({
         success: false,
-        message: 'Cannot delete department with employees or sub-departments'
+        message: 'Cannot delete department with employees'
       });
     }
 
@@ -198,6 +216,33 @@ export const deleteDepartment = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: 'Failed to delete department'
+    });
+  }
+};
+
+// GET all head departments
+export const getAllHeadDepartments = async (req: Request, res: Response) => {
+  try {
+    const headDepartments = await prisma.head_departments.findMany({
+      orderBy: { name: 'asc' }, // optional: sort alphabetically
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        status: true,
+        code: true,
+      },
+    });
+
+    res.json({
+      success: true,
+      data: headDepartments,
+    });
+  } catch (error) {
+    console.error('Error fetching head departments:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch head departments',
     });
   }
 };

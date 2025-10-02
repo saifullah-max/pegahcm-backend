@@ -27,15 +27,6 @@ async function main() {
     },
   });
 
-  await prisma.roles.upsert({
-    where: { name: 'user' },
-    update: {},
-    create: {
-      name: 'user',
-      description: 'User role with limited access',
-    },
-  });
-
   // ———————————————————————————————————————————————————————————
   // 2) Permissions (module + action composite unique)
   // Only seed-time perms; later perms created via dashboard
@@ -142,7 +133,6 @@ async function main() {
       // add any missing ones similarly...
     ];
 
-
   // Explicitly type to avoid never[] issues; we only need id later
   const seededPermissions: Array<{ id: string }> = [];
 
@@ -190,6 +180,22 @@ async function main() {
         permission_id: perm.id,
       },
     });
+
+    const headDepartments = [
+      { name: 'Production', description: 'Production Head Department', code: 'PROD' },
+      { name: 'Finance', description: 'Finance Head Department', code: 'FIN' },
+      { name: 'Commercial', description: 'Commercial Head Department', code: 'COM' },
+      { name: 'HR', description: 'Human Resource Head Department', code: 'HR' },
+      { name: 'IT', description: 'Information Technology Head Department', code: 'IT' },
+    ];
+
+    for (const hd of headDepartments) {
+      await prisma.head_departments.upsert({
+        where: { name: hd.name },
+        update: {},
+        create: hd,
+      });
+    }
 
     // User -> Permission
     await prisma.user_permissions.upsert({

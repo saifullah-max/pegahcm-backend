@@ -147,8 +147,11 @@ model employees {
   user                    users            @relation(fields: [user_id], references: [id])
   user_id                 String           @unique
   employee_number         String           @unique
-  department              departments? @relation(fields: [department_id], references: [id])
+
+  // Department association
   department_id           String?
+  department              departments?     @relation(fields: [department_id], references: [id])
+  
   position                String
   sub_department_id       String?  
   date_of_birth           DateTime
@@ -209,23 +212,47 @@ model roles {
   updated_by String?
 }
 
-model departments {
+// Head Departments: Top-level categories like Production, Finance, Commercial
+model head_departments {
   id          String       @id @default(uuid())
   name        String       @unique
   description String?
 
-  // Self-relation for hierarchy
-  parent_id   String?      // Null for top-level departments
-  parent      departments? @relation("SubDepartments", fields: [parent_id], references: [id])
-  sub_departments departments[] @relation("SubDepartments")
+  // One head department -> many departments
+  departments departments[]
 
-  employees   employees[]  // Employees belonging to this department
+  status      String?      // e.g., "active", "inactive", "archived"
+  code        String?      // Optional code like PROD, FIN
+  manager_id  String?      // Optional reference to a manager
+  notes       String?
 
-  created_at DateTime? @default(now())
-  created_by String?
-  updated_at DateTime? @updatedAt
-  updated_by String?
+  created_at  DateTime? @default(now())
+  created_by  String?
+  updated_at  DateTime? @updatedAt
+  updated_by  String?
+  deleted_at  DateTime?
 }
+
+// Departments: Each department belongs to a head department
+model departments {
+  id          String           @id @default(uuid())
+  name        String           // Department name like MERN, Laravel, CMS
+  description String?
+  
+  head_id     String
+  head        head_departments @relation(fields: [head_id], references: [id])
+
+  employees   employees[]
+
+    created_at  DateTime? @default(now())
+  created_by  String?
+  updated_at  DateTime? @updatedAt
+  updated_by  String?
+  deleted_at  DateTime?
+
+  @@unique([name, head_id], name: "name_head_id") // <-- composite unique
+}
+
 
 model attendance_records {
   id                   String                    @id @default(uuid())
@@ -698,6 +725,7 @@ model projects {
   created_by String?
   updated_at DateTime? @updatedAt
   updated_by String?
+
 }
 
 model milestones {
