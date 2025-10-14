@@ -61,7 +61,7 @@ interface CreateEmployeeRequest {
 
   // Employee details
   department_id: string;
-  sub_department_id?: string;
+  //sub_department_id?: string;
   designation: string;
   joining_date: Date;
   status: EmployeeStatus;
@@ -122,7 +122,7 @@ export const createEmployee = async (req: Request, res: Response) => {
       address,
       role_id,
       department_id,
-      sub_department_id,
+      //sub_department_id,
       designation,
       joining_date,
       status,
@@ -237,7 +237,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           employee_number,
           shift_id,
           department_id: department_id,
-          sub_department_id: sub_department_id,
+          //sub_department_id: sub_department_id,
           position: designation,
           father_name: father_name ?? undefined,
           date_of_birth: new Date(date_of_birth),
@@ -291,18 +291,18 @@ export const createEmployee = async (req: Request, res: Response) => {
           visibilityLevel: 2,
           excludeUserId: result.user.id,
         }),
-        sub_department_id &&
-        createScopedNotification({
-          scope: "TEAMLEADS_SUBDEPT",
-          data: {
-            title: "New Team Member",
-            message: `${full_name} has joined your sub-department.`,
-            type: "Employee",
-          },
-          target_ids: { sub_department_id: sub_department_id, employee_id: result.employee.id },
-          visibilityLevel: 3,
-          excludeUserId: result.user.id,
-        }),
+        // sub_department_id &&
+        // createScopedNotification({
+        //   scope: "TEAMLEADS_SUBDEPT",
+        //   data: {
+        //     title: "New Team Member",
+        //     message: `${full_name} has joined your sub-department.`,
+        //     type: "Employee",
+        //   },
+        //   target_ids: { sub_department_id: sub_department_id, employee_id: result.employee.id },
+        //   visibilityLevel: 3,
+        //   excludeUserId: result.user.id,
+        // }),
         createScopedNotification({
           scope: "EMPLOYEE_ONLY",
           data: {
