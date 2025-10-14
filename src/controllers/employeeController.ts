@@ -238,7 +238,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           shift_id,
           department_id: department_id,
           //sub_department_id: sub_department_id,
-          position: designation,
+          // position: designation,
           father_name: father_name ?? undefined,
           date_of_birth: new Date(date_of_birth),
           hire_date: new Date(joining_date),
@@ -328,7 +328,7 @@ export const createEmployee = async (req: Request, res: Response) => {
           employee_number: result.employee.employee_number,
           full_name,
           email,
-          designation: result.employee.position,
+          // designation: result.employee.position,
           department: department_id,
           status: result.employee.status,
           skills:
@@ -378,7 +378,7 @@ export const listEmployees = async (req: Request, res: Response) => {
     if (search) {
       where.OR = [
         { employee_number: { contains: search as string } },
-        { position: { contains: search as string } },
+        // { position: { contains: search as string } },
         { user: { full_name: { contains: search as string } } },
       ];
     }
@@ -430,7 +430,7 @@ export const listEmployees = async (req: Request, res: Response) => {
         email: emp.user.email,
         role: emp.user.role.name,
         sub_role: emp.user.sub_role?.name,
-        designation: emp.position,
+        // designation: emp.position,
         department: emp.department?.name,
         sub_department: emp.sub_department?.name,
         manager: emp.manager?.user.full_name,
