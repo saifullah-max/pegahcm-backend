@@ -8,6 +8,9 @@ export const create_target = async (req: Request, res: Response) => {
 
         let employeeData = {};
 
+        const user_id = req.user?.userId
+
+
         if (employee_id) {
             const employee = await prisma.employees.findUnique({
                 where: { id: employee_id },
@@ -34,7 +37,7 @@ export const create_target = async (req: Request, res: Response) => {
                 closing_target: parseInt(closing_target),
                 daily_bids: parseInt(daily_bids),
                 employee: employeeData,
-                created_by: employee_id
+                created_by: user_id
             },
         });
 

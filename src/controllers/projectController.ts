@@ -34,6 +34,9 @@ export const create_project = async (req: Request, res: Response) => {
         const files = (req.files || {}) as {
             [fieldname: string]: Express.Multer.File[];
         };
+        
+        const user_id = req.user?.userId
+
 
         const documentsObj =
             files.documents?.map((file) => ({
@@ -65,7 +68,7 @@ export const create_project = async (req: Request, res: Response) => {
                     ? { connect: { id: bid_id } }
                     : undefined,
                 documents: documentsObj,
-                created_by: empId?.id
+                created_by: user_id
             },
         });
 

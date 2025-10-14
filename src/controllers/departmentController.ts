@@ -13,11 +13,7 @@ export const createDepartment = async (req: Request, res: Response) => {
       });
     }
 
-    const userId = req.user?.userId
-
-    const empId = await prisma.employees.findUnique({
-      where: { user_id: userId },
-    })
+    const user_id = req.user?.userId
 
     // Check if head department exists
     const headDept = await prisma.head_departments.findUnique({
@@ -48,7 +44,7 @@ export const createDepartment = async (req: Request, res: Response) => {
         name,
         description,
         head_id,
-        created_by: empId?.id ? empId.id : userId
+        created_by: user_id
 
       },
       include: { head: true }

@@ -29,7 +29,7 @@ export const createSalary = async (req: Request, res: Response) => {
                 total_pay: 0,
                 effective_from,
                 effective_to,
-                created_by: req.user?.userId || "system",
+                created_by: req.user?.userId,
                 employee: {
                     connect: { id: employee_id },
                 },
@@ -162,7 +162,7 @@ export const getAllSalaries = async (req: Request, res: Response) => {
                 employee: {
                     select: {
                         id: true,
-                        position: true,
+                        designation: true,
                         user: { select: { full_name: true, email: true } },
                     },
                 },
@@ -186,7 +186,7 @@ export const getSalaryById = async (req: Request, res: Response) => {
                 employee: {
                     select: {
                         id: true,
-                        position: true,
+                        designation: true,
                         user: { select: { full_name: true, email: true } },
                     },
                 },
@@ -264,7 +264,7 @@ export const copyPreviousSalaryByEmployee = async (req: Request, res: Response) 
                 bonuses: latestSalary.bonuses,
                 effective_from: nextEffectiveFrom,
                 effective_to: nextEffectiveTo,
-                created_by: req.user?.userId || 'system',
+                created_by: req.user?.userId,
                 total_pay: latestSalary.total_pay,
                 allowances: {
                     create: latestSalary.allowances.map((a: any) => ({
@@ -296,9 +296,11 @@ export const getSalarySlip = async (req: Request, res: Response) => {
         const employee = await prisma.employees.findUnique({
             where: { id: employee_id }
             ,
-            include: { user: true, department: true, 
+            include: {
+                user: true, department: true,
                 // sub_department: true, 
-                salary_details: { include: { allowances: true } } }
+                salary_details: { include: { allowances: true } }
+            }
         });
 
         if (!employee) return res.status(404).send('Employee not found');
@@ -344,7 +346,7 @@ export const getSalarySlip = async (req: Request, res: Response) => {
 
         doc.fontSize(12).text(`Employee: ${employee.user.full_name}`);
         doc.text(`Employee No: ${employee.employee_number}`);
-        doc.text(`Designation: ${employee.position}`);
+        doc.text(`Designation: ${employee.designation_id}`);
         doc.text(`Department: ${employee.department?.name || 'N/A'}`);
         // doc.text(`Sub Department: ${employee.sub_department?.name || 'N/A'}`);
         doc.text(`Hire Date: ${employee.hire_date.toLocaleDateString()}`);

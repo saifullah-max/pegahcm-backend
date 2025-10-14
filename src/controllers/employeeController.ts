@@ -521,7 +521,7 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
         employee: {
           id: employee.id,
           employee_number: employee.employee_number,
-          designation: employee.position,
+          designation: employee.designation_id,
           department_id: employee.department_id,
           phone_number: employee.phone_number,
           sub_department_id: employee.sub_department_id,
@@ -688,7 +688,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
         phone_number,
         department_id: department_id,
         sub_department_id: sub_department_id,
-        position: designation,
+        designation: designation,
         father_name,
         date_of_birth: date_of_birth ? new Date(date_of_birth) : undefined,
         hire_date: joining_date ? new Date(joining_date) : undefined,
@@ -783,7 +783,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
           employee_number: updatedEmployee.employee_number,
           full_name: full_name || undefined,
           email: email || undefined,
-          designation: updatedEmployee.position,
+          designation: updatedEmployee.designation_id,
           department: department_id,
           status: updatedEmployee.status,
           skills:

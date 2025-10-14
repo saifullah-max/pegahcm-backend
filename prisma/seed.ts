@@ -7,7 +7,7 @@ async function main() {
   // ———————————————————————————————————————————————————————————
   // 0) Config: change if you want different defaults in prod
   // ———————————————————————————————————————————————————————————
-  const ADMIN_EMAIL = 'admin@example.com';
+  const ADMIN_EMAIL = 'admin@pegahub.com';
   const ADMIN_USERNAME = 'admin';
   const ADMIN_FULLNAME = 'System Admin';
   const ADMIN_PASSWORD = 'admin123'; // rotate in prod / env var
@@ -89,6 +89,13 @@ async function main() {
       { module: 'Department', action: 'update', description: 'update Department' },
       { module: 'Department', action: 'delete', description: 'delete Department' },
       { module: 'Department', action: 'approve', description: 'approve Department' },
+
+      { module: 'Designation', action: 'view-all', description: 'view-all Designation' },
+      { module: 'Designation', action: 'view', description: 'view Designation' },
+      { module: 'Designation', action: 'create', description: 'create Designation' },
+      { module: 'Designation', action: 'update', description: 'update Designation' },
+      { module: 'Designation', action: 'delete', description: 'delete Designation' },
+      { module: 'Designation', action: 'approve', description: 'approve Designation' },
 
       { module: 'SubRole', action: 'view-all', description: 'view-all SubRole' },
       { module: 'SubRole', action: 'view', description: 'view SubRole' },

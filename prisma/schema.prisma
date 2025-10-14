@@ -152,7 +152,9 @@ model employees {
   department_id           String?
   department              departments?     @relation(fields: [department_id], references: [id])
   
-  position                String
+designation_id          String?
+  designation             designations?    @relation(fields: [designation_id], references: [id])
+
   sub_department_id       String?  
   date_of_birth           DateTime
   hire_date               DateTime
@@ -755,4 +757,20 @@ model target {
   created_by String?
   updated_at DateTime? @updatedAt
   updated_by String?
+}
+
+model designations {
+  id        String @id @default(uuid())
+  name      String
+  description   String?
+
+  status String?
+
+  employees   employees[]
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String? 
+  deleted_at  DateTime? 
 }

@@ -24,6 +24,7 @@ import bidRoutes from './routes/bidRoutes';
 import projectRoutes from './routes/projectRoutes';
 import milestoneRoutes from './routes/milestoneRoutes';
 import targetRoutes from './routes/targetRoutes';
+import designationRoutes from './routes/designationRoutes'
 
 // Load environment variables
 dotenv.config();
@@ -63,7 +64,7 @@ app.use('/api/bids', bidRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/milestones', milestoneRoutes);
 app.use('/api/targets', targetRoutes);
-
+app.use('/api/designations', designationRoutes)
 // Basic route
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to PegaHCM API' });
