@@ -143,35 +143,35 @@ model users {
 }
 
 model employees {
-  id                      String           @id @default(uuid())
-  user                    users            @relation(fields: [user_id], references: [id])
-  user_id                 String           @unique
-  employee_number         String           @unique
+  id              String @id @default(uuid())
+  user            users  @relation(fields: [user_id], references: [id])
+  user_id         String @unique
+  employee_number String @unique
 
   // Department association
-  department_id           String?
-  department              departments?     @relation(fields: [department_id], references: [id])
-  
-designation_id          String?
-  designation             designations?    @relation(fields: [designation_id], references: [id])
+  department_id String?
+  department    departments? @relation(fields: [department_id], references: [id])
 
-  sub_department_id       String?  
+  designation_id String?
+  designation    designations? @relation(fields: [designation_id], references: [id])
+
+  sub_department_id       String?
   date_of_birth           DateTime
   hire_date               DateTime
   status                  String
   father_name             String?
-  manager                 employees?       @relation("EmployeeManager", fields: [manager_id], references: [id])
+  manager                 employees? @relation("EmployeeManager", fields: [manager_id], references: [id])
   manager_id              String?
   skills                  String? // JSON string of skills array
   address                 String
   emergency_contact_name  String
   emergency_contact_phone String
   gender                  String
-  salary                  Decimal          @db.Decimal(10, 2)
+  salary                  Decimal    @db.Decimal(10, 2)
   work_location           String // Onsite, Remote, Hybrid
   phone_number            String?
   shift_id                String?
-  shift                   shifts?          @relation(fields: [shift_id], references: [id])
+  shift                   shifts?    @relation(fields: [shift_id], references: [id])
 
   profile_image_url String?
   images            Json? // Stores array of image objects [{name, url, mimeType, uploadedAt}]
@@ -216,45 +216,44 @@ model roles {
 
 // Head Departments: Top-level categories like Production, Finance, Commercial
 model head_departments {
-  id          String       @id @default(uuid())
-  name        String       @unique
+  id          String  @id @default(uuid())
+  name        String  @unique
   description String?
 
   // One head department -> many departments
   departments departments[]
 
-  status      String?      // e.g., "active", "inactive", "archived"
-  code        String?      // Optional code like PROD, FIN
-  manager_id  String?      // Optional reference to a manager
-  notes       String?
+  status     String? // e.g., "active", "inactive", "archived"
+  code       String? // Optional code like PROD, FIN
+  manager_id String? // Optional reference to a manager
+  notes      String?
 
-  created_at  DateTime? @default(now())
-  created_by  String?
-  updated_at  DateTime? @updatedAt
-  updated_by  String?
-  deleted_at  DateTime?
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
+  deleted_at DateTime?
 }
 
 // Departments: Each department belongs to a head department
 model departments {
-  id          String           @id @default(uuid())
-  name        String           // Department name like MERN, Laravel, CMS
+  id          String  @id @default(uuid())
+  name        String // Department name like MERN, Laravel, CMS
   description String?
-  
-  head_id     String
-  head        head_departments @relation(fields: [head_id], references: [id])
 
-  employees   employees[]
+  head_id String
+  head    head_departments @relation(fields: [head_id], references: [id])
 
-    created_at  DateTime? @default(now())
-  created_by  String?
-  updated_at  DateTime? @updatedAt
-  updated_by  String?
-  deleted_at  DateTime?
+  employees employees[]
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
+  deleted_at DateTime?
 
   @@unique([name, head_id], name: "name_head_id") // <-- composite unique
 }
-
 
 model attendance_records {
   id                   String                    @id @default(uuid())
@@ -694,6 +693,9 @@ model bids {
   attend_by        String
   project          projects? @relation("BidToProject")
 
+  upwork_id      String?
+  upwork_profile upwork_ids? @relation(fields: [upwork_id], references: [id])
+
   created_at DateTime? @default(now())
   created_by String?
   updated_at DateTime? @updatedAt
@@ -704,7 +706,6 @@ model projects {
   id              String    @id @default(uuid())
   client_name     String
   name            String
-  upwork_id       String
   description     String?
   start_date      DateTime
   end_date        DateTime?
@@ -723,11 +724,16 @@ model projects {
   milestones milestones[]
   documents  Json?
 
+  project_type_id String?
+  project_type    project_types? @relation(fields: [project_type_id], references: [id])
+
+  upwork_id      String?
+  upwork_profile upwork_ids? @relation(fields: [upwork_id], references: [id])
+
   created_at DateTime? @default(now())
   created_by String?
   updated_at DateTime? @updatedAt
   updated_by String?
-
 }
 
 model milestones {
@@ -760,17 +766,45 @@ model target {
 }
 
 model designations {
-  id        String @id @default(uuid())
-  name      String
-  description   String?
+  id          String  @id @default(uuid())
+  name        String
+  description String?
 
   status String?
 
-  employees   employees[]
+  employees employees[]
 
   created_at DateTime? @default(now())
   created_by String?
   updated_at DateTime? @updatedAt
-  updated_by String? 
-  deleted_at  DateTime? 
+  updated_by String?
+  deleted_at DateTime?
+}
+
+model project_types {
+  id       String     @id @default(uuid())
+  name     String     @unique
+  projects projects[]
+
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
+  deleted_at DateTime?
+}
+
+model upwork_ids {
+  id   String @id @default(uuid())
+  name String @unique
+  link String @unique
+  status String?
+
+  bids     bids[]
+  projects projects[]
+
+    created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
+  deleted_at DateTime?
 }

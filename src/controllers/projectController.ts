@@ -34,7 +34,7 @@ export const create_project = async (req: Request, res: Response) => {
         const files = (req.files || {}) as {
             [fieldname: string]: Express.Multer.File[];
         };
-        
+
         const user_id = req.user?.userId
 
 
@@ -212,3 +212,26 @@ export const delete_project = async (req: Request, res: Response) => {
         res.status(400).json({ error: error.message });
     }
 };
+
+// Create project type
+export const create_project_type = async (req: Request, res: Response) => {
+    try {
+        const { name } = req.body;
+
+        const project_type = await prisma.project_types.findFirst({ where: { name } })
+
+        if (project_type) {
+            return res.status(400).json({ success: false, message: "A project type with similar name exists, please use some other name" })
+        } else {
+            const type = await prisma.project_types.create({
+                data: {
+                    name,
+                    created_by: req.user?.userId
+                }
+            })
+            res.status(200).json({ success: true, type, message: "New Project type created" })
+        }
+    } catch (error) {
+        console.error("Error creating new project type", error)
+    }
+}

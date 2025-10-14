@@ -4,7 +4,8 @@ import {
     get_all_projects,
     get_project_by_id,
     update_project,
-    delete_project
+    delete_project,
+    create_project_type
 } from '../controllers/projectController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { uploadMiddleware } from '../middlewares/uploadMiddleware';
@@ -19,5 +20,7 @@ router
     .get(get_project_by_id)
     .put(update_project)
     .put(delete_project);
+
+router.route('/type').post(create_project_type)
 
 export default router;
