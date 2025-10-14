@@ -56,7 +56,7 @@ export const create_project = async (req: Request, res: Response) => {
                 start_date: new Date(start_date),
                 end_date: end_date ? new Date(end_date) : undefined,
                 deadline: deadline ? new Date(deadline) : undefined,
-                number_of_hours,
+                number_of_hours: Number(number_of_hours),
                 status,
                 sales_person: sales_person_id
                     ? { connect: { id: sales_person_id } }
