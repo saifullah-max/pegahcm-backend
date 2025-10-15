@@ -802,7 +802,7 @@ model upwork_ids {
   bids     bids[]
   projects projects[]
 
-    created_at DateTime? @default(now())
+  created_at DateTime? @default(now())
   created_by String?
   updated_at DateTime? @updatedAt
   updated_by String?

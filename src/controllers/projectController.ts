@@ -235,3 +235,14 @@ export const create_project_type = async (req: Request, res: Response) => {
         console.error("Error creating new project type", error)
     }
 }
+
+export const get_all_project_types = async (req: Request, res: Response) => {
+    try {
+        const project_types = await prisma.project_types.findMany({})
+
+        return res.status(200).json({ success: true, message: "All project types fetched successfully", project_types })
+    } catch (error) {
+        console.error("Error fetching project types:", error)
+        return res.status(500).json({ success: false, message: "Server error while fetching project types" })
+    }
+}

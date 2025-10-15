@@ -17,6 +17,8 @@ router
     .route('/:id')
     .get(get_bid_by_id)
     .put(update_bid)
+
+router.route('/delete/:id')
     .put(delete_bid);
 
 export default router;

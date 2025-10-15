@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
+import { buildFilters } from '../utils/buildFilters';
 
 // Create a new bid
 export const create_bid = async (req: Request, res: Response) => {
@@ -12,13 +13,22 @@ export const create_bid = async (req: Request, res: Response) => {
             total,
             cost,
             bid_status,
-            id_name,
+            upwork_id,
             description,
             client_name,
             project_type,
             price,
             attend_by,
         } = req.body;
+
+
+        const upwork_profile = await prisma.upwork_ids.findUnique({
+            where: { id: upwork_id }
+        })
+
+        if (!upwork_profile) {
+            return res.status(400).json({ success: false, message: "Provided upwork ID does not exist." })
+        }
 
         const newBid = await prisma.bids.create({
             data: {
@@ -29,7 +39,8 @@ export const create_bid = async (req: Request, res: Response) => {
                 total: parseInt(total),
                 cost,
                 bid_status,
-                id_name,
+                id_name: upwork_profile.name,
+                upwork_id: upwork_profile.id,
                 description,
                 client_name,
                 project_type,
@@ -47,7 +58,8 @@ export const create_bid = async (req: Request, res: Response) => {
 // Get all bids
 export const get_all_bids = async (req: Request, res: Response) => {
     try {
-        const bids = await prisma.bids.findMany();
+        const where = buildFilters("bids", req.query)
+        const bids = await prisma.bids.findMany({ where });
         res.status(200).json(bids);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
@@ -85,13 +97,22 @@ export const update_bid = async (req: Request, res: Response) => {
             total,
             cost,
             bid_status,
-            id_name,
+            upwork_id,
             description,
             client_name,
             project_type,
             price,
             attend_by,
         } = req.body;
+
+
+        const upwork_profile = await prisma.upwork_ids.findUnique({
+            where: { id: upwork_id }
+        })
+
+        if (!upwork_profile) {
+            return res.status(400).json({ success: false, message: "Provided upwork ID does not exist." })
+        }
 
         const updated_bid = await prisma.bids.update({
             where: { id },
@@ -104,7 +125,8 @@ export const update_bid = async (req: Request, res: Response) => {
                 total: total ? parseInt(total) : undefined,
                 cost,
                 bid_status,
-                id_name,
+                id_name: upwork_profile.name,
+                upwork_id: upwork_profile.id,
                 description,
                 client_name,
                 project_type,
