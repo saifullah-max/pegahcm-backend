@@ -96,10 +96,14 @@ export const get_all_projects = async (req: Request, res: Response) => {
         const projects = await prisma.projects.findMany({
             include: {
                 sales_person: {
-                    select: { id: true, user: true }, // get only needed fields
+                    include: {
+                        user: true
+                    }
                 },
                 assignee: {
-                    select: { id: true, user: true },
+                    include: {
+                        user: true
+                    }
                 },
                 bid: true,
                 milestones: true,

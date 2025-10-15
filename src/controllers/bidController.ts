@@ -59,7 +59,11 @@ export const create_bid = async (req: Request, res: Response) => {
 export const get_all_bids = async (req: Request, res: Response) => {
     try {
         const where = buildFilters("bids", req.query)
-        const bids = await prisma.bids.findMany({ where });
+        const bids = await prisma.bids.findMany({
+            where, include: {
+                project_type: true
+            }
+        });
         res.status(200).json(bids);
     } catch (error: any) {
         res.status(400).json({ error: error.message });

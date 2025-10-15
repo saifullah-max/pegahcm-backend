@@ -177,30 +177,30 @@ model employees {
   images            Json? // Stores array of image objects [{name, url, mimeType, uploadedAt}]
   documents         Json? // Stores array of document objects [{name, url, mimeType, type, uploadedAt, categoryId}]
 
-  managed_employees    employees[]               @relation("EmployeeManager")
-  attendance_records   attendance_records[]
-  leave_requests       leave_requests[]
-  vacations            vacations[]
-  onboarding_processes onboarding_processes[]
-  resignations         resignations[]
-  assets               assets[]
-  hr_processes         hr_processes[]
-  LeaveBalance         leave_balances[]
-  AttendanceFixRequest attendance_fix_requests[]
-  salary_details       salary_details[]
-  employee_documents   employee_documents[]
-  employee_images      employee_images[]
+  managed_employees      employees[]               @relation("EmployeeManager")
+  attendance_records     attendance_records[]
+  leave_requests         leave_requests[]
+  vacations              vacations[]
+  onboarding_processes   onboarding_processes[]
+  resignations           resignations[]
+  assets                 assets[]
+  hr_processes           hr_processes[]
+  Leave_balance          leave_balances[]
+  Attendance_fix_request attendance_fix_requests[]
+  salary_details         salary_details[]
+  employee_documents     employee_documents[]
+  employee_images        employee_images[]
 
   created_at DateTime? @default(now())
   created_by String?
   updated_at DateTime? @updatedAt
   updated_by String?
 
-  target        target[]
-  salesProjects projects[]  @relation("ProjectToSalesPerson")
-  assigned      projects[]  @relation("projectToAssignee")
-  milestones    milestones? @relation(fields: [milestonesId], references: [id])
-  milestonesId  String?
+  target         target[]
+  sales_projects projects[]  @relation("ProjectToSalesPerson")
+  assigned       projects[]  @relation("projectToAssignee")
+  milestones     milestones? @relation(fields: [milestones_id], references: [id])
+  milestones_id  String?
 }
 
 model roles {
@@ -690,13 +690,15 @@ model bids {
   id_name          String
   description      String?
   client_name      String
-  project_type     String
   price            String
   attend_by        String
   project          projects? @relation("BidToProject")
 
   upwork_id      String?
   upwork_profile upwork_ids? @relation(fields: [upwork_id], references: [id])
+
+  project_type_id String?
+  project_type    project_types? @relation(fields: [project_type_id], references: [id])
 
   created_at DateTime? @default(now())
   created_by String?
@@ -800,6 +802,7 @@ model project_types {
   updated_at DateTime? @updatedAt
   updated_by String?
   deleted_at DateTime?
+  bids       bids[]
 }
 
 model upwork_ids {

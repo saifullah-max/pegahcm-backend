@@ -64,7 +64,22 @@ export const create_milestone = async (req: Request, res: Response) => {
 export const get_all_milestones = async (req: Request, res: Response) => {
     try {
         const milestones = await prisma.milestones.findMany({
-            include: { project: true },
+            include: {
+                project: {
+                    include: {
+                        sales_person: {
+                            include: {
+                                user: true
+                            }
+                        },
+                        assignee: {
+                            include: {
+                                user: true
+                            }
+                        }
+                    }
+                }
+            },
         });
         res.status(200).json(milestones);
     } catch (error: any) {
@@ -133,7 +148,9 @@ export const update_milestone = async (req: Request, res: Response) => {
                 estimated_hours: estimated_hours ? Number(estimated_hours) : undefined,
                 actual_hours: actual_hours ? Number(actual_hours) : undefined,
                 status: status ? status : undefined,
-                assignees: assignee ? assignee : undefined, // assuming FK
+                assignees: {
+                    connect: assigneeConnect
+                }, // assuming FK
                 revenue: revenue ? Number(revenue) : undefined,
                 description: description ? description : undefined,
                 documents: documentsObj.length > 0 ? documentsObj : undefined,
