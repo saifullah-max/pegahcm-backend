@@ -7,16 +7,19 @@ import {
     delete_milestone,
 } from '../controllers/milestoneController';
 import { authenticateToken } from '../middlewares/authMiddleware';
+import { uploadMiddleware } from '../middlewares/uploadMiddleware';
 
 const router = express.Router();
 
 router.use(authenticateToken);
 
-router.route('/').post(create_milestone).get(get_all_milestones);
+router.route('/').post(uploadMiddleware, create_milestone).get(get_all_milestones);
 router
     .route('/:id')
     .get(get_milestone_by_id)
-    .put(update_milestone)
-    .delete(delete_milestone);
+    .put(uploadMiddleware, update_milestone)
+
+router.route('/delete/:id')
+    .put(delete_milestone);
 
 export default router;

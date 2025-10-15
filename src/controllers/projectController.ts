@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
 import { connect } from 'http2';
 
-const getFileUrl = (req: Request, folder: string, filename: string) => {
+export const getFileUrl = (req: Request, folder: string, filename: string) => {
     const baseUrl =
         process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
     return `${baseUrl}/uploads/${folder}/${filename}`;
@@ -47,26 +47,34 @@ export const create_project = async (req: Request, res: Response) => {
                 uploaded_at: new Date(),
             })) || [];
 
+
+        const upwork_profile_id = await prisma.upwork_ids.findUnique({
+            where: { id: upwork_id }
+        })
+
+        if (!upwork_profile_id) {
+            return res.status(400).json({ success: false, message: "Provided upwork ID does not exist." })
+        }
+
         const newProject = await prisma.projects.create({
             data: {
                 client_name,
                 name,
-                upwork_id,
+                upwork_profile: {
+                    connect: { id: upwork_profile_id.id }
+                },
                 description,
                 start_date: new Date(start_date),
                 end_date: end_date ? new Date(end_date) : undefined,
                 deadline: deadline ? new Date(deadline) : undefined,
                 number_of_hours: Number(number_of_hours),
                 status,
-                sales_person: sales_person_id
-                    ? { connect: { id: sales_person_id } }
-                    : undefined,
-                assignee: assignee_id
-                    ? { connect: { id: assignee_id } }
-                    : undefined,
-                bid: bid_id
-                    ? { connect: { id: bid_id } }
-                    : undefined,
+                sales_person: {
+                    connect: { id: sales_person_id }
+                },
+                assignee: {
+                    connect: { id: assignee_id }
+                },
                 documents: documentsObj,
                 created_by: user_id
             },
@@ -156,25 +164,29 @@ export const update_project = async (req: Request, res: Response) => {
             }
         })
 
+        const upwork_profile = await prisma.upwork_ids.findUnique({
+            where: { id: upwork_id }
+        })
+
+        if (!upwork_profile) {
+            return res.status(400).json({ success: false, message: "Provided upwork ID does not exist." })
+        }
+
         const updatedProject = await prisma.projects.update({
             where: { id },
             data: {
                 client_name,
-                upwork_id,
+                upwork_id: upwork_profile.id,
                 name,
                 description,
                 start_date: start_date ? new Date(start_date) : undefined,
                 end_date: end_date ? new Date(end_date) : undefined,
                 deadline: deadline ? new Date(deadline) : undefined,
                 status,
-                sales_person: sales_person_id
-                    ? { connect: { id: sales_person_id } }
-                    : undefined,
-                assignee: assignee_id
-                    ? { connect: { id: assignee_id } }
-                    : undefined,
+                sales_person: sales_person_id,
+                assignee: assignee_id,
                 number_of_hours,
-                bid: bid_id ? { connect: { id: bid_id } } : undefined,
+                bid: bid_id,
                 updated_by: empId?.id
             },
         });
