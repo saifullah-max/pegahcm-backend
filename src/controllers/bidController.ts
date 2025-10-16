@@ -18,7 +18,7 @@ export const create_bid = async (req: Request, res: Response) => {
             client_name,
             project_type,
             price,
-            attend_by,
+            attend_by_id,
         } = req.body;
 
 
@@ -55,7 +55,7 @@ export const create_bid = async (req: Request, res: Response) => {
                 client_name,
                 price,
                 attend_by: {
-                    connect: { id: attend_by }
+                    connect: { id: attend_by_id }
                 },
                 project_type: { connect: { id: project_type } },
             },
