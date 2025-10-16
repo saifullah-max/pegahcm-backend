@@ -9,10 +9,10 @@ const router = express.Router();
 router.use(authenticateToken as any);
 
 // Department routes
-router.post('/', checkPermission("Department", "create"), createDesignation as any);
-router.get('/', checkPermission("Department", "view"), getDesignations as any);
-router.get('/:id', checkPermission("Department", "view"), getDesignationById as any);
-router.put('/:id', checkPermission("Department", "update"), updateDesignation as any);
-router.put('/:id', checkPermission("Department", "delete"), deleteDesignation as any);
+router.post('/', checkPermission("Designation", "create"), createDesignation as any);
+router.get('/', checkPermission("Designation", "view"), getDesignations as any);
+router.get('/:id', checkPermission("Designation", "view"), getDesignationById as any);
+router.put('/:id', checkPermission("Designation", "update"), updateDesignation as any);
+router.put('/:id', checkPermission("Designation", "delete"), deleteDesignation as any);
 
 export default router; 

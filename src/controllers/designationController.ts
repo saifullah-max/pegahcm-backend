@@ -4,10 +4,10 @@ import prisma from "../utils/Prisma";
 // ✅ Create designation
 export const createDesignation = async (req: Request, res: Response) => {
     try {
-        const { name, description, created_by } = req.body;
+        const { name, description, status } = req.body;
 
         const designation = await prisma.designations.create({
-            data: { name, description, created_by },
+            data: { name, description, status, created_by: req.user?.userId },
         });
 
         res.status(201).json({ success: true, data: designation });
@@ -77,7 +77,7 @@ export const deleteDesignation = async (req: Request, res: Response) => {
 
         const designation = await prisma.designations.update({
             where: { id },
-            data: { deleted_at: new Date() }, // 👈 soft delete
+            data: { deleted_at: new Date(), status: 'deleted' },
         });
 
         res.json({ success: true, message: "Designation deleted successfully", data: designation });
