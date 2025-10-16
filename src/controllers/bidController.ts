@@ -98,6 +98,14 @@ export const get_bid_by_id = async (req: Request, res: Response) => {
         const { id } = req.params;
         const bid = await prisma.bids.findUnique({
             where: { id },
+            include: {
+                project_type: true,
+                attend_by: {
+                    include: {
+                        user: true
+                    }
+                }
+            }
         });
 
         if (!bid) {
