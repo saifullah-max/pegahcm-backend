@@ -70,25 +70,21 @@ export const create_bid = async (req: Request, res: Response) => {
 // Get all bids
 export const get_all_bids = async (req: Request, res: Response) => {
     try {
-        const where = buildFilters("bids", req.query)
+        const where = buildFilters("bids", req.query);
+
         const bids = await prisma.bids.findMany({
             where,
             include: {
                 project_type: true,
-                attend_by: {
-                    include: {
-                        user: true
-                    }
-                }
-
+                attend_by: { include: { user: true } }
             },
-            orderBy: {
-                created_at: 'desc'
-            }
+            orderBy: { created_at: "desc" }
         });
-        res.status(200).json(bids);
-    } catch (error: any) {
-        res.status(400).json({ error: error.message });
+
+        return res.json(bids); // empty array if no match
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Internal server error" });
     }
 };
 
@@ -125,7 +121,6 @@ export const update_bid = async (req: Request, res: Response) => {
         const {
             created_at,
             url,
-            profile,
             connects,
             boosted_connects,
             total,
@@ -136,16 +131,30 @@ export const update_bid = async (req: Request, res: Response) => {
             client_name,
             project_type,
             price,
-            attend_by,
+            attend_by_id,
         } = req.body;
 
+        // Validate upwork profile if provided
+        let upwork_profile;
+        if (upwork_id) {
+            upwork_profile = await prisma.upwork_ids.findUnique({
+                where: { id: upwork_id }
+            });
+            if (!upwork_profile) {
+                return res.status(400).json({ success: false, message: "Provided upwork ID does not exist." });
+            }
+        }
 
-        const upwork_profile = await prisma.upwork_ids.findUnique({
-            where: { id: upwork_id }
-        })
-
-        if (!upwork_profile) {
-            return res.status(400).json({ success: false, message: "Provided upwork ID does not exist." })
+        // Validate project type if provided
+        if (project_type) {
+            const existingProject = await prisma.project_types.findUnique({
+                where: { id: project_type },
+            });
+            if (!existingProject) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: "Invalid Project ID — no matching project type found." });
+            }
         }
 
         const updated_bid = await prisma.bids.update({
@@ -153,19 +162,18 @@ export const update_bid = async (req: Request, res: Response) => {
             data: {
                 created_at: created_at ? new Date(created_at) : undefined,
                 url,
-                profile,
-                connects: connects ? parseInt(connects) : undefined,
-                boosted_connects: boosted_connects ? parseInt(boosted_connects) : undefined,
-                total: total ? parseInt(total) : undefined,
+                connects: connects !== undefined ? parseInt(connects) : undefined,
+                boosted_connects: boosted_connects !== undefined ? parseInt(boosted_connects) : undefined,
+                total: total !== undefined ? parseInt(total) : undefined,
                 cost,
                 bid_status,
-                id_name: upwork_profile.name,
-                upwork_id: upwork_profile.id,
+                id_name: upwork_profile ? upwork_profile.name : undefined,
+                upwork_profile: upwork_id ? { connect: { id: upwork_id } } : undefined,
                 description,
                 client_name,
-                project_type,
+                project_type: project_type ? { connect: { id: project_type } } : undefined,
                 price,
-                attend_by,
+                attend_by: attend_by_id ? { connect: { id: attend_by_id } } : undefined,
             },
         });
 
