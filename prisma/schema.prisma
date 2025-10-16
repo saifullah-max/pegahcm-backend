@@ -201,6 +201,7 @@ model employees {
   assigned       projects[]  @relation("projectToAssignee")
   milestones     milestones? @relation(fields: [milestones_id], references: [id])
   milestones_id  String?
+  bids           bids[]
 }
 
 model roles {
@@ -679,7 +680,7 @@ model hr_processes {
 }
 
 model bids {
-  id               String    @id @default(cuid())
+  id               String     @id @default(cuid())
   url              String
   profile          String
   connects         Int
@@ -691,8 +692,9 @@ model bids {
   description      String?
   client_name      String
   price            String
-  attend_by        String
-  project          projects? @relation("BidToProject")
+  attend_by_id     String?
+  attend_by        employees? @relation(fields: [attend_by_id], references: [id])
+  project          projects?  @relation("BidToProject")
 
   upwork_id      String?
   upwork_profile upwork_ids? @relation(fields: [upwork_id], references: [id])
