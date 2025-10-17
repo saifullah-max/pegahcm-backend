@@ -696,6 +696,8 @@ model bids {
   attend_by        employees? @relation(fields: [attend_by_id], references: [id])
   project          projects?  @relation("BidToProject")
 
+  price_type      String?
+
   upwork_id      String?
   upwork_profile upwork_ids? @relation(fields: [upwork_id], references: [id])
 
