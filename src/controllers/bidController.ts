@@ -18,6 +18,7 @@ export const create_bid = async (req: Request, res: Response) => {
             project_type_id,
             price,
             attend_by_id,
+            price_type
         } = req.body;
 
 
@@ -42,6 +43,7 @@ export const create_bid = async (req: Request, res: Response) => {
         const newBid = await prisma.bids.create({
             data: {
                 url,
+                price_type,
                 profile: req.user?.userId!,
                 connects: parseInt(connects),
                 boosted_connects: parseInt(boosted_connects),
@@ -130,6 +132,7 @@ export const update_bid = async (req: Request, res: Response) => {
             project_type_id,
             price,
             attend_by_id,
+            price_type
         } = req.body;
 
         // Validate upwork profile if provided
@@ -159,6 +162,7 @@ export const update_bid = async (req: Request, res: Response) => {
             where: { id },
             data: {
                 url,
+                price_type,
                 connects: connects !== undefined ? parseInt(connects) : undefined,
                 boosted_connects: boosted_connects !== undefined ? parseInt(boosted_connects) : undefined,
                 total: total !== undefined ? parseInt(total) : undefined,
