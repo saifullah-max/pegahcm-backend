@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { initSocket } from './utils/socket';
 import http from 'http';
 import path from 'path';
+import { connectMongo } from './utils/mongo';
+import { auditMiddleware } from './middlewares/auditMiddleware';
 import authRoutes from './routes/authRoutes';
 import roleRoutes from './routes/roleRoutes';
 import subRoleRoutes from './routes/subRolesRoutes'
@@ -42,6 +44,9 @@ initSocket(server);
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Connect Mongo for audit logs and register audit middleware early
+connectMongo();
+app.use(auditMiddleware);
 
 
 // Routes
