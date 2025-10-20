@@ -63,7 +63,7 @@ interface CreateEmployeeRequest {
   department_id: string;
   //sub_department_id?: string;
   designation: string;
-  joining_date: Date;
+  hire_date: Date;
   status: EmployeeStatus;
   salary: number;
 
@@ -124,7 +124,7 @@ export const createEmployee = async (req: Request, res: Response) => {
       department_id,
       //sub_department_id,
       designation,
-      joining_date,
+      hire_date,
       status,
       salary,
       skills,
@@ -229,6 +229,12 @@ export const createEmployee = async (req: Request, res: Response) => {
         })
         : null;
 
+      const designation_name = await prisma.designations.findUnique({
+        where: {
+          id: designation
+        }
+      })
+
       // ✅ Create Employee
       const newEmployee = await prismaTx.employees.create({
         data: {
@@ -241,12 +247,13 @@ export const createEmployee = async (req: Request, res: Response) => {
           // position: designation,
           father_name: father_name ?? undefined,
           date_of_birth: new Date(date_of_birth),
-          hire_date: new Date(joining_date),
+          hire_date: new Date(hire_date),
           status,
           skills: processedSkills.length > 0 ? processedSkills.join(",") : null,
           work_location,
           gender,
           address,
+          designation_id: designation_name?.id,
           emergency_contact_name,
           emergency_contact_phone,
           salary,
@@ -584,7 +591,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
       department_id,
       sub_department_id,
       designation,
-      joining_date,
+      hire_date,
       status,
       salary,
       skills,
@@ -691,7 +698,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
         designation: designation,
         father_name,
         date_of_birth: date_of_birth ? new Date(date_of_birth) : undefined,
-        hire_date: joining_date ? new Date(joining_date) : undefined,
+        hire_date: hire_date ? new Date(hire_date) : undefined,
         status,
         skills: processedSkills.length > 0 ? processedSkills.join(",") : null,
         work_location,
