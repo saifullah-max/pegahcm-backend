@@ -13,6 +13,6 @@ router.post('/', checkPermission("Designation", "create"), createDesignation as 
 router.get('/', checkPermission("Designation", "view"), getDesignations as any);
 router.get('/:id', checkPermission("Designation", "view"), getDesignationById as any);
 router.put('/:id', checkPermission("Designation", "update"), updateDesignation as any);
-router.put('/:id', checkPermission("Designation", "delete"), deleteDesignation as any);
+router.put('/delete/:id', checkPermission("Designation", "delete"), deleteDesignation as any);
 
 export default router; 

@@ -137,6 +137,14 @@ async function main() {
       { module: 'Project', action: 'view', description: 'view Project' },
       { module: 'Project', action: 'create', description: 'create Project' },
 
+      { module: 'Upwork', action: 'view-all', description: 'view-all Upwork' },
+      { module: 'Upwork', action: 'view', description: 'view Upwork' },
+      { module: 'Upwork', action: 'create', description: 'create Upwork' },
+      { module: 'Upwork', action: 'update', description: 'update Upwork' },
+      { module: 'Upwork', action: 'delete', description: 'delete Upwork' },
+      { module: 'Upwork', action: 'approve', description: 'approve Upwork' },
+
+
       // add any missing ones similarly...
     ];
 

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import prisma from "../utils/Prisma";
 
-// ✅ Create designation
+// Create designation
 export const createDesignation = async (req: Request, res: Response) => {
     try {
         const { name, description, status } = req.body;
@@ -17,7 +17,7 @@ export const createDesignation = async (req: Request, res: Response) => {
     }
 };
 
-// ✅ Get all designations (excluding soft-deleted)
+// Get all designations (excluding soft-deleted)
 export const getDesignations = async (req: Request, res: Response) => {
     try {
         const designations = await prisma.designations.findMany({
@@ -32,7 +32,7 @@ export const getDesignations = async (req: Request, res: Response) => {
     }
 };
 
-// ✅ Get single designation by ID
+// Get single designation by ID
 export const getDesignationById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
@@ -52,7 +52,7 @@ export const getDesignationById = async (req: Request, res: Response) => {
     }
 };
 
-// ✅ Update designation
+// Update designation
 export const updateDesignation = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
@@ -70,14 +70,14 @@ export const updateDesignation = async (req: Request, res: Response) => {
     }
 };
 
-// ✅ Soft delete designation
+// Soft delete designation
 export const deleteDesignation = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
         const designation = await prisma.designations.update({
             where: { id },
-            data: { deleted_at: new Date(), status: 'deleted' },
+            data: { deleted_at: new Date(), status: 'deleted', updated_by: req.user?.userId },
         });
 
         res.json({ success: true, message: "Designation deleted successfully", data: designation });

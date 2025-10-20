@@ -48,7 +48,7 @@ export const create_bid = async (req: Request, res: Response) => {
                 connects: parseInt(connects),
                 boosted_connects: parseInt(boosted_connects),
                 total: parseInt(total),
-                cost,
+                cost: Number(parseFloat(cost)),
                 bid_status,
                 id_name: upwork_profile.name,
                 upwork_profile: { connect: { id: upwork_id } },
@@ -59,6 +59,7 @@ export const create_bid = async (req: Request, res: Response) => {
                     connect: { id: attend_by_id }
                 },
                 project_type: { connect: { id: project_type_id } },
+                created_by: req.user?.userId
             },
         });
 
@@ -166,7 +167,7 @@ export const update_bid = async (req: Request, res: Response) => {
                 connects: connects !== undefined ? parseInt(connects) : undefined,
                 boosted_connects: boosted_connects !== undefined ? parseInt(boosted_connects) : undefined,
                 total: total !== undefined ? parseInt(total) : undefined,
-                cost,
+                cost: Number(parseFloat(cost)),
                 bid_status,
                 id_name: upwork_profile ? upwork_profile.name : undefined,
                 upwork_profile: upwork_id ? { connect: { id: upwork_id } } : undefined,

@@ -22,7 +22,7 @@ export const create_target = async (req: Request, res: Response) => {
             if (!employee) {
                 return res.status(404).json({ error: 'Employee not found' });
             }
-            
+
             const keywords = ["sales", "upwork", "freelance", "marketing", "business", "bidding"];
 
             const deptName = employee.department?.name?.toLowerCase() || "";
@@ -74,6 +74,7 @@ export const get_target_by_id = async (req: Request, res: Response) => {
             where: { id },
             include: { employee: { include: { department: true } } },
         });
+        console.log("Target:", target);
 
         if (!target) {
             return res.status(404).json({ error: 'Target not found' });
@@ -105,9 +106,17 @@ export const update_target = async (req: Request, res: Response) => {
                 return res.status(404).json({ error: 'Employee not found' });
             }
 
-            if (employee.department?.name !== 'Sales') {
-                return res.status(400).json({ error: 'Employee does not belong to the Sales department' });
+            const keywords = ["sales", "upwork", "freelance", "marketing", "business", "bidding"];
+
+            const deptName = employee.department?.name?.toLowerCase() || "";
+
+            // Create an array that includes both singular and plural versions
+            const allKeywords = [...keywords, ...keywords.map(k => k + "s")];
+
+            if (!allKeywords.some(word => deptName.includes(word))) {
+                return res.status(400).json({ error: 'Employee does not belong to a Sales-related department' });
             }
+
             employeeData = { connect: { id: employee_id } };
         } else if (employee_id === null) {
             employeeData = { disconnect: true };

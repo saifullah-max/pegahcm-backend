@@ -686,7 +686,7 @@ model bids {
   connects         Int
   boosted_connects Int
   total            Int
-  cost             Int
+  cost             Decimal    @db.Decimal(10, 4)
   bid_status       String
   id_name          String
   description      String?
@@ -696,7 +696,7 @@ model bids {
   attend_by        employees? @relation(fields: [attend_by_id], references: [id])
   project          projects?  @relation("BidToProject")
 
-  price_type      String?
+  price_type String?
 
   upwork_id      String?
   upwork_profile upwork_ids? @relation(fields: [upwork_id], references: [id])
