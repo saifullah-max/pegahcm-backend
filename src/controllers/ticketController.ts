@@ -47,6 +47,10 @@ export const createTicket = async (req: Request, res: Response) => {
                 uploaded_at: new Date(),
             })) || [];
 
+        const assigneeIds = assignee_ids
+            ? assignee_ids.split(",").map((id: string) => id.trim())
+            : [];
+
         const ticket = await prisma.tickets.create({
             data: {
                 title,
@@ -59,11 +63,9 @@ export const createTicket = async (req: Request, res: Response) => {
                 estimated_hours,
                 actual_hours,
                 created_by: req.user?.userId,
-                assignees: assignee_ids?.length
-                    ? {
-                        connect: assignee_ids.map((id: string) => ({ id })),
-                    }
-                    : undefined,
+                assignees: {
+                    connect: assigneeIds.map((id: string) => ({ id })),
+                },
             },
             include: {
                 assignees: {
