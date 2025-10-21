@@ -62,13 +62,12 @@ export const create_milestone = async (req: Request, res: Response) => {
                 data: { status: "In progress" },
             });
         }
-
+        
         res.status(201).json(newMilestone);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
     }
 };
-
 
 // Get all milestones
 export const get_all_milestones = async (req: Request, res: Response) => {

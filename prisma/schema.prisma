@@ -836,7 +836,7 @@ model tickets {
   milestone       milestones  @relation(fields: [milestone_id], references: [id])
   assignees       employees[] @relation("TicketAssignees")
   documents       Json?
-  due_date        DateTime?
+  deadline        DateTime?
   estimated_hours Int
   actual_hours    Int
 
