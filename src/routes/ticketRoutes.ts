@@ -4,12 +4,13 @@ import { createTicket, deleteTicket, getAllTickets, getTicketById, updateTicket 
 
 const router = express.Router();
 
+router.use(authenticateToken);
+
 router.route('/').post(createTicket).get(getAllTickets)
 
 router.route('/:id').get(getTicketById).put(updateTicket)
 
 router.route('/delete/:id').put(deleteTicket)
 
-router.use(authenticateToken);
 
 export default router;

@@ -28,11 +28,9 @@ export const create_milestone = async (req: Request, res: Response) => {
                 uploaded_at: new Date(),
             })) || [];
 
-        const assigneeConnect = Array.isArray(assignee)
-            ? assignee.map(id => ({ id }))
-            : assignee
-                ? [{ id: assignee }]
-                : [];
+        const assigneeIds = assignee
+            ? assignee.split(",").map((id: string) => id.trim())
+            : [];
 
         const newMilestone = await prisma.milestones.create({
             data: {
@@ -45,13 +43,14 @@ export const create_milestone = async (req: Request, res: Response) => {
                 actual_hours: Number(actual_hours),
                 status,
                 assignees: {
-                    connect: assigneeConnect
+                    connect: assigneeIds.map((id: string) => ({ id })),
                 },
                 revenue: Number(revenue),
                 description,
                 documents: documentsObj,
                 created_by: req.user?.userId
             },
+            include: { assignees: true },
         });
 
         res.status(201).json(newMilestone);
@@ -78,7 +77,8 @@ export const get_all_milestones = async (req: Request, res: Response) => {
                             }
                         }
                     }
-                }
+                },
+                assignees: true
             },
         });
         res.status(200).json(milestones);
@@ -133,11 +133,9 @@ export const update_milestone = async (req: Request, res: Response) => {
                 uploaded_at: new Date(),
             })) || [];
 
-        const assigneeConnect = Array.isArray(assignee)
-            ? assignee.map(id => ({ id }))
-            : assignee
-                ? [{ id: assignee }]
-                : [];
+        const assigneeIds = assignee
+            ? assignee.split(",").map((id: string) => id.trim())
+            : [];
 
         const updatedMilestone = await prisma.milestones.update({
             where: { id },
@@ -149,7 +147,8 @@ export const update_milestone = async (req: Request, res: Response) => {
                 actual_hours: actual_hours ? Number(actual_hours) : undefined,
                 status: status ? status : undefined,
                 assignees: {
-                    connect: assigneeConnect
+                    set: [], // clears old ones
+                    connect: assigneeIds.map((id: string) => ({ id })), // adds new ones
                 }, // assuming FK
                 revenue: revenue ? Number(revenue) : undefined,
                 description: description ? description : undefined,

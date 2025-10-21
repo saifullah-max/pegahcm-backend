@@ -199,8 +199,7 @@ model employees {
   target           target[]
   sales_projects   projects[]  @relation("ProjectToSalesPerson")
   assigned         projects[]  @relation("projectToAssignee")
-  milestones       milestones? @relation(fields: [milestones_id], references: [id])
-  milestones_id    String?
+  assigned_milestones milestones[] @relation("MilestoneAssignees")  
   assigned_tickets tickets[]   @relation("TicketAssignees")
   bids             bids[]
 }
@@ -755,7 +754,7 @@ model milestones {
   actual_hours    Int
   status          String
 
-  assignees employees[]
+  assignees employees[] @relation("MilestoneAssignees")
   tickets   tickets[]
 
   revenue     Int
