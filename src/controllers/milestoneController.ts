@@ -63,6 +63,7 @@ export const create_milestone = async (req: Request, res: Response) => {
             });
         }
         
+        
         res.status(201).json(newMilestone);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
