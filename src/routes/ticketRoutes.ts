@@ -9,7 +9,7 @@ router.use(authenticateToken);
 
 router.route('/').post(uploadMiddleware, createTicket).get(getAllTickets)
 
-router.route('/:id').get(getTicketById).put(updateTicket)
+router.route('/:id').get(getTicketById).put(uploadMiddleware, updateTicket)
 
 router.route('/delete/:id').put(deleteTicket)
 
