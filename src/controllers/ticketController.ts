@@ -60,8 +60,8 @@ export const createTicket = async (req: Request, res: Response) => {
                 milestone_id,
                 documents: documentsObj,
                 deadline: deadline ? new Date(deadline) : null,
-                estimated_hours,
-                actual_hours,
+                estimated_hours: Number(estimated_hours),
+                actual_hours: Number(actual_hours),
                 created_by: req.user?.userId,
                 assignees: {
                     connect: assigneeIds.map((id: string) => ({ id })),
