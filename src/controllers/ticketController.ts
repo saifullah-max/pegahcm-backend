@@ -14,6 +14,7 @@ export const createTicket = async (req: Request, res: Response) => {
             deadline,
             estimated_hours,
             actual_hours,
+            task_type
         } = req.body;
 
         if (!title || !milestone_id) {
@@ -63,6 +64,7 @@ export const createTicket = async (req: Request, res: Response) => {
                 estimated_hours: Number(estimated_hours),
                 actual_hours: Number(actual_hours),
                 created_by: req.user?.userId,
+                task_type,
                 assignees: {
                     connect: assigneeIds.map((id: string) => ({ id })),
                 },
@@ -226,6 +228,11 @@ export const updateTicket = async (req: Request, res: Response) => {
                 uploaded_at: new Date(),
             })) || [];
 
+        let closedAt;
+        if (status === 'closed') {
+            closedAt = new Date();
+        }
+
         const updatedTicket = await prisma.tickets.update({
             where: { id },
             data: {
@@ -238,6 +245,7 @@ export const updateTicket = async (req: Request, res: Response) => {
                 actual_hours,
                 documents: documentsObj,
                 updated_by: req.user?.userId,
+                closed_at: status === 'closed' ? closedAt : undefined,
                 assignees: assignee_ids?.length
                     ? {
                         set: [],

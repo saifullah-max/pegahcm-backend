@@ -839,9 +839,11 @@ model tickets {
   deadline        DateTime?
   estimated_hours Int
   actual_hours    Int
+  task_type       String?
 
   created_at DateTime? @default(now())
   created_by String?
   updated_at DateTime? @updatedAt
   updated_by String?
+  closed_at DateTime? @default(now())
 }
