@@ -119,6 +119,7 @@ async function main() {
 
       { module: 'Milestone', action: 'view', description: 'view Milestone' },
       { module: 'Milestone', action: 'create', description: 'create Milestone' },
+      { module: 'Milestone', action: 'update', description: 'update Milestone' },
 
       { module: 'Attendance', action: 'view-all', description: 'view-all Attendance' },
       { module: 'Attendance', action: 'view', description: 'view Attendance' },
