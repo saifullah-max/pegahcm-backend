@@ -8,11 +8,14 @@ export const create_milestone = async (req: Request, res: Response) => {
         const { name, project_id, deadline, estimated_hours, actual_hours, status, assignee, revenue, description } = req.body;
 
         const project = await prisma.projects.findUnique({
-            where: { id: project_id }
+            where: { id: project_id },
         });
 
         if (!project) {
-            return res.status(404).json({ success: false, message: "Provided Project doesnot found in database" });
+            return res.status(404).json({
+                success: false,
+                message: "Provided Project not found in database",
+            });
         }
 
         const files = (req.files || {}) as {
@@ -36,7 +39,7 @@ export const create_milestone = async (req: Request, res: Response) => {
             data: {
                 name,
                 project: {
-                    connect: { id: project.id }
+                    connect: { id: project.id },
                 },
                 deadline: new Date(deadline),
                 estimated_hours: Number(estimated_hours),
@@ -48,16 +51,24 @@ export const create_milestone = async (req: Request, res: Response) => {
                 revenue: Number(revenue),
                 description,
                 documents: documentsObj,
-                created_by: req.user?.userId
+                created_by: req.user?.userId,
             },
             include: { assignees: true },
         });
+
+        if (project.status === "completed") {
+            await prisma.projects.update({
+                where: { id: project.id },
+                data: { status: "In progress" },
+            });
+        }
 
         res.status(201).json(newMilestone);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
     }
 };
+
 
 // Get all milestones
 export const get_all_milestones = async (req: Request, res: Response) => {
@@ -78,8 +89,14 @@ export const get_all_milestones = async (req: Request, res: Response) => {
                         }
                     }
                 },
-                assignees: true
+                assignees: {
+                    include: {
+                        user: true
+                    }
+                }
             },
+            orderBy: { created_at: "desc" }
+
         });
         res.status(200).json(milestones);
     } catch (error: any) {
@@ -93,7 +110,27 @@ export const get_milestone_by_id = async (req: Request, res: Response) => {
         const { id } = req.params;
         const milestone = await prisma.milestones.findUnique({
             where: { id },
-            include: { project: true },
+            include: {
+                project: {
+                    include: {
+                        sales_person: {
+                            include: {
+                                user: true
+                            }
+                        },
+                        assignee: {
+                            include: {
+                                user: true
+                            }
+                        }
+                    }
+                },
+                assignees: {
+                    include: {
+                        user: true
+                    }
+                }
+            },
         });
 
         if (!milestone) {
@@ -155,7 +192,30 @@ export const update_milestone = async (req: Request, res: Response) => {
                 documents: documentsObj.length > 0 ? documentsObj : undefined,
                 updated_by: req.user?.userId,
             },
+            include: { assignees: true },
+
         });
+
+        const projectId = await updatedMilestone.project_id
+
+        const allMilestones = await prisma.milestones.findMany({
+            where: { project_id: projectId },
+            select: { status: true },
+        });
+
+        const allCompleted = allMilestones.length > 0 && allMilestones.every(m => m.status === "completed");
+
+        if (allCompleted) {
+            await prisma.projects.update({
+                where: { id: projectId },
+                data: { status: "completed" },
+            });
+        } else {
+            await prisma.projects.update({
+                where: { id: projectId },
+                data: { status: "active" },
+            });
+        }
 
         res.status(200).json(updatedMilestone);
     } catch (error: any) {

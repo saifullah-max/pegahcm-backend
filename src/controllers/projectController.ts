@@ -93,6 +93,7 @@ export const create_project = async (req: Request, res: Response) => {
 // Get all projects
 export const get_all_projects = async (req: Request, res: Response) => {
     try {
+
         const projects = await prisma.projects.findMany({
             include: {
                 sales_person: {
@@ -108,6 +109,8 @@ export const get_all_projects = async (req: Request, res: Response) => {
                 bid: true,
                 milestones: true,
             },
+            orderBy: { created_at: "desc" }
+
         });
         res.status(200).json(projects);
     } catch (error: any) {
