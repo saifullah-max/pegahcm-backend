@@ -23,8 +23,8 @@ export const createTicket = async (req: Request, res: Response) => {
                 message: "Title and milestone_id are required.",
             });
         }
+        
 
-        // ✅ Get milestone + project (with auto_id)
         const milestone = await prisma.milestones.findUnique({
             where: { id: milestone_id },
             include: {
@@ -32,7 +32,7 @@ export const createTicket = async (req: Request, res: Response) => {
                     select: {
                         id: true,
                         name: true,
-                        auto_id: true, // ✅ new field
+                        auto_id: true,
                     },
                 },
             },
@@ -45,7 +45,6 @@ export const createTicket = async (req: Request, res: Response) => {
             });
         }
 
-        // ✅ Get milestone index within project
         const milestonesInProject = await prisma.milestones.findMany({
             where: { project_id: milestone.project.id },
             orderBy: { created_at: "asc" },
@@ -54,7 +53,6 @@ export const createTicket = async (req: Request, res: Response) => {
         const milestoneIndex =
             milestonesInProject.findIndex((m) => m.id === milestone.id) + 1;
 
-        // ✅ Count tickets under this milestone
         const ticketCount = await prisma.tickets.count({
             where: { milestone_id },
         });
@@ -242,8 +240,9 @@ export const updateTicket = async (req: Request, res: Response) => {
             task_type,
         } = req.body;
 
-        console.log(req.body);
+        console.log("[UPDATE] Request body:", req.body);
 
+        // ✅ 1. Validate existing ticket
         const existingTicket = await prisma.tickets.findUnique({
             where: { id },
             include: {
@@ -262,6 +261,7 @@ export const updateTicket = async (req: Request, res: Response) => {
             });
         }
 
+        // ✅ 2. Handle uploaded files (like in createTicket)
         const files = (req.files || {}) as {
             [fieldname: string]: Express.Multer.File[];
         };
@@ -275,32 +275,48 @@ export const updateTicket = async (req: Request, res: Response) => {
                 uploaded_at: new Date(),
             })) || [];
 
-        const assigneeIds = assignee_ids
-            ? assignee_ids.split(",").map((id: string) => id.trim())
-            : [];
-
-        let closedAt: Date | undefined;
-        if (status === "closed") {
-            closedAt = new Date();
-        }
-
+        // ✅ 3. Merge old + new documents safely
         const mergedDocuments = [
             ...((existingTicket.documents as any[]) ?? []),
             ...(documentsObj ?? []),
         ];
 
-        const milestoneExists = await prisma.milestones.findUnique({
-            where: { id: milestone_id },
-        });
-        console.log("✅ milestone exists:", !!milestoneExists);
+        // ✅ 4. Parse and validate assignees
+        const assigneeIds = assignee_ids
+            ? assignee_ids.split(",").map((id: string) => id.trim())
+            : [];
 
-        const assigneeExists = await prisma.employees.findMany({
+        const validAssignees = await prisma.employees.findMany({
             where: { id: { in: assigneeIds } },
+            select: { id: true },
         });
-        console.log("✅ valid assignees:", assigneeExists.map(a => a.id));
+        console.log("✅ valid assignees:", validAssignees.map((a) => a.id));
 
+        const assigneeConnect =
+            validAssignees.length > 0
+                ? {
+                    set: [], // clear previous
+                    connect: validAssignees.map((a) => ({ id: a.id })),
+                }
+                : undefined;
 
-        // ✅ Update ticket
+        // ✅ 5. Check milestone existence (if provided)
+        let validMilestoneId = existingTicket.milestone_id;
+        if (milestone_id) {
+            const milestoneExists = await prisma.milestones.findUnique({
+                where: { id: milestone_id },
+            });
+            console.log("✅ milestone exists:", !!milestoneExists);
+
+            if (milestoneExists) {
+                validMilestoneId = milestone_id;
+            }
+        }
+
+        // ✅ 6. Handle closed_at logic
+        const closedAt = status === "closed" ? new Date() : undefined;
+
+        // ✅ 7. Update ticket
         const updatedTicket = await prisma.tickets.update({
             where: { id },
             data: {
@@ -308,20 +324,15 @@ export const updateTicket = async (req: Request, res: Response) => {
                 description,
                 status,
                 priority,
-                milestone_id: milestone_id || existingTicket.milestone_id,
+                milestone_id: validMilestoneId,
                 deadline: deadline ? new Date(deadline) : undefined,
                 estimated_hours: Number(estimated_hours),
                 actual_hours: Number(actual_hours),
-                documents: mergedDocuments, // ✅ always array, never null
+                documents: mergedDocuments,
                 task_type: task_type || existingTicket.task_type,
                 updated_by: req.user?.userId,
-                closed_at: status === "closed" ? closedAt : undefined,
-                assignees: assigneeIds.length
-                    ? {
-                        set: [], // Clear existing first
-                        connect: assigneeIds.map((id: string) => ({ id })),
-                    }
-                    : undefined,
+                closed_at: closedAt,
+                ...(assigneeConnect && { assignees: assigneeConnect }),
             },
             include: {
                 assignees: {
@@ -347,7 +358,7 @@ export const updateTicket = async (req: Request, res: Response) => {
             ticket: updatedTicket,
         });
     } catch (error: any) {
-        console.error("Error updating ticket:", error);
+        console.error("❌ Error updating ticket:", error);
         return res.status(500).json({
             success: false,
             message: "Failed to update ticket.",

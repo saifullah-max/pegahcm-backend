@@ -40,6 +40,10 @@ export const create_bid = async (req: Request, res: Response) => {
                 .json({ success: false, message: "Invalid Project ID — no matching project type found." });
         }
 
+        const attendedIds = attend_by_id
+            ? attend_by_id.split(",").map((id: string) => id.trim())
+            : [];
+
         const newBid = await prisma.bids.create({
             data: {
                 url,
@@ -56,7 +60,7 @@ export const create_bid = async (req: Request, res: Response) => {
                 client_name,
                 price,
                 attend_by: {
-                    connect: { id: attend_by_id }
+                    connect: attendedIds.map((id: string) => ({ id })),
                 },
                 project_type: { connect: { id: project_type_id } },
                 created_by: req.user?.userId
