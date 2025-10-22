@@ -438,7 +438,7 @@ export const listEmployees = async (req: Request, res: Response) => {
         email: emp.user.email,
         role: emp.user.role.name,
         sub_role: emp.user.sub_role?.name,
-        // designation: emp.position,
+        designation: emp.designation?.name,
         department: emp.department?.name,
         sub_department: emp.sub_department?.name,
         manager: emp.manager?.user.full_name,
@@ -590,7 +590,6 @@ export const updateEmployee = async (req: Request, res: Response) => {
       address,
       role_id,
       department_id,
-      sub_department_id,
       designation,
       hire_date,
       status,
@@ -694,9 +693,10 @@ export const updateEmployee = async (req: Request, res: Response) => {
       where: { id },
       data: {
         phone_number,
-        department_id: department_id,
-        sub_department_id: sub_department_id,
-        designation: designation,
+        department: { connect: { id: department_id } },
+        designation: {
+          connect: { id: designation }
+        },
         father_name,
         date_of_birth: date_of_birth ? new Date(date_of_birth) : undefined,
         hire_date: hire_date ? new Date(hire_date) : undefined,

@@ -244,7 +244,6 @@ export const updateTicket = async (req: Request, res: Response) => {
 
         console.log(req.body);
 
-        // ✅ Validate ticket existence
         const existingTicket = await prisma.tickets.findUnique({
             where: { id },
             include: {
@@ -263,7 +262,6 @@ export const updateTicket = async (req: Request, res: Response) => {
             });
         }
 
-        // ✅ Handle uploaded files (like createTicket)
         const files = (req.files || {}) as {
             [fieldname: string]: Express.Multer.File[];
         };
@@ -277,18 +275,15 @@ export const updateTicket = async (req: Request, res: Response) => {
                 uploaded_at: new Date(),
             })) || [];
 
-        // ✅ Parse assignee IDs
         const assigneeIds = assignee_ids
             ? assignee_ids.split(",").map((id: string) => id.trim())
             : [];
 
-        // ✅ If ticket is closed, set closed_at timestamp
         let closedAt: Date | undefined;
         if (status === "closed") {
             closedAt = new Date();
         }
 
-        // ✅ Safe merge of existing + new documents
         const mergedDocuments = [
             ...((existingTicket.documents as any[]) ?? []),
             ...(documentsObj ?? []),
