@@ -79,6 +79,7 @@ export const get_all_bids = async (req: Request, res: Response) => {
         const where = buildFilters("bids", req.query);
 
         const bids = await prisma.bids.findMany({
+            // 
             where,
             include: {
                 project_type: true,
@@ -86,6 +87,7 @@ export const get_all_bids = async (req: Request, res: Response) => {
             },
             orderBy: { created_at: "desc" }
         });
+        // 
 
         return res.json(bids); // empty array if no match
     } catch (err) {
@@ -163,9 +165,10 @@ export const update_bid = async (req: Request, res: Response) => {
             }
         }
 
-        const attendedIds = attend_by_id
-            ? attend_by_id.split(",").map((id: string) => id.trim())
-            : [];
+        // console.log("Attend by id:", attend_by_id);
+        // const attendedIds = attend_by_id
+        //     ? attend_by_id.split(",").map((id: string) => id.trim())
+        //     : [];
 
         const updated_bid = await prisma.bids.update({
             where: { id },
@@ -184,7 +187,7 @@ export const update_bid = async (req: Request, res: Response) => {
                 project_type: project_type_id ? { connect: { id: project_type_id } } : undefined,
                 price,
                 attend_by: {
-                    connect: attendedIds.map((id: string) => ({ id })),
+                    connect: { id: attend_by_id },
                 },
                 updated_by: req.user?.userId
             },

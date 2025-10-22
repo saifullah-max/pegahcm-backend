@@ -77,12 +77,12 @@ export const get_all_milestones = async (req: Request, res: Response) => {
             include: {
                 project: {
                     include: {
-                        sales_person: {
+                        sales_persons: {
                             include: {
                                 user: true
                             }
                         },
-                        assignee: {
+                        assignees: {
                             include: {
                                 user: true
                             }
@@ -113,12 +113,12 @@ export const get_milestone_by_id = async (req: Request, res: Response) => {
             include: {
                 project: {
                     include: {
-                        sales_person: {
+                        sales_persons: {
                             include: {
                                 user: true
                             }
                         },
-                        assignee: {
+                        assignees: {
                             include: {
                                 user: true
                             }

@@ -63,6 +63,14 @@ export const create_project = async (req: Request, res: Response) => {
 
         const nextAutoId = (lastProject?.auto_id ?? 0) + 1;
 
+        const assigneeIdsArray = assignee_id
+            ? assignee_id.split(",").map((id: string) => id.trim())
+            : [];
+
+        const salesPersonIdsArray = sales_person_id
+            ? sales_person_id.split(",").map((id: string) => id.trim())
+            : [];
+
         const newProject = await prisma.projects.create({
             data: {
                 client_name,
@@ -77,12 +85,12 @@ export const create_project = async (req: Request, res: Response) => {
                 deadline: deadline ? new Date(deadline) : undefined,
                 number_of_hours: Number(number_of_hours),
                 status,
-                sales_person: {
-                    connect: { id: sales_person_id }
-                },
-                assignee: {
-                    connect: { id: assignee_id }
-                },
+                assignees: assigneeIdsArray.length
+                    ? { connect: assigneeIdsArray.map((id: string) => ({ id })) }
+                    : undefined,
+                sales_persons: salesPersonIdsArray.length
+                    ? { connect: salesPersonIdsArray.map((id: string) => ({ id })) }
+                    : undefined,
                 documents: documentsObj,
                 created_by: user_id
             },
@@ -104,12 +112,12 @@ export const get_all_projects = async (req: Request, res: Response) => {
 
         const projects = await prisma.projects.findMany({
             include: {
-                sales_person: {
+                sales_persons: {
                     include: {
                         user: true
                     }
                 },
-                assignee: {
+                assignees: {
                     include: {
                         user: true
                     }
@@ -133,10 +141,10 @@ export const get_project_by_id = async (req: Request, res: Response) => {
         const project = await prisma.projects.findUnique({
             where: { id },
             include: {
-                sales_person: {
+                sales_persons: {
                     select: { id: true, user: true }
                 },
-                assignee: {
+                assignees: {
                     select: { id: true, user: true }
                 },
                 bid: true,
@@ -198,8 +206,8 @@ export const update_project = async (req: Request, res: Response) => {
                 end_date: end_date ? new Date(end_date) : undefined,
                 deadline: deadline ? new Date(deadline) : undefined,
                 status,
-                sales_person: sales_person_id,
-                assignee: assignee_id,
+                sales_persons: sales_person_id,
+                assignees: assignee_id,
                 number_of_hours,
                 bid: bid_id,
                 updated_by: empId?.id

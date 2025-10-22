@@ -197,11 +197,11 @@ model employees {
   updated_by String?
 
   target              target[]
-  sales_projects      projects[]   @relation("ProjectToSalesPerson")
-  assigned            projects[]   @relation("projectToAssignee")
+  sales_projects      projects[]   @relation("ProjectToSalesPersons")
+  assigned_projects   projects[]   @relation("ProjectToAssignees")
   assigned_milestones milestones[] @relation("MilestoneAssignees")
   assigned_tickets    tickets[]    @relation("TicketAssignees")
-  bids                bids[]
+  attending_bids      bids[]       @relation("BidAttendBy")
 }
 
 model roles {
@@ -680,21 +680,20 @@ model hr_processes {
 }
 
 model bids {
-  id               String     @id @default(cuid())
+  id               String      @id @default(cuid())
   url              String
   profile          String
   connects         Int
   boosted_connects Int
   total            Int
-  cost             Decimal    @db.Decimal(10, 4)
+  cost             Decimal     @db.Decimal(10, 4)
   bid_status       String
   id_name          String
   description      String?
   client_name      String
   price            String
-  attend_by_id     String?
-  attend_by        employees? @relation(fields: [attend_by_id], references: [id])
-  project          projects?  @relation("BidToProject")
+  attend_by        employees[] @relation("BidAttendBy")
+  project          projects?   @relation("BidToProject")
 
   price_type String?
 
@@ -720,14 +719,11 @@ model projects {
   end_date        DateTime?
   deadline        DateTime?
   number_of_hours Int?
+  status          String
 
-  sales_person_id String?
-  assignee_id     String?
+  sales_persons employees[] @relation("ProjectToSalesPersons")
+  assignees     employees[] @relation("ProjectToAssignees")
 
-  sales_person employees? @relation("ProjectToSalesPerson", fields: [sales_person_id], references: [id])
-  assignee     employees? @relation("projectToAssignee", fields: [assignee_id], references: [id])
-
-  status     String
   bid_id     String?      @unique
   bid        bids?        @relation("BidToProject", fields: [bid_id], references: [id])
   milestones milestones[]
