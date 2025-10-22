@@ -14,7 +14,7 @@ export const createTicket = async (req: Request, res: Response) => {
             deadline,
             estimated_hours,
             actual_hours,
-            task_type
+            task_type,
         } = req.body;
 
         if (!title || !milestone_id) {
@@ -24,8 +24,18 @@ export const createTicket = async (req: Request, res: Response) => {
             });
         }
 
+        // ✅ Get milestone + project (with auto_id)
         const milestone = await prisma.milestones.findUnique({
             where: { id: milestone_id },
+            include: {
+                project: {
+                    select: {
+                        id: true,
+                        name: true,
+                        auto_id: true, // ✅ new field
+                    },
+                },
+            },
         });
 
         if (!milestone) {
@@ -35,6 +45,31 @@ export const createTicket = async (req: Request, res: Response) => {
             });
         }
 
+        // ✅ Get milestone index within project
+        const milestonesInProject = await prisma.milestones.findMany({
+            where: { project_id: milestone.project.id },
+            orderBy: { created_at: "asc" },
+            select: { id: true },
+        });
+        const milestoneIndex =
+            milestonesInProject.findIndex((m) => m.id === milestone.id) + 1;
+
+        // ✅ Count tickets under this milestone
+        const ticketCount = await prisma.tickets.count({
+            where: { milestone_id },
+        });
+
+        // ✅ Build ticket number using project.auto_id
+        const projectInitial = milestone.project.name.charAt(0).toUpperCase();
+        const milestoneInitial = milestone.name.charAt(0).toUpperCase();
+
+        const ticketNumber = `${projectInitial}${milestone.project.auto_id ?? 0
+            }${milestoneInitial}${milestoneIndex}-${String(ticketCount + 1).padStart(
+                3,
+                "0"
+            )}`;
+
+        // ✅ Handle file uploads
         const files = (req.files || {}) as {
             [fieldname: string]: Express.Multer.File[];
         };
@@ -52,11 +87,12 @@ export const createTicket = async (req: Request, res: Response) => {
             ? assignee_ids.split(",").map((id: string) => id.trim())
             : [];
 
+        // ✅ Create ticket
         const ticket = await prisma.tickets.create({
             data: {
                 title,
                 description,
-                status: status || "pending",
+                status: status || "in_queue",
                 priority,
                 milestone_id,
                 documents: documentsObj,
@@ -65,6 +101,7 @@ export const createTicket = async (req: Request, res: Response) => {
                 actual_hours: Number(actual_hours),
                 created_by: req.user?.userId,
                 task_type,
+                ticket_number: ticketNumber, // ✅ Clean formatted ticket number
                 assignees: {
                     connect: assigneeIds.map((id: string) => ({ id })),
                 },
@@ -80,12 +117,11 @@ export const createTicket = async (req: Request, res: Response) => {
                 milestone: {
                     include: {
                         project: {
-                            select: { id: true, name: true },
+                            select: { id: true, name: true, auto_id: true },
                         },
                     },
                 },
             },
-
         });
 
         return res.status(201).json({
@@ -120,7 +156,7 @@ export const getAllTickets = async (req: Request, res: Response) => {
                 milestone: {
                     include: {
                         project: {
-                            select: { id: true, name: true },
+                            select: { id: true, name: true, client_name: true },
                         },
                     },
                 },
@@ -160,7 +196,7 @@ export const getTicketById = async (req: Request, res: Response) => {
                 milestone: {
                     include: {
                         project: {
-                            select: { id: true, name: true },
+                            select: { id: true, name: true, client_name: true },
                         },
                     },
                 },

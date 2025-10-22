@@ -196,12 +196,12 @@ model employees {
   updated_at DateTime? @updatedAt
   updated_by String?
 
-  target           target[]
-  sales_projects   projects[]  @relation("ProjectToSalesPerson")
-  assigned         projects[]  @relation("projectToAssignee")
-  assigned_milestones milestones[] @relation("MilestoneAssignees")  
-  assigned_tickets tickets[]   @relation("TicketAssignees")
-  bids             bids[]
+  target              target[]
+  sales_projects      projects[]   @relation("ProjectToSalesPerson")
+  assigned            projects[]   @relation("projectToAssignee")
+  assigned_milestones milestones[] @relation("MilestoneAssignees")
+  assigned_tickets    tickets[]    @relation("TicketAssignees")
+  bids                bids[]
 }
 
 model roles {
@@ -712,6 +712,7 @@ model bids {
 
 model projects {
   id              String    @id @default(uuid())
+  auto_id         Int?      @unique
   client_name     String
   name            String
   description     String?
@@ -840,10 +841,11 @@ model tickets {
   estimated_hours Int
   actual_hours    Int
   task_type       String?
+  ticket_number   String      @unique
 
   created_at DateTime? @default(now())
   created_by String?
   updated_at DateTime? @updatedAt
   updated_by String?
-  closed_at DateTime? @default(now())
+  closed_at  DateTime? @default(now())
 }

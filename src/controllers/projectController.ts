@@ -56,10 +56,18 @@ export const create_project = async (req: Request, res: Response) => {
             return res.status(400).json({ success: false, message: "Provided upwork ID does not exist." })
         }
 
+        const lastProject = await prisma.projects.findFirst({
+            orderBy: { auto_id: 'desc' },
+            select: { auto_id: true },
+        });
+
+        const nextAutoId = (lastProject?.auto_id ?? 0) + 1;
+
         const newProject = await prisma.projects.create({
             data: {
                 client_name,
                 name,
+                auto_id: nextAutoId,
                 upwork_profile: {
                     connect: { id: upwork_profile_id.id }
                 },
