@@ -411,6 +411,7 @@ export const listEmployees = async (req: Request, res: Response) => {
             sub_role: { select: { name: true } },
           },
         },
+        designation: true,
         department: { select: { name: true } },
         // sub_department: { select: { name: true } },
         manager: { select: { user: { select: { full_name: true } } } },

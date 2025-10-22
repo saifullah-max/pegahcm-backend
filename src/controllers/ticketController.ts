@@ -234,14 +234,26 @@ export const updateTicket = async (req: Request, res: Response) => {
             description,
             status,
             priority,
+            milestone_id,
             assignee_ids,
             deadline,
             estimated_hours,
             actual_hours,
+            task_type,
         } = req.body;
 
+        console.log(req.body);
+
+        // ✅ Validate ticket existence
         const existingTicket = await prisma.tickets.findUnique({
             where: { id },
+            include: {
+                milestone: {
+                    include: {
+                        project: { select: { id: true, name: true, auto_id: true } },
+                    },
+                },
+            },
         });
 
         if (!existingTicket || existingTicket.status === "deleted") {
@@ -251,6 +263,7 @@ export const updateTicket = async (req: Request, res: Response) => {
             });
         }
 
+        // ✅ Handle uploaded files (like createTicket)
         const files = (req.files || {}) as {
             [fieldname: string]: Express.Multer.File[];
         };
@@ -264,11 +277,35 @@ export const updateTicket = async (req: Request, res: Response) => {
                 uploaded_at: new Date(),
             })) || [];
 
-        let closedAt;
-        if (status === 'closed') {
+        // ✅ Parse assignee IDs
+        const assigneeIds = assignee_ids
+            ? assignee_ids.split(",").map((id: string) => id.trim())
+            : [];
+
+        // ✅ If ticket is closed, set closed_at timestamp
+        let closedAt: Date | undefined;
+        if (status === "closed") {
             closedAt = new Date();
         }
 
+        // ✅ Safe merge of existing + new documents
+        const mergedDocuments = [
+            ...((existingTicket.documents as any[]) ?? []),
+            ...(documentsObj ?? []),
+        ];
+
+        const milestoneExists = await prisma.milestones.findUnique({
+            where: { id: milestone_id },
+        });
+        console.log("✅ milestone exists:", !!milestoneExists);
+
+        const assigneeExists = await prisma.employees.findMany({
+            where: { id: { in: assigneeIds } },
+        });
+        console.log("✅ valid assignees:", assigneeExists.map(a => a.id));
+
+
+        // ✅ Update ticket
         const updatedTicket = await prisma.tickets.update({
             where: { id },
             data: {
@@ -276,16 +313,18 @@ export const updateTicket = async (req: Request, res: Response) => {
                 description,
                 status,
                 priority,
+                milestone_id: milestone_id || existingTicket.milestone_id,
                 deadline: deadline ? new Date(deadline) : undefined,
-                estimated_hours,
-                actual_hours,
-                documents: documentsObj,
+                estimated_hours: Number(estimated_hours),
+                actual_hours: Number(actual_hours),
+                documents: mergedDocuments, // ✅ always array, never null
+                task_type: task_type || existingTicket.task_type,
                 updated_by: req.user?.userId,
-                closed_at: status === 'closed' ? closedAt : undefined,
-                assignees: assignee_ids?.length
+                closed_at: status === "closed" ? closedAt : undefined,
+                assignees: assigneeIds.length
                     ? {
-                        set: [],
-                        connect: assignee_ids.map((id: string) => ({ id })),
+                        set: [], // Clear existing first
+                        connect: assigneeIds.map((id: string) => ({ id })),
                     }
                     : undefined,
             },
@@ -300,12 +339,11 @@ export const updateTicket = async (req: Request, res: Response) => {
                 milestone: {
                     include: {
                         project: {
-                            select: { id: true, name: true },
+                            select: { id: true, name: true, auto_id: true },
                         },
                     },
                 },
             },
-
         });
 
         return res.status(200).json({
