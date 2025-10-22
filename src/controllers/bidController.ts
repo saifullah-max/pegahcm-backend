@@ -163,6 +163,10 @@ export const update_bid = async (req: Request, res: Response) => {
             }
         }
 
+        const attendedIds = attend_by_id
+            ? attend_by_id.split(",").map((id: string) => id.trim())
+            : [];
+
         const updated_bid = await prisma.bids.update({
             where: { id },
             data: {
@@ -179,7 +183,9 @@ export const update_bid = async (req: Request, res: Response) => {
                 client_name,
                 project_type: project_type_id ? { connect: { id: project_type_id } } : undefined,
                 price,
-                attend_by: attend_by_id ? { connect: { id: attend_by_id } } : undefined,
+                attend_by: {
+                    connect: attendedIds.map((id: string) => ({ id })),
+                },
                 updated_by: req.user?.userId
             },
         });
