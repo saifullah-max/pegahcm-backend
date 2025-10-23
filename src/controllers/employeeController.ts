@@ -149,13 +149,13 @@ export const createEmployee = async (req: Request, res: Response) => {
     // ✅ Build profile image object if uploaded
     const profileImageObj = files.profileImage?.[0]
       ? [
-        {
-          name: files.profileImage[0].originalname,
-          url: getFileUrl(req, "profiles", files.profileImage[0].filename),
-          mime_type: files.profileImage[0].mimetype,
-          uploaded_at: new Date(),
-        },
-      ]
+          {
+            name: files.profileImage[0].originalname,
+            url: getFileUrl(req, "profiles", files.profileImage[0].filename),
+            mime_type: files.profileImage[0].mimetype,
+            uploaded_at: new Date(),
+          },
+        ]
       : [];
 
     // ✅ Build documents object if uploaded
@@ -182,8 +182,8 @@ export const createEmployee = async (req: Request, res: Response) => {
     const processedSkills = Array.isArray(skills)
       ? skills
       : typeof skills === "string"
-        ? skills.split(",").map((s) => s.trim())
-        : [];
+      ? skills.split(",").map((s) => s.trim())
+      : [];
 
     // ✅ Generate Employee Number & Hash Password
     const employee_number = await generateEmployeeNumber();
@@ -224,16 +224,16 @@ export const createEmployee = async (req: Request, res: Response) => {
 
       const Role = role_id
         ? await prismaTx.roles.findUnique({
-          where: { id: role_id },
-          select: { name: true },
-        })
+            where: { id: role_id },
+            select: { name: true },
+          })
         : null;
 
       const designation_name = await prisma.designations.findUnique({
         where: {
-          id: designation
-        }
-      })
+          id: designation,
+        },
+      });
 
       // ✅ Create Employee
       const newEmployee = await prismaTx.employees.create({
@@ -287,17 +287,20 @@ export const createEmployee = async (req: Request, res: Response) => {
           visibilityLevel: 1,
         }),
         department_id &&
-        createScopedNotification({
-          scope: "MANAGERS_DEPT",
-          data: {
-            title: "New Department Member",
-            message: `${full_name} has joined your department.`,
-            type: "Employee",
-          },
-          target_ids: { department_id: department_id, employee_id: result.employee.id },
-          visibilityLevel: 2,
-          excludeUserId: result.user.id,
-        }),
+          createScopedNotification({
+            scope: "MANAGERS_DEPT",
+            data: {
+              title: "New Department Member",
+              message: `${full_name} has joined your department.`,
+              type: "Employee",
+            },
+            target_ids: {
+              department_id: department_id,
+              employee_id: result.employee.id,
+            },
+            visibilityLevel: 2,
+            excludeUserId: result.user.id,
+          }),
         // sub_department_id &&
         // createScopedNotification({
         //   scope: "TEAMLEADS_SUBDEPT",
@@ -419,6 +422,8 @@ export const listEmployees = async (req: Request, res: Response) => {
       orderBy: { hire_date: "desc" },
     });
 
+    console.log("employees", employees);
+
     const formattedEmployees = employees.map((emp: any) => {
       // ✅ Parse JSON safely
       const images = Array.isArray(emp.images) ? emp.images : [];
@@ -426,13 +431,14 @@ export const listEmployees = async (req: Request, res: Response) => {
 
       const profile_image_url =
         images.length > 0 &&
-          typeof images[0] === "object" &&
-          "url" in images[0]!
+        typeof images[0] === "object" &&
+        "url" in images[0]!
           ? (images[0] as { url: string }).url
           : emp.profile_image_url || null;
 
       return {
         id: emp.id,
+        user_id:emp.user_id,
         employee_number: emp.employee_number,
         full_name: emp.user.full_name,
         email: emp.user.email,
@@ -623,13 +629,13 @@ export const updateEmployee = async (req: Request, res: Response) => {
     // Build new profile image object if uploaded
     const newProfileImageObj = files.profileImage?.[0]
       ? [
-        {
-          name: files.profileImage[0].originalname,
-          url: getFileUrl(req, "profiles", files.profileImage[0].filename),
-          mime_type: files.profileImage[0].mimetype,
-          uploaded_at: new Date(),
-        },
-      ]
+          {
+            name: files.profileImage[0].originalname,
+            url: getFileUrl(req, "profiles", files.profileImage[0].filename),
+            mime_type: files.profileImage[0].mimetype,
+            uploaded_at: new Date(),
+          },
+        ]
       : [];
 
     // Build new documents object if uploaded
@@ -658,8 +664,8 @@ export const updateEmployee = async (req: Request, res: Response) => {
     const processedSkills = Array.isArray(skills)
       ? skills
       : typeof skills === "string"
-        ? skills.split(",").map((s) => s.trim())
-        : [];
+      ? skills.split(",").map((s) => s.trim())
+      : [];
 
     // Merge profile image
     const oldProfileImages = Array.isArray(existingEmployee.images)
@@ -672,8 +678,8 @@ export const updateEmployee = async (req: Request, res: Response) => {
 
     const profile_image_url =
       typeof firstImage === "object" &&
-        firstImage !== null &&
-        "url" in firstImage
+      firstImage !== null &&
+      "url" in firstImage
         ? (firstImage as { url: string }).url
         : existingEmployee.profile_image_url;
 
@@ -683,9 +689,9 @@ export const updateEmployee = async (req: Request, res: Response) => {
     // Determine subRole type
     const Role = role_id
       ? await prisma.roles.findUnique({
-        where: { id: role_id },
-        select: { name: true },
-      })
+          where: { id: role_id },
+          select: { name: true },
+        })
       : null;
 
     // Update employee
@@ -695,7 +701,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
         phone_number,
         department: { connect: { id: department_id } },
         designation: {
-          connect: { id: designation }
+          connect: { id: designation },
         },
         father_name,
         date_of_birth: date_of_birth ? new Date(date_of_birth) : undefined,
@@ -1043,8 +1049,8 @@ export const updateEmployeeInfoByEmployee = async (
       newImages.length > 0
         ? newImages
         : Array.isArray(existingEmployee.images)
-          ? existingEmployee.images
-          : [];
+        ? existingEmployee.images
+        : [];
     // Profile URL: first image or existing
     const profile_image_url: string | undefined =
       newImages.length > 0
