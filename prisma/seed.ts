@@ -1,4 +1,4 @@
-import { PermissionSource, PrismaClient } from "@prisma/client";
+import { PermissionSource, PrismaClient, Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -349,6 +349,248 @@ async function main() {
     });
 
   }
+
+  // ---------- NEW SEED ADDITIONS ----------
+  // create teamMember role
+  const teamRole = await prisma.roles.upsert({
+    where: { name: "teamMember" },
+    update: {},
+    create: {
+      name: "teamMember",
+      description: "Team member role",
+    },
+  });
+
+  // ensure head departments exist (Production, Commercial) -- they were seeded earlier,
+  // but fetch them to get their ids
+  const productionHead = await prisma.head_departments.findUnique({ where: { name: "Production" } });
+  const commercialHead = await prisma.head_departments.findUnique({ where: { name: "Commercial" } });
+
+  // create departments MERN (head = Production) and Upwork bidding (head = Commercial)
+  const mernDept = await prisma.departments.upsert({
+    where: { name_head_id: { name: "MERN", head_id: productionHead ? productionHead.id : "" } },
+    update: {},
+    create: {
+      name: "MERN",
+      description: "MERN Department",
+      head_id: productionHead ? productionHead.id : undefined as any,
+    },
+  });
+
+  const upworkDept = await prisma.departments.upsert({
+    where: { name_head_id: { name: "Upwork bidding", head_id: commercialHead ? commercialHead.id : "" } },
+    update: {},
+    create: {
+      name: "Upwork bidding",
+      description: "Upwork Bidding Department",
+      head_id: commercialHead ? commercialHead.id : undefined as any,
+    },
+  });
+
+  // create Shift "Evening" start_time today 15:00, end_time today + 1 year (user requested effective range)
+  const today = new Date();
+  const startTime = new Date(today);
+  startTime.setHours(15, 0, 0, 0); // 3:00 PM today
+  const oneYearLater = new Date(today);
+  oneYearLater.setFullYear(today.getFullYear() + 1);
+  oneYearLater.setHours(0, 0, 0, 0); // midnight on same day next year (effective_to)
+
+  const eveningShift = await prisma.shifts.upsert({
+    where: { name: "Evening" },
+    update: {
+      start_time: startTime,
+      end_time: oneYearLater,
+      description: "Evening shift 3pm - 12am (effective 1 year)",
+    },
+    create: {
+      name: "Evening",
+      start_time: startTime,
+      end_time: oneYearLater,
+      description: "Evening shift 3pm - 12am (effective 1 year)",
+    },
+  });
+
+  // create designation (name is not unique in schema) — use findFirst/create
+  let srArch = await prisma.designations.findFirst({ where: { name: "Sr.Software architecture" } });
+  if (!srArch) {
+    srArch = await prisma.designations.create({
+      data: {
+        name: "Sr.Software architecture",
+        description: "Senior Software Architect",
+      },
+    });
+  }
+
+  // create upwork id "Shariq"
+  const upworkShariq = await prisma.upwork_ids.upsert({
+    where: { name: "Shariq" },
+    update: {},
+    create: {
+      name: "Shariq",
+      link: "https://example.com/shariq",
+      status: "ACTIVE",
+    },
+  });
+
+  // create one bid tied to upworkShariq — use Prisma.Decimal for Decimal fields
+  const createdBid = await prisma.bids.create({
+    data: {
+      url: "https://upwork.com/fake-bid-1",
+      profile: "ShariqProfile",
+      connects: 5,
+      boosted_connects: 0,
+      total: 100,
+      cost: new Prisma.Decimal(100), // proper Decimal
+      bid_status: "OPEN",
+      id_name: "BID-001",
+      description: "Test bid created for seeding",
+      client_name: "Example Client",
+      price: "100",
+      upwork_id: upworkShariq.id,
+      price_type: "fixed",
+    },
+  });
+
+  // create one project linked to the bid
+  const project = await prisma.projects.create({
+    data: {
+      client_name: "Example Client",
+      name: "Seeded Project 1",
+      description: "Project created via seed",
+      start_date: new Date(),
+      status: "active",
+      bid_id: createdBid.id,
+    },
+  });
+
+  // create one milestone for project
+  const milestone = await prisma.milestones.create({
+    data: {
+      name: "Initial milestone",
+      project_id: project.id,
+      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // +7 days
+      estimated_hours: 40,
+      actual_hours: 0,
+      status: "open",
+      revenue: 0,
+    },
+  });
+
+  // create one ticket linked to milestone
+  const ticket = await prisma.tickets.create({
+    data: {
+      title: "Seeded Ticket 1",
+      description: "A ticket created in seed data",
+      milestone_id: milestone.id,
+      estimated_hours: 8,
+      actual_hours: 0,
+      task_type: "bug",
+      ticket_number: `SEED-${Date.now()}`,
+    },
+  });
+
+  // helper to hash password
+  const pwHash1 = await bcrypt.hash("Password123!", 10);
+  const pwHash2 = await bcrypt.hash("Password123!", 10);
+
+  // find permission Employee:view
+  const employeeViewPerm = await prisma.permissions.findUnique({
+    where: { module_action: { module: "Employee", action: "view" } },
+  });
+
+  // create two users and employees
+  const user1 = await prisma.users.upsert({
+    where: { email: "Saifullah@pegahub.com" },
+    update: {},
+    create: {
+      username: "Saifullah",
+      full_name: "Saifullah",
+      email: "Saifullah@pegahub.com",
+      password_hash: pwHash1,
+      role_id: teamRole.id,
+      status: "ACTIVE",
+    },
+  });
+
+  const emp1 = await prisma.employees.create({
+    data: {
+      user_id: user1.id,
+      employee_number: "EMP1001",
+      date_of_birth: new Date("1990-01-01"),
+      hire_date: new Date(),
+      status: "ACTIVE",
+      department_id: mernDept.id,
+      designation_id: srArch.id,
+      phone_number: "0300-0000-001",
+      salary: new Prisma.Decimal(50000), // proper Decimal
+      work_location: "Onsite",
+      gender: "Male",
+      address: "Seeded Address 1",
+      shift_id: eveningShift.id,
+      // added required emergency contact fields
+      emergency_contact_name: "N/A",
+      emergency_contact_phone: "0000000000",
+    },
+  });
+
+  const user2 = await prisma.users.upsert({
+    where: { email: "salesTester@pegahub.com" },
+    update: {},
+    create: {
+      username: "salesTester",
+      full_name: "Sales Tester",
+      email: "salesTester@pegahub.com",
+      password_hash: pwHash2,
+      role_id: teamRole.id,
+      status: "ACTIVE",
+    },
+  });
+
+  const emp2 = await prisma.employees.create({
+    data: {
+      user_id: user2.id,
+      employee_number: "EMP1002",
+      date_of_birth: new Date("1992-02-02"),
+      hire_date: new Date(),
+      status: "ACTIVE",
+      department_id: upworkDept.id,
+      designation_id: srArch.id,
+      phone_number: "0300-0000-002",
+      salary: new Prisma.Decimal(45000), // proper Decimal
+      work_location: "Remote",
+      gender: "Male",
+      address: "Seeded Address 2",
+      shift_id: eveningShift.id,
+      // added required emergency contact fields
+      emergency_contact_name: "N/A",
+      emergency_contact_phone: "0000000000",
+    },
+  });
+
+  // assign Employee:view to both users if permission exists
+  if (employeeViewPerm) {
+    await prisma.user_permissions.upsert({
+      where: { userId_permissionId: { user_id: user1.id, permission_id: employeeViewPerm.id } },
+      update: {},
+      create: {
+        user_id: user1.id,
+        permission_id: employeeViewPerm.id,
+        source: PermissionSource.USER,
+      },
+    });
+
+    await prisma.user_permissions.upsert({
+      where: { userId_permissionId: { user_id: user2.id, permission_id: employeeViewPerm.id } },
+      update: {},
+      create: {
+        user_id: user2.id,
+        permission_id: employeeViewPerm.id,
+        source: PermissionSource.USER,
+      },
+    });
+  }
+
+  // ---------- END NEW SEED ADDITIONS ----------
 }
 
 main()
