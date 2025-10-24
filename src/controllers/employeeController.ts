@@ -422,7 +422,7 @@ export const listEmployees = async (req: Request, res: Response) => {
       orderBy: { hire_date: "desc" },
     });
 
-    console.log("employees", employees);
+    // console.log("employees", employees);
 
     const formattedEmployees = employees.map((emp: any) => {
       // ✅ Parse JSON safely

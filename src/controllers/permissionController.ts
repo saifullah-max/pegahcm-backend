@@ -85,6 +85,14 @@ export const assignPermissionsToUser = async (req: Request, res: Response) => {
 
     await prisma.user_permissions.deleteMany({ where: { user_id } });
     await prisma.user_permissions.createMany({ data, skipDuplicates: true });
+    console.log("permissions:", data);
+
+    const exists = data.some((p: { permission_id: string }) =>
+      p.permission_id === "77d2d8a0-a00f-404a-a81a-3c58bd9ee7b2"
+    );
+    console.log("Permission exists:", exists); // true / false
+
+
 
     try {
       // 🔔 Notify target user
