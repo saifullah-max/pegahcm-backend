@@ -23,7 +23,7 @@ export const createTicket = async (req: Request, res: Response) => {
                 message: "Title and milestone_id are required.",
             });
         }
-        
+
 
         const milestone = await prisma.milestones.findUnique({
             where: { id: milestone_id },
@@ -261,11 +261,21 @@ export const updateTicket = async (req: Request, res: Response) => {
             });
         }
 
-        // ✅ 2. Handle uploaded files (like in createTicket)
-        const files = (req.files || {}) as {
-            [fieldname: string]: Express.Multer.File[];
-        };
+        // ✅ 2. Parse kept existing documents if provided
+        let keptExistingDocs: any[] | undefined;
+        if (req.body.existing_documents !== undefined) {
+            try {
+                keptExistingDocs = Array.isArray(req.body.existing_documents)
+                    ? JSON.parse(req.body.existing_documents[0] || "[]")
+                    : JSON.parse(req.body.existing_documents || "[]");
+            } catch (e) {
+                console.warn("❌ Failed to parse existing_documents JSON");
+                keptExistingDocs = [];
+            }
+        }
 
+        // ✅ 3. Attach newly uploaded documents if any exist
+        const files = (req.files || {}) as { [fieldname: string]: Express.Multer.File[] };
         const documentsObj =
             files.documents?.map((file) => ({
                 name: file.originalname,
@@ -275,13 +285,18 @@ export const updateTicket = async (req: Request, res: Response) => {
                 uploaded_at: new Date(),
             })) || [];
 
-        // ✅ 3. Merge old + new documents safely
-        const mergedDocuments = [
-            ...((existingTicket.documents as any[]) ?? []),
-            ...(documentsObj ?? []),
-        ];
+        // ✅ 4. Final documents logic
+        let finalDocuments: any[] = [];
 
-        // ✅ 4. Parse and validate assignees
+        if (keptExistingDocs !== undefined) {
+            // ✅ UI explicitly updated docs (can be empty or partial)
+            finalDocuments = [...keptExistingDocs, ...documentsObj];
+        } else {
+            // ✅ UI did not touch docs so keep all DB docs
+            finalDocuments = [...(existingTicket.documents as any[]), ...documentsObj];
+        }
+
+        // ✅ 5. Assignees validation
         const assigneeIds = assignee_ids
             ? assignee_ids.split(",").map((id: string) => id.trim())
             : [];
@@ -290,33 +305,29 @@ export const updateTicket = async (req: Request, res: Response) => {
             where: { id: { in: assigneeIds } },
             select: { id: true },
         });
-        console.log("✅ valid assignees:", validAssignees.map((a) => a.id));
 
         const assigneeConnect =
             validAssignees.length > 0
                 ? {
-                    set: [], // clear previous
+                    set: [],
                     connect: validAssignees.map((a) => ({ id: a.id })),
                 }
                 : undefined;
 
-        // ✅ 5. Check milestone existence (if provided)
+        // ✅ 6. Validate milestone if provided
         let validMilestoneId = existingTicket.milestone_id;
         if (milestone_id) {
             const milestoneExists = await prisma.milestones.findUnique({
                 where: { id: milestone_id },
             });
-            console.log("✅ milestone exists:", !!milestoneExists);
 
-            if (milestoneExists) {
-                validMilestoneId = milestone_id;
-            }
+            if (milestoneExists) validMilestoneId = milestone_id;
         }
 
-        // ✅ 6. Handle closed_at logic
+        // ✅ 7. Closed timestamp logic
         const closedAt = status === "closed" ? new Date() : undefined;
 
-        // ✅ 7. Update ticket
+        // ✅ 8. Update Ticket
         const updatedTicket = await prisma.tickets.update({
             where: { id },
             data: {
@@ -328,19 +339,15 @@ export const updateTicket = async (req: Request, res: Response) => {
                 deadline: deadline ? new Date(deadline) : undefined,
                 estimated_hours: Number(estimated_hours),
                 actual_hours: Number(actual_hours),
-                documents: mergedDocuments,
                 task_type: task_type || existingTicket.task_type,
+                documents: finalDocuments,
                 updated_by: req.user?.userId,
                 closed_at: closedAt,
                 ...(assigneeConnect && { assignees: assigneeConnect }),
             },
             include: {
                 assignees: {
-                    select: {
-                        id: true,
-                        designation: true,
-                        user: true,
-                    },
+                    select: { id: true, designation: true, user: true },
                 },
                 milestone: {
                     include: {
@@ -357,6 +364,7 @@ export const updateTicket = async (req: Request, res: Response) => {
             message: "Ticket updated successfully.",
             ticket: updatedTicket,
         });
+
     } catch (error: any) {
         console.error("❌ Error updating ticket:", error);
         return res.status(500).json({
@@ -366,6 +374,7 @@ export const updateTicket = async (req: Request, res: Response) => {
         });
     }
 };
+
 
 export const deleteTicket = async (req: Request, res: Response) => {
     try {
