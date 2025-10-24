@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
 import { createScopedNotification } from '../utils/notificationUtils';
+import { PermissionSource } from '@prisma/client';
 
 // Create a new role
 export const createRole = async (req: Request, res: Response) => {
@@ -180,14 +181,18 @@ export const assignPermissionsToRole = async (req: Request, res: Response) => {
       if (userIds.length > 0) {
         // Step 4: Delete all UserPermissions for those users
         await tx.user_permissions.deleteMany({
-          where: { user_id: { in: userIds } },
+          where: {
+            user_id: { in: userIds },
+            source: "ROLE"
+          },
         });
 
-        // Step 5: Add new permissions to those users
+        // add role-based permissions
         const userPermissionData = userIds.flatMap((user_id) =>
           permission_ids.map((permission_id: string) => ({
             user_id,
             permission_id,
+            source: PermissionSource.ROLE,
           }))
         );
 
@@ -195,6 +200,7 @@ export const assignPermissionsToRole = async (req: Request, res: Response) => {
           data: userPermissionData,
           skipDuplicates: true,
         });
+
       }
     });
 

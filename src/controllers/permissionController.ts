@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { createScopedNotification } from '../utils/notificationUtils';
 import prisma from '../utils/Prisma';
+import { PermissionSource } from '@prisma/client';
 
 export const createPermission = async (req: Request, res: Response) => {
   try {
@@ -39,12 +40,8 @@ export const createPermission = async (req: Request, res: Response) => {
       const userAssignments = adminRole.users.map((user) => ({
         user_id: user.id,
         permission_id: permission.id,
+        source: PermissionSource.ROLE
       }));
-
-      await prisma.user_permissions.createMany({
-        data: userAssignments,
-        skipDuplicates: true,
-      });
 
       // 2. Assign to the admin role itself
       await prisma.role_permissions.create({
@@ -83,8 +80,20 @@ export const assignPermissionsToUser = async (req: Request, res: Response) => {
       permission_id,
     }));
 
-    await prisma.user_permissions.deleteMany({ where: { user_id } });
-    await prisma.user_permissions.createMany({ data, skipDuplicates: true });
+    await prisma.user_permissions.createMany({
+      data: data.map((p: any) => ({
+        ...p,
+        source: "USER"
+      })),
+      skipDuplicates: true,
+    });
+    await prisma.user_permissions.createMany({
+      data: data.map((p: any) => ({
+        ...p,
+        source: "USER"
+      })),
+      skipDuplicates: true,
+    });
     console.log("permissions:", data);
 
     const exists = data.some((p: { permission_id: string }) =>

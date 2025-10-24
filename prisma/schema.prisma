@@ -90,11 +90,17 @@ model sub_role_permissions {
   @@unique([sub_role_id, permission_id], name: "subRole_permission")
 }
 
+enum PermissionSource {
+  ROLE
+  USER
+}
+
 model user_permissions {
   id         String      @id @default(uuid())
   user       users       @relation(fields: [user_id], references: [id])
   user_id    String
   permission permissions @relation(fields: [permission_id], references: [id])
+  source         PermissionSource
 
   created_at    DateTime? @default(now())
   created_by    String?
