@@ -46,13 +46,10 @@ export const create_bid = async (req: Request, res: Response) => {
 
     let attendedIds: string[] = [];
 
-    if (Array.isArray(attend_by_id)) {
+    if (attend_by_id && attend_by_id.length>0) {
       // Already an array
       attendedIds = attend_by_id.map((id: any) => String(id));
-    } else if (typeof attend_by_id === "string") {
-      // Convert "1,2,3" → ["1","2","3"]
-      attendedIds = attend_by_id.split(",").map((id: string) => id.trim());
-    }
+    } 
 
     const newBid = await prisma.bids.create({
       data: {
@@ -192,10 +189,24 @@ export const update_bid = async (req: Request, res: Response) => {
       }
     }
 
-    // console.log("Attend by id:", attend_by_id);
-    // const attendedIds = attend_by_id
-    //     ? attend_by_id.split(",").map((id: string) => id.trim())
-    //     : [];
+    // Normalize attend_by_id to an array
+    let attendedIds: string[] = [];
+    if (attend_by_id && attend_by_id.length>0){
+      attendedIds = attend_by_id.map((id: any) => String(id));
+    } 
+
+    // Validate employee IDs (optional, but recommended)
+    if (attendedIds.length > 0) {
+      const employees = await prisma.employees.findMany({
+        where: { id: { in: attendedIds } },
+      });
+      if (employees.length !== attendedIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: "One or more provided employee IDs do not exist.",
+        });
+      }
+    }
 
     const updated_bid = await prisma.bids.update({
       where: { id },
@@ -219,7 +230,7 @@ export const update_bid = async (req: Request, res: Response) => {
           : undefined,
         price,
         attend_by: {
-          connect: { id: attend_by_id },
+          set: attendedIds.map((id: string) => ({ id })),
         },
         updated_by: req.user?.userId,
       },
