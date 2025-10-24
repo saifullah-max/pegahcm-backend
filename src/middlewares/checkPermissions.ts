@@ -15,6 +15,32 @@ export const checkPermission = (module: string, action: string) => {
         return;
       }
 
+      // Special handling for Ticket comments: assignee bypass
+      if (module === "Ticket" && action === "comment") {
+        const ticketId =
+          (req.params as any).ticketId ||
+          (req.params as any).id ||
+          (req.body as any).ticket_id;
+        if (!ticketId) {
+          // If no ticket id provided, fall back to normal permission check
+          // (controller should preferably pass ticket id)
+        } else {
+          const ticket = await prisma.tickets.findUnique({
+            where: { id: ticketId },
+            include: { assignees: { select: { user_id: true } } },
+          });
+
+          const isAssignee =
+            !!ticket &&
+            ticket.assignees.some((a: any) => a.user_id === userId);
+
+          if (isAssignee) {
+            return next();
+          }
+        }
+        // not an assignee: continue to normal permission checks below to ensure user has Ticket:comment
+      }
+
       const user = await prisma.users.findUnique({
         where: { id: userId },
         include: {
@@ -39,7 +65,6 @@ export const checkPermission = (module: string, action: string) => {
           (up: any) => `${up.permission.module}:${up.permission.action}`
         ) || []),
       ];
-      // console.log("permission:", permissions);
 
       // Special handling for 'view' to support view-own / view-all
       if (action === "view") {
@@ -48,7 +73,6 @@ export const checkPermission = (module: string, action: string) => {
           permissions.includes(`${module}:view-own`) ||
           permissions.includes(`${module}:view`);
         if (!hasViewAll && !hasViewOwn) {
-            console.log(hasViewAll, hasViewOwn)
           res
             .status(403)
             .json({ message: "Forbidden: Missing view permission" });
@@ -60,7 +84,6 @@ export const checkPermission = (module: string, action: string) => {
       }
 
       const hasPerm = permissions.includes(`${module}:${action}`);
-      // console.log("Has permission?", hasPerm);
 
       if (!hasPerm) {
         res.status(403).json({ message: "Forbidden: Missing permission" });

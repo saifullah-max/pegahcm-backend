@@ -96,11 +96,11 @@ enum PermissionSource {
 }
 
 model user_permissions {
-  id         String      @id @default(uuid())
-  user       users       @relation(fields: [user_id], references: [id])
+  id         String           @id @default(uuid())
+  user       users            @relation(fields: [user_id], references: [id])
   user_id    String
-  permission permissions @relation(fields: [permission_id], references: [id])
-  source         PermissionSource
+  permission permissions      @relation(fields: [permission_id], references: [id])
+  source     PermissionSource
 
   created_at    DateTime? @default(now())
   created_by    String?
@@ -196,6 +196,7 @@ model employees {
   salary_details         salary_details[]
   employee_documents     employee_documents[]
   employee_images        employee_images[]
+  comments               ticket_comments[]
 
   created_at DateTime? @default(now())
   created_by String?
@@ -830,24 +831,47 @@ model upwork_ids {
 }
 
 model tickets {
-  id              String      @id @default(uuid())
+  id              String            @id @default(uuid())
   title           String
   description     String?
-  status          String      @default("pending")
+  status          String            @default("pending")
   priority        String? // e.g. low | medium | high
   milestone_id    String
-  milestone       milestones  @relation(fields: [milestone_id], references: [id])
-  assignees       employees[] @relation("TicketAssignees")
+  milestone       milestones        @relation(fields: [milestone_id], references: [id])
+  assignees       employees[]       @relation("TicketAssignees")
   documents       Json?
   deadline        DateTime?
   estimated_hours Int
   actual_hours    Int
   task_type       String?
-  ticket_number   String      @unique
+  ticket_number   String            @unique
+  comments        ticket_comments[]
 
   created_at DateTime? @default(now())
   created_by String?
   updated_at DateTime? @updatedAt
   updated_by String?
   closed_at  DateTime? @default(now())
+}
+
+model ticket_comments {
+  id String @id @default(uuid())
+
+  ticket_id String
+  ticket    tickets @relation(fields: [ticket_id], references: [id])
+
+  employee_id String
+  employee    employees @relation(fields: [employee_id], references: [id])
+
+  description String?
+  documents   Json? // Array of document metadata: [{name, url, mime_type, uploaded_at}]
+
+  parent_id String?
+  parent    ticket_comments?  @relation("CommentReplies", fields: [parent_id], references: [id])
+  replies   ticket_comments[] @relation("CommentReplies")
+
+  // Metadata
+  created_at DateTime  @default(now())
+  updated_at DateTime? @updatedAt
+  deleted_at DateTime?
 }

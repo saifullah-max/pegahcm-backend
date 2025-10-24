@@ -375,7 +375,6 @@ export const updateTicket = async (req: Request, res: Response) => {
     }
 };
 
-
 export const deleteTicket = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;

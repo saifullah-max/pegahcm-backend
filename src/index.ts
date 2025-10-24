@@ -30,6 +30,7 @@ import designationRoutes from './routes/designationRoutes'
 import upworkRoutes from './routes/upworkRoutes'
 import ticketRoutes from './routes/ticketRoutes'
 import { startCleanupJobs } from './utils/CronJob';
+import ticketCommentsRoutes from './routes/ticketCommentsRoutes'
 
 // Load environment variables
 dotenv.config();
@@ -75,6 +76,7 @@ app.use('/api/targets', targetRoutes);
 app.use('/api/designations', designationRoutes)
 app.use('/api/upwork', upworkRoutes)
 app.use('/api/tickets', ticketRoutes)
+app.use('/api/tickets/comments', ticketCommentsRoutes)
 // Basic route
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to PegaHCM API' });
