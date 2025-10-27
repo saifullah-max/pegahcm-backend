@@ -77,7 +77,6 @@ export const createTicketComment = async (req: Request, res: Response) => {
     }
 };
 
-
 export const getCommentsByTicketId = async (req: Request, res: Response) => {
     try {
         const { ticketId } = req.params;

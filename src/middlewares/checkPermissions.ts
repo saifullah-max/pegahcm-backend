@@ -73,6 +73,8 @@ export const checkPermission = (module: string, action: string) => {
           permissions.includes(`${module}:view-own`) ||
           permissions.includes(`${module}:view`);
         if (!hasViewAll && !hasViewOwn) {
+          console.log("has perm:", hasViewAll, hasViewOwn);
+
           res
             .status(403)
             .json({ message: "Forbidden: Missing view permission" });
@@ -84,6 +86,7 @@ export const checkPermission = (module: string, action: string) => {
       }
 
       const hasPerm = permissions.includes(`${module}:${action}`);
+      console.log("has perm:", hasPerm);
 
       if (!hasPerm) {
         res.status(403).json({ message: "Forbidden: Missing permission" });

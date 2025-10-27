@@ -27,84 +27,79 @@ export const create_project = async (req: Request, res: Response) => {
       bid_id,
     } = req.body;
 
-    const empId = await prisma.employees.findUnique({
-      where: {
-        user_id: req.user?.userId,
-      },
-    });
-
-    const files = (req.files || {}) as {
-      [fieldname: string]: Express.Multer.File[];
-    };
-
     const user_id = req.user?.userId;
 
-    const documentsObj =
-      files.documents?.map((file) => ({
-        name: file.originalname,
-        url: getFileUrl(req, "documents", file.filename),
-        mime_type: file.mimetype,
-        type: file.mimetype,
-        uploaded_at: new Date(),
-      })) || [];
+    // Process files
+    const files = (req.files || {}) as { [fieldname: string]: Express.Multer.File[] };
+    const documentsObj = files.documents?.map(file => ({
+      name: file.originalname,
+      url: getFileUrl(req, "documents", file.filename),
+      mime_type: file.mimetype,
+      type: file.mimetype,
+      uploaded_at: new Date(),
+    })) || [];
 
-    const upwork_profile_id = await prisma.upwork_ids.findUnique({
-      where: { id: upwork_id },
-    });
-
-    if (!upwork_profile_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Provided upwork ID does not exist.",
-      });
+    // Validate upwork ID
+    const upworkProfile = await prisma.upwork_ids.findUnique({ where: { id: upwork_id } });
+    if (!upworkProfile) {
+      return res.status(400).json({ success: false, message: "Provided upwork ID does not exist." });
     }
 
+    // Prepare auto_id
     const lastProject = await prisma.projects.findFirst({
       orderBy: { auto_id: "desc" },
       select: { auto_id: true },
     });
-
     const nextAutoId = (lastProject?.auto_id ?? 0) + 1;
 
-    const assigneeIdsArray = assignee_id
-      ? assignee_id.split(",").map((id: string) => id.trim())
+    // Prepare employee IDs arrays
+    const assigneeIdsArray: string[] = Array.isArray(assignee_id)
+      ? assignee_id
+      : assignee_id
+        ? assignee_id.split(",").map((id: string) => id.trim())
+        : [];
+
+    const salesPersonIdsArray: string[] = Array.isArray(sales_person_id)
+      ? sales_person_id
+      : sales_person_id
+        ? sales_person_id.split(",").map((id: string) => id.trim())
+        : [];
+
+    // Fetch only existing employees
+    const existingAssignees = assigneeIdsArray.length
+      ? await prisma.employees.findMany({ where: { id: { in: assigneeIdsArray } } })
+      : [];
+    const existingSalesPersons = salesPersonIdsArray.length
+      ? await prisma.employees.findMany({ where: { id: { in: salesPersonIdsArray } } })
       : [];
 
-    const salesPersonIdsArray = sales_person_id
-      ? sales_person_id.split(",").map((id: string) => id.trim())
-      : [];
-
+    // Create project
     const newProject = await prisma.projects.create({
       data: {
         client_name,
         name,
         auto_id: nextAutoId,
-        upwork_profile: {
-          connect: { id: upwork_profile_id.id },
-        },
+        upwork_profile: { connect: { id: upworkProfile.id } },
         description,
         start_date: new Date(start_date),
         end_date: end_date ? new Date(end_date) : undefined,
         deadline: deadline ? new Date(deadline) : undefined,
         number_of_hours: Number(number_of_hours),
         status,
-        assignees: assigneeIdsArray.length
-          ? { connect: assigneeIdsArray.map((id: string) => ({ id })) }
+        assignees: existingAssignees.length
+          ? { connect: existingAssignees.map(emp => ({ id: emp.id })) }
           : undefined,
-        sales_persons: salesPersonIdsArray.length
-          ? { connect: salesPersonIdsArray.map((id: string) => ({ id })) }
+        sales_persons: existingSalesPersons.length
+          ? { connect: existingSalesPersons.map(emp => ({ id: emp.id })) }
           : undefined,
         documents: documentsObj,
         created_by: user_id,
       },
     });
 
-    res.status(201).json({
-      success: true,
-      message: "Project created successfully.",
-      newProject,
-    });
+    res.status(201).json({ success: true, message: "Project created successfully.", newProject });
   } catch (error: any) {
+    console.error(error);
     res.status(400).json({ error: error.message });
   }
 };
