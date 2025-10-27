@@ -114,12 +114,12 @@ export const get_all_projects = async (req: Request, res: Response) => {
   try {
     const current_user_id = (req.user as unknown as CustomJwtPayload).userId;
     const permissionScope = (req as any).permissionScope || "all"; // 'own' | 'all'
-    const baseWhere = (buildFilters("bids", req.query) || {}) as any;
+    const baseWhere = (buildFilters("projects", req.query) || {}) as any;
 
     let where: any = baseWhere;
     if (permissionScope === "own") {
       const ownerFilter = {
-        OR: [{ profile: current_user_id }, { created_by: current_user_id }],
+        OR: [{ created_by: current_user_id }],
       };
       if (Object.keys(baseWhere).length === 0) {
         where = ownerFilter;
@@ -129,6 +129,7 @@ export const get_all_projects = async (req: Request, res: Response) => {
     }
 
     const projects = await prisma.projects.findMany({
+      where,
       include: {
         sales_persons: {
           include: {

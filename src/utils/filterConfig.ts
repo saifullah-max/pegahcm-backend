@@ -17,4 +17,25 @@ export const filterConfig = {
         ],
         foreignKeys: ["upwork_id"],
     },
+    projects: {
+        allowedKeys: [
+            "status",
+            "assign_to"
+        ],
+        foreignKeys: ["assign_id"]
+    },
+    milestones: {
+        allowedKeys: [
+            "status",
+            "assign_to"
+        ],
+        foreignKeys: ["assign_id"]
+    },
+    tickets: {
+        allowedKeys: [
+            "status",
+            "assign_to"
+        ],
+        foreignKeys: ["assign_id"]
+    },
 }

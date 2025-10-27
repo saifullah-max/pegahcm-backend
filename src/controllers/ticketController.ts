@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import prisma from "../utils/Prisma";
 import { getFileUrl } from "./projectController";
+import { buildFilters } from "../utils/buildFilters";
+import { CustomJwtPayload } from "./notificationController";
 
 export const createTicket = async (req: Request, res: Response) => {
     try {
@@ -139,9 +141,28 @@ export const createTicket = async (req: Request, res: Response) => {
 
 export const getAllTickets = async (req: Request, res: Response) => {
     try {
+        const current_user_id = (req.user as unknown as CustomJwtPayload).userId;
+        const permissionScope = (req as any).permissionScope || "all"; // 'own' | 'all'
+        const baseWhere = (buildFilters("tickets", req.query) || {}) as any;
+
+        let where: any = baseWhere;
+        if (permissionScope === "own") {
+            const ownerFilter = {
+                OR: [{ created_by: current_user_id }],
+            };
+            if (Object.keys(baseWhere).length === 0) {
+                where = ownerFilter;
+            } else {
+                where = { AND: [baseWhere, ownerFilter] };
+            }
+        }
+
         const tickets = await prisma.tickets.findMany({
             where: {
-                status: { not: "deleted" },
+                AND: [
+                    { status: { not: "deleted" } },
+                    where
+                ]
             },
             include: {
                 assignees: {

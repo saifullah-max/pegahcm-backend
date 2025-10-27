@@ -10,12 +10,13 @@ import {
 } from '../controllers/projectController';
 import { authenticateToken } from '../middlewares/authMiddleware';
 import { uploadMiddleware } from '../middlewares/uploadMiddleware';
+import { checkPermission } from '../middlewares/checkPermissions';
 
 const router = express.Router();
 
 router.use(authenticateToken);
 
-router.route('/').post(uploadMiddleware, create_project).get(get_all_projects);
+router.route('/').post(uploadMiddleware, create_project).get(checkPermission("Project", "view"), get_all_projects);
 router.route('/type').post(create_project_type).get(get_all_project_types);
 
 router

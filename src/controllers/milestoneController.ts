@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
 import { getFileUrl } from './projectController';
+import { buildFilters } from '../utils/buildFilters';
+import { CustomJwtPayload } from './notificationController';
 
 // Create a new milestone
 export const create_milestone = async (req: Request, res: Response) => {
@@ -62,8 +64,8 @@ export const create_milestone = async (req: Request, res: Response) => {
                 data: { status: "In progress" },
             });
         }
-        
-        
+
+
         res.status(201).json(newMilestone);
     } catch (error: any) {
         res.status(400).json({ error: error.message });
@@ -73,7 +75,24 @@ export const create_milestone = async (req: Request, res: Response) => {
 // Get all milestones
 export const get_all_milestones = async (req: Request, res: Response) => {
     try {
+        const current_user_id = (req.user as unknown as CustomJwtPayload).userId;
+        const permissionScope = (req as any).permissionScope || "all"; // 'own' | 'all'
+        const baseWhere = (buildFilters("milestones", req.query) || {}) as any;
+
+        let where: any = baseWhere;
+        if (permissionScope === "own") {
+            const ownerFilter = {
+                OR: [{ created_by: current_user_id }],
+            };
+            if (Object.keys(baseWhere).length === 0) {
+                where = ownerFilter;
+            } else {
+                where = { AND: [baseWhere, ownerFilter] };
+            }
+        }
+
         const milestones = await prisma.milestones.findMany({
+            where,
             include: {
                 project: {
                     include: {
