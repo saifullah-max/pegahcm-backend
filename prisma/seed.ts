@@ -217,10 +217,14 @@ async function main() {
       { module: "Ticket", action: "view", description: "view Ticket" },
       { module: "Ticket", action: "create", description: "create Ticket" },
       { module: "Ticket", action: "comment", description: "Comment on ticket" },
+      { module: "Ticket", action: "delete", description: "Delete Ticket" },
 
       { module: "Milestone", action: "view", description: "view Milestone" },
       { module: "Milestone", action: "create", description: "create Milestone" },
       { module: "Milestone", action: "update", description: "update Milestone" },
+      { module: "Milestone", action: "view-all", description: "view all Milestone data" },
+      { module: "Milestone", action: "view-owm", description: "view own Milestone data" },
+      { module: "Milestone", action: "delete", description: "Delete Milestone" },
 
       {
         module: "Attendance",
@@ -258,6 +262,9 @@ async function main() {
 
       { module: "Project", action: "view", description: "view Project" },
       { module: "Project", action: "create", description: "create Project" },
+      { module: "Project", action: "view-all", description: "view all Project data" },
+      { module: "Project", action: "view-own", description: "view own Project data" },
+      { module: "Project", action: "delete", description: "Delete Project" },
 
       { module: "Upwork", action: "view-all", description: "view-all Upwork" },
       { module: "Upwork", action: "view", description: "view Upwork" },
