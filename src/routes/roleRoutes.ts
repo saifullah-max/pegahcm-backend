@@ -14,7 +14,7 @@ router.get('/:id', checkPermission("Role", "view"), getRoleById as any);
 router.put('/:id', checkPermission("Role", "update"), updateRole as any);
 router.delete('/:id', checkPermission("Role", "delete"), deleteRole as any);
 
-router.post('/permission', checkPermission("SubRole", "create"), assignPermissionsToRole as any);
+router.post('/permission', checkPermission("Role", "create"), assignPermissionsToRole as any);
 
 
 export default router; 

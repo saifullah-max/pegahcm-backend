@@ -383,12 +383,17 @@ export const listEmployees = async (req: Request, res: Response) => {
     const skip = (pageNumber - 1) * limitNumber;
 
     // Build where clause
-    const where: any = {};
+    const where: any = {
+      user: {
+        role: {
+          name: { not: "Admin" }, // 👈 exclude admin users
+        },
+      },
+    };
 
     if (search) {
       where.OR = [
         { employee_number: { contains: search as string } },
-        // { position: { contains: search as string } },
         { user: { full_name: { contains: search as string } } },
       ];
     }
@@ -422,10 +427,7 @@ export const listEmployees = async (req: Request, res: Response) => {
       orderBy: { hire_date: "desc" },
     });
 
-    // console.log("employees", employees);
-
     const formattedEmployees = employees.map((emp: any) => {
-      // ✅ Parse JSON safely
       const images = Array.isArray(emp.images) ? emp.images : [];
       const documents = Array.isArray(emp.documents) ? emp.documents : [];
 
@@ -461,11 +463,9 @@ export const listEmployees = async (req: Request, res: Response) => {
           ? emp.skills.split(",").map((skill: any) => skill.trim())
           : [],
         hire_date: emp.hire_date,
-
-        // ✅ New fields
         profile_image_url,
-        images, // Full image objects
-        documents, // Full document objects
+        images,
+        documents,
       };
     });
 
@@ -488,6 +488,7 @@ export const listEmployees = async (req: Request, res: Response) => {
       .json({ success: false, message: "Internal server error" });
   }
 };
+
 
 export const ListSingleEmployee = async (req: Request, res: Response) => {
   const { id } = req.params;

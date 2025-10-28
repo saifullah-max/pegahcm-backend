@@ -14,7 +14,7 @@ router.use(authenticateToken as any);
 // submit resignation
 router.post('/resignation/apply', checkPermission("Resignation", "create"), submitResignation as any);
 
-router.get('/', listEmployees as any)
+router.get('/', checkPermission("Employee", "view") ,listEmployees as any)
 
 // getting a specific employee by ID
 router.get('/:id', checkPermission("Employee", "view"), ListSingleEmployee as any);

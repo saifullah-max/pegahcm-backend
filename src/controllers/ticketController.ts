@@ -209,7 +209,9 @@ export const getTicketById = async (req: Request, res: Response) => {
                     select: {
                         id: true,
                         designation: true,
-                        user: true,
+                        user: {
+                            select: { id: true, full_name: true, email: true },
+                        },
                     },
                 },
                 milestone: {
@@ -220,7 +222,6 @@ export const getTicketById = async (req: Request, res: Response) => {
                     },
                 },
             },
-
         });
 
         if (!ticket || ticket.status === "deleted") {
@@ -230,10 +231,33 @@ export const getTicketById = async (req: Request, res: Response) => {
             });
         }
 
+        // 🔹 Fetch creator & updater user details (optional)
+        const [createdByUser, updatedByUser] = await Promise.all([
+            ticket.created_by
+                ? prisma.users.findUnique({
+                    where: { id: ticket.created_by },
+                    select: { id: true, full_name: true },
+                })
+                : null,
+            ticket.updated_by
+                ? prisma.users.findUnique({
+                    where: { id: ticket.updated_by },
+                    select: { id: true, full_name: true },
+                })
+                : null,
+        ]);
+
+        // 🔹 Append readable names to ticket object
+        const enrichedTicket = {
+            ...ticket,
+            created_by_name: createdByUser?.full_name || null,
+            updated_by_name: updatedByUser?.full_name || null,
+        };
+
         return res.status(200).json({
             success: true,
             message: "Ticket fetched successfully.",
-            ticket,
+            ticket: enrichedTicket,
         });
     } catch (error: any) {
         console.error("Error fetching ticket:", error);

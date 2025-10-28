@@ -871,7 +871,11 @@ model ticket_comments {
   replies   ticket_comments[] @relation("CommentReplies")
 
   // Metadata
+  status     String    @default("active") // 👈 new field
   created_at DateTime  @default(now())
+  created_by String?
   updated_at DateTime? @updatedAt
+  updated_by String?
   deleted_at DateTime?
+  deleted_by String?
 }

@@ -77,6 +77,7 @@ async function main() {
     { module: "Bid", action: "create", description: "create Bid" },
 
     { module: "Employee", action: "view-all", description: "view-all Employee" },
+    { module: "Employee", action: "view-own", description: "view-own Employee" },
     { module: "Employee", action: "view", description: "view Employee" },
     { module: "Employee", action: "create", description: "create Employee" },
     { module: "Employee", action: "update", description: "update Employee" },
@@ -114,12 +115,21 @@ async function main() {
     { module: "Ticket", action: "comment", description: "Comment on ticket" },
     { module: "Ticket", action: "delete", description: "Delete Ticket" },
     { module: "Ticket", action: "update", description: "Update Ticket" },
+    { module: "Ticket", action: "view-all", description: "view all Ticket" },
+    { module: "Ticket", action: "view-own", description: "view own Ticket" },
+
+    { module: "Comment", action: "view", description: "view Comment" },
+    { module: "Comment", action: "create", description: "create Comment" },
+    { module: "Comment", action: "delete", description: "Delete Comment" },
+    { module: "Comment", action: "update", description: "Update Comment" },
+    { module: "Comment", action: "view-all", description: "view all Comment" },
+    { module: "Comment", action: "view-own", description: "view own Comment" },
 
     { module: "Milestone", action: "view", description: "view Milestone" },
     { module: "Milestone", action: "create", description: "create Milestone" },
     { module: "Milestone", action: "update", description: "update Milestone" },
     { module: "Milestone", action: "view-all", description: "view all Milestone" },
-    { module: "Milestone", action: "view-owm", description: "view own Milestone" },
+    { module: "Milestone", action: "view-own", description: "view own Milestone" },
     { module: "Milestone", action: "delete", description: "Delete Milestone" },
 
     { module: "Attendance", action: "view-all", description: "view-all Attendance" },
@@ -183,6 +193,28 @@ async function main() {
       password_hash,
       role_id: adminRole.id,
       status: "ACTIVE",
+    },
+  });
+
+  await prisma.employees.upsert({
+    where: { user_id: adminUser.id },
+    update: {},
+    create: {
+      id: crypto.randomUUID(),
+      user_id: adminUser.id,
+      employee_number: "ADM-001",
+      department_id: null,
+      designation_id: null,
+      designation: undefined,
+      work_location: "Onsite",
+      gender: "Other",
+      status: "ACTIVE",
+      hire_date: new Date(),
+      date_of_birth: new Date("2000-01-01"),
+      address: "N/A",
+      emergency_contact_name: "N/A",
+      emergency_contact_phone: "N/A",
+      salary: 0,
     },
   });
 
