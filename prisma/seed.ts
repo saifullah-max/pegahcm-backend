@@ -113,6 +113,7 @@ async function main() {
     { module: "Ticket", action: "create", description: "create Ticket" },
     { module: "Ticket", action: "comment", description: "Comment on ticket" },
     { module: "Ticket", action: "delete", description: "Delete Ticket" },
+    { module: "Ticket", action: "update", description: "Update Ticket" },
 
     { module: "Milestone", action: "view", description: "view Milestone" },
     { module: "Milestone", action: "create", description: "create Milestone" },
