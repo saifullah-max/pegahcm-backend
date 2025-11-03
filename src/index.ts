@@ -82,6 +82,10 @@ app.get('/', (req, res) => {
   res.json({ message: 'Welcome to PegaHCM API' });
 });
 
+app.get('/health', (req, res) => {
+  return res.json({ success: true, message: "Health check passed!" })
+})
+
 startCleanupJobs();
 
 // Start server
