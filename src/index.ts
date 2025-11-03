@@ -48,7 +48,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // Connect Mongo for audit logs and register audit middleware early
-connectMongo('mongodb+srv://saifullahahmed380:<db_password>@pegahub.zmgqxdy.mongodb.net/?appName=pegahub');
+connectMongo('mongodb+srv://saifullahahmed380:dsu241064@pegahub.zmgqxdy.mongodb.net/?appName=pegahub');
 app.use(auditMiddleware);
 
 
