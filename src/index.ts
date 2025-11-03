@@ -82,7 +82,7 @@ app.get('/', (req, res) => {
   res.json({ message: 'Welcome to PegaHCM API' });
 });
 
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   return res.json({ success: true, message: "Health check passed!" })
 })
 
