@@ -230,13 +230,13 @@ export const getAllHeadDepartments = async (req: Request, res: Response) => {
       },
     });
 
-    res.json({
+    return res.json({
       success: true,
       data: headDepartments,
     });
   } catch (error) {
     console.error('Error fetching head departments:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch head departments',
     });
