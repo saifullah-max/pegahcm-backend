@@ -7,6 +7,8 @@ import { createTicketComment, DeleteCommentById, getCommentsByTicketId } from '.
 const router = express.Router();
 
 router.use(authenticateToken);
+console.log("Using updated createTicketComment controller file");
+
 
 router.route('/').post(uploadMiddleware, checkPermission("Comment", "create"), createTicketComment)
 router.route('/get/:ticketId').get(getCommentsByTicketId)

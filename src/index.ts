@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initSocket } from './utils/socket';
 import http from 'http';
 import path from 'path';
 import { connectMongo } from './utils/mongo';
@@ -31,6 +30,8 @@ import upworkRoutes from './routes/upworkRoutes'
 import ticketRoutes from './routes/ticketRoutes'
 import { startCleanupJobs } from './utils/CronJob';
 import ticketCommentsRoutes from './routes/ticketCommentsRoutes'
+import { initSocket } from './utils/socket';
+
 
 // Load environment variables
 dotenv.config();
