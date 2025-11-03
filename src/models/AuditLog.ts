@@ -1,5 +1,13 @@
 import mongoose from '../utils/mongo';
 
+console.log('🟢 [AuditLog] Initializing model...');
+
+if (!mongoose?.connection?.readyState) {
+  console.error('🔴 [AuditLog] Mongoose not connected properly! readyState:', mongoose?.connection?.readyState);
+} else {
+  console.log('🟢 [AuditLog] Mongoose connected. Host:', mongoose?.connection?.host);
+}
+
 const AuditLogSchema = new (mongoose as any).Schema(
   {
     actorId: { type: String },
@@ -30,7 +38,26 @@ AuditLogSchema.index({ route: 1, method: 1, createdAt: -1 });
 AuditLogSchema.index({ actorId: 1, createdAt: -1 });
 AuditLogSchema.index({ actorName: 1, createdAt: -1 });
 
-const AuditLog = (mongoose as any).models.AuditLog || (mongoose as any).model('AuditLog', AuditLogSchema);
+// Debug logs for schema initialization
+AuditLogSchema.post('init', (doc: any) => {
+  console.log('📄 [AuditLog] Document initialized:', doc._id);
+});
+
+AuditLogSchema.post('save', (doc: any) => {
+  console.log('💾 [AuditLog] Document saved:', doc._id);
+});
+
+AuditLogSchema.post('error', (error: any, doc: any, next: any) => {
+  console.error('❌ [AuditLog] Schema error:', error?.message || error);
+  next(error);
+});
+
+let AuditLog: any;
+try {
+  AuditLog = (mongoose as any).models.AuditLog || (mongoose as any).model('AuditLog', AuditLogSchema);
+  console.log('✅ [AuditLog] Model registered successfully');
+} catch (err: any) {
+  console.error('🚨 [AuditLog] Model registration failed:', err?.message);
+}
+
 export default AuditLog;
-
-

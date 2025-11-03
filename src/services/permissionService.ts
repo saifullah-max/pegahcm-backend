@@ -1,3 +1,4 @@
+import { PermissionSource } from "@prisma/client";
 import prisma from "../utils/Prisma";
 
 export const getAllPermissions = async () => {
@@ -39,6 +40,7 @@ export const updateUserPermissions = async (user_id: string, permissions: { perm
         data: permissions.map(p => ({
             user_id,
             permission_id: p.permission_id,
+            source: PermissionSource.ROLE
         })),
     });
 };
