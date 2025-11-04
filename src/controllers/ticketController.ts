@@ -64,7 +64,7 @@ export const createTicket = async (req: Request, res: Response) => {
         // const milestoneInitial = milestone.name.charAt(0).toUpperCase();
 
         const ticketNumber = `P${milestone.project.auto_id ?? 0
-        }M$${milestone.auto_id ?? 0
+        }M${milestone.auto_id ?? 0
         }-${String(ticketCount + 1).padStart(
             3,
             "0"
