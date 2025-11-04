@@ -170,6 +170,7 @@ export const getAllTickets = async (req: Request, res: Response) => {
                         id: true,
                         designation: true,
                         user: true,
+                        profile_image_url: true
                     },
                 },
                 milestone: {
