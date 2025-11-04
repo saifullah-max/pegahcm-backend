@@ -37,9 +37,17 @@ export const create_milestone = async (req: Request, res: Response) => {
             ? assignee.split(",").map((id: string) => id.trim())
             : [];
 
+        // Prepare auto_id
+        const lastMilestone = await prisma.milestones.findFirst({
+        orderBy: { auto_id: "desc" },
+        select: { auto_id: true },
+        });
+        const nextAutoId = (lastMilestone?.auto_id ?? 0) + 1;
+
         const newMilestone = await prisma.milestones.create({
             data: {
                 name,
+                auto_id: nextAutoId,
                 project: {
                     connect: { id: project.id },
                 },

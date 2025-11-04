@@ -750,6 +750,7 @@ model projects {
 
 model milestones {
   id              String   @id @default(uuid())
+  auto_id         Int?      @unique
   name            String
   project_id      String
   project         projects @relation(fields: [project_id], references: [id])

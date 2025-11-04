@@ -52,22 +52,23 @@ export const createTicket = async (req: Request, res: Response) => {
             orderBy: { created_at: "asc" },
             select: { id: true },
         });
-        const milestoneIndex =
-            milestonesInProject.findIndex((m) => m.id === milestone.id) + 1;
+        // const milestoneIndex =
+        //     milestonesInProject.findIndex((m) => m.id === milestone.id) + 1;
 
         const ticketCount = await prisma.tickets.count({
             where: { milestone_id },
         });
 
         // ✅ Build ticket number using project.auto_id
-        const projectInitial = milestone.project.name.charAt(0).toUpperCase();
-        const milestoneInitial = milestone.name.charAt(0).toUpperCase();
+        // const projectInitial = milestone.project.name.charAt(0).toUpperCase();
+        // const milestoneInitial = milestone.name.charAt(0).toUpperCase();
 
-        const ticketNumber = `${projectInitial}${milestone.project.auto_id ?? 0
-            }${milestoneInitial}${milestoneIndex}-${String(ticketCount + 1).padStart(
-                3,
-                "0"
-            )}`;
+        const ticketNumber = `P${milestone.project.auto_id ?? 0
+        }M$${milestone.auto_id ?? 0
+        }-${String(ticketCount + 1).padStart(
+            3,
+            "0"
+        )}`;
 
         // ✅ Handle file uploads
         const files = (req.files || {}) as {
