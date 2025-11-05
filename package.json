@@ -9,7 +9,12 @@
     "seed": "ts-node prisma/seed.ts",
     "build": "tsc",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:name": "prisma migrate dev --name",
+    "db:reset": "prisma migrate reset --force",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

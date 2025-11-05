@@ -96,11 +96,11 @@ enum PermissionSource {
 }
 
 model user_permissions {
-  id         String           @id @default(uuid())
-  user       users            @relation(fields: [user_id], references: [id])
+  id         String            @id @default(uuid())
+  user       users             @relation(fields: [user_id], references: [id])
   user_id    String
-  permission permissions      @relation(fields: [permission_id], references: [id])
-  source     PermissionSource
+  permission permissions       @relation(fields: [permission_id], references: [id])
+  source     PermissionSource?
 
   created_at    DateTime? @default(now())
   created_by    String?
@@ -687,20 +687,21 @@ model hr_processes {
 }
 
 model bids {
-  id               String      @id @default(cuid())
+  id               String @id @default(cuid())
   url              String
   profile          String
   connects         Int
   boosted_connects Int
   total            Int
+
   cost             Decimal     @db.Decimal(10, 4)
-  bid_status       String
-  id_name          String
-  description      String?
-  client_name      String
-  price            String
-  attend_by        employees[] @relation("BidAttendBy")
-  project          projects?   @relation("BidToProject")
+  bid_status  String
+  id_name     String
+  description String?
+  client_name String
+  price       String
+  attend_by   employees[]   @relation("BidAttendBy")
+  project     projects?     @relation("BidToProject")
 
   price_type String?
 
@@ -750,7 +751,7 @@ model projects {
 
 model milestones {
   id              String   @id @default(uuid())
-  auto_id         Int?      @unique
+  auto_id         Int?     @unique
   name            String
   project_id      String
   project         projects @relation(fields: [project_id], references: [id])
@@ -872,11 +873,24 @@ model ticket_comments {
   replies   ticket_comments[] @relation("CommentReplies")
 
   // Metadata
-  status     String    @default("active") // 👈 new field
+  status     String    @default("active") // new field
   created_at DateTime  @default(now())
   created_by String?
   updated_at DateTime? @updatedAt
   updated_by String?
   deleted_at DateTime?
   deleted_by String?
+}
+
+model connect_costs {
+  id     String  @id @default(uuid())
+  cost   Decimal @db.Decimal(10, 4)
+
+  status String? @default("Active")
+  created_at DateTime? @default(now())
+  created_by String?
+  updated_at DateTime? @updatedAt
+  updated_by String?
+
+  @@index([status])
 }
