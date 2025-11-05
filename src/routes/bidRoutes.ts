@@ -13,12 +13,12 @@ const router = express.Router();
 
 router.use(authenticateToken);
 
+router.route("/delete/:id").put(delete_bid);
 router
   .route("/")
   .post(create_bid)
   .get(checkPermission("Bid", "view"), get_all_bids);
 router.route("/:id").get(get_bid_by_id).put(update_bid);
 
-router.route("/delete/:id").put(delete_bid);
 
 export default router;

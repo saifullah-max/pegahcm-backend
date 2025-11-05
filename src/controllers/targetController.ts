@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../utils/Prisma';
+import { Prisma } from '@prisma/client';
 
 // Create a new target
 export const create_target = async (req: Request, res: Response) => {
@@ -149,5 +150,99 @@ export const delete_target = async (req: Request, res: Response) => {
         res.status(204).send(); // No content
     } catch (error: any) {
         res.status(400).json({ error: error.message });
+    }
+};
+
+export const create_cost = async (req: Request, res: Response) => {
+    try {
+        const { cost, status } = req.body as { cost: string | number; status?: string };
+
+        const user_id = req.user?.userId;
+
+        if (cost === undefined || cost === null || `${cost}`.trim() === "") {
+            return res.status(400).json({ error: 'cost is required' });
+        }
+
+        const desiredStatus = (status?.trim() || 'Active');
+
+        const result = await prisma.$transaction(async (tx) => {
+            if (desiredStatus.toLowerCase() === 'active') {
+                await tx.connect_costs.updateMany({
+                    where: { status: 'Active' },
+                    data: { status: 'inactive', updated_by: user_id },
+                });
+            }
+
+            const created = await tx.connect_costs.create({
+                data: {
+                    cost: new Prisma.Decimal(String(cost)),
+                    status: desiredStatus,
+                    created_by: user_id,
+                },
+            });
+
+            return created;
+        });
+
+        return res.status(201).json(result);
+    } catch (error: any) {
+        return res.status(400).json({ error: error.message });
+    }
+};
+
+export const update_cost = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { cost, status } = req.body as { cost?: string | number; status?: string };
+
+        const user_id = req.user?.userId;
+
+        const updates: any = { updated_by: user_id };
+        if (cost !== undefined) updates.cost = new Prisma.Decimal(String(cost));
+        if (status !== undefined) updates.status = status.trim();
+
+        const result = await prisma.$transaction(async (tx) => {
+            if (updates.status && updates.status.toLowerCase() === 'active') {
+                await tx.connect_costs.updateMany({
+                    where: { status: 'Active', NOT: { id } },
+                    data: { status: 'inactive', updated_by: user_id },
+                });
+            }
+
+            const updated = await tx.connect_costs.update({
+                where: { id },
+                data: updates,
+            });
+
+            return updated;
+        });
+
+        return res.status(200).json(result);
+    } catch (error: any) {
+        return res.status(400).json({ error: error.message });
+    }
+};
+
+export const get_costs = async (req: Request, res: Response) => {
+    try {
+        const { status, latest } = req.query as { status?: string; latest?: string };
+
+        const statusFilter = status ? (status.trim().slice(0, 1).toUpperCase() + status.trim().slice(1).toLowerCase()) : undefined;
+
+        if (latest === 'true') {
+            const latestRecord = await prisma.connect_costs.findFirst({
+                where: statusFilter ? { status: statusFilter } : undefined,
+                orderBy: { created_at: 'desc' },
+            });
+            return res.status(200).json(latestRecord);
+        }
+
+        const records = await prisma.connect_costs.findMany({
+            where: statusFilter ? { status: statusFilter } : undefined,
+            orderBy: { created_at: 'desc' },
+        });
+        return res.status(200).json(records);
+    } catch (error: any) {
+        return res.status(400).json({ error: error.message });
     }
 };

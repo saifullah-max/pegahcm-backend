@@ -94,6 +94,7 @@ export const create_project = async (req: Request, res: Response) => {
           : undefined,
         documents: documentsObj,
         created_by: user_id,
+        bid_id
       },
     });
 

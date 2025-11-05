@@ -46,10 +46,10 @@ export const create_bid = async (req: Request, res: Response) => {
 
     let attendedIds: string[] = [];
 
-    if (attend_by_id && attend_by_id.length>0) {
+    if (attend_by_id && attend_by_id.length > 0) {
       // Already an array
       attendedIds = attend_by_id.map((id: any) => String(id));
-    } 
+    }
 
     const newBid = await prisma.bids.create({
       data: {
@@ -87,8 +87,12 @@ export const get_all_bids = async (req: Request, res: Response) => {
     const permissionScope = (req as any).permissionScope || "all"; // 'own' | 'all'
     const baseWhere = (buildFilters("bids", req.query) || {}) as any;
 
-    let where: any = baseWhere;
-    if (permissionScope === "own") {
+
+    let where: any = {
+      ...baseWhere,
+      bid_status: { not: "deleted" }, // ✅ exclude deleted bids
+    };
+     if (permissionScope === "own") {
       const ownerFilter = {
         OR: [{ profile: current_user_id }, { created_by: current_user_id }],
       };
@@ -191,9 +195,9 @@ export const update_bid = async (req: Request, res: Response) => {
 
     // Normalize attend_by_id to an array
     let attendedIds: string[] = [];
-    if (attend_by_id && attend_by_id.length>0){
+    if (attend_by_id && attend_by_id.length > 0) {
       attendedIds = attend_by_id.map((id: any) => String(id));
-    } 
+    }
 
     // Validate employee IDs (optional, but recommended)
     if (attendedIds.length > 0) {

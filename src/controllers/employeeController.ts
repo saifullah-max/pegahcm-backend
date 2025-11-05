@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { createScopedNotification } from "../utils/notificationUtils";
 import { JwtPayload } from "jsonwebtoken";
 import prisma from "../utils/Prisma";
+import { PermissionSource } from "@prisma/client";
 
 enum RoleTag {
   HR = "HR",
@@ -216,6 +217,7 @@ export const createEmployee = async (req: Request, res: Response) => {
             data: subRolePermissions.map((sp: any) => ({
               user_id: newUser.id,
               permission_id: sp.permission_id,
+              source: PermissionSource.USER
             })),
             skipDuplicates: true,
           });
