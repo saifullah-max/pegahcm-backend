@@ -19,13 +19,10 @@ export const checkIn = async (
     const user = req.user as unknown as CustomJwtPayload;
     const user_id = user.userId;
 
+    // Fetch employee info
     const employee = await prisma.employees.findUnique({
       where: { user_id },
-      include: {
-        user: {
-          include: { role: true, sub_role: true },
-        },
-      },
+      include: { user: { include: { role: true, sub_role: true } } },
     });
 
     if (!employee) {
@@ -33,25 +30,21 @@ export const checkIn = async (
       return;
     }
 
-    const {
-      id: employee_id,
-      sub_department_id,
-      department_id,
-      user: userMeta,
-    } = employee;
+    const { id: employee_id, sub_department_id, department_id, user: userMeta } = employee;
     const roleName = userMeta.role.name.toLowerCase();
     const role_tag = userMeta.role_tag;
 
-    const todayUtc = moment().utc().startOf("day");
-    const todayEndUtc = moment().utc().endOf("day");
+    // Timezone & current time
+    const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
+    const now = moment().tz(userTimezone);
 
-    // ✅ Check if on approved leave
+    // Check if on leave
     const onLeave = await prisma.leave_requests.findFirst({
       where: {
         employee_id,
         status: "Approved",
-        start_date: { lte: todayUtc.toDate() },
-        end_date: { gte: todayEndUtc.toDate() },
+        start_date: { lte: now.toDate() },
+        end_date: { gte: now.toDate() },
       },
     });
 
@@ -60,11 +53,11 @@ export const checkIn = async (
       return;
     }
 
-    // ✅ Check if already checked in
+    // Already checked in today?
     const alreadyCheckedIn = await prisma.attendance_records.findFirst({
       where: {
         employee_id,
-        date: { gte: todayUtc.toDate(), lte: todayEndUtc.toDate() },
+        date: { gte: moment(now).startOf("day").toDate(), lte: moment(now).endOf("day").toDate() },
       },
     });
 
@@ -73,7 +66,7 @@ export const checkIn = async (
       return;
     }
 
-    // ✅ Get shift info
+    // Shift info
     const { shift_id } = req.body;
     if (!shift_id) {
       res.status(400).json({ message: "Shift ID is required." });
@@ -86,51 +79,30 @@ export const checkIn = async (
       return;
     }
 
-    // ✅ Get user's timezone (fallback to Asia/Karachi if not provided)
-    const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
+    // Shift start & end in user's timezone
+    const shiftStart = moment(shift.start_time).tz(userTimezone);
+    let shiftEnd = moment(shift.end_time).tz(userTimezone);
+    if (shiftEnd.isBefore(shiftStart)) shiftEnd.add(1, "day"); // overnight shift
 
-    // ✅ Current time in user's timezone
-    const now = moment().tz(userTimezone);
+    // Late threshold
+    const lateThreshold = shiftStart.clone().add(30, "minutes");
 
-    // ✅ Extract shift start time (ignore old date, only take time part)
-    const shiftStartHour = moment(shift.start_time).utc().hour();
-    const shiftStartMinute = moment(shift.start_time).utc().minute();
-
-    // ✅ Today's shift start in user's timezone
-    const shiftStartLocal = now.clone().startOf("day").hour(shiftStartHour).minute(shiftStartMinute).second(0);
-
-    // ✅ Late threshold = shift start + 30 mins
-    const lateThresholdLocal = shiftStartLocal.clone().add(30, "minutes");
-
-    console.log({
-      nowLocal: now.format(),
-      shiftStartLocal: shiftStartLocal.format(),
-      lateThresholdLocal: lateThresholdLocal.format(),
-    });
-
-    // ✅ Determine status
     let status = "Present";
     let lateMessage = "";
+    let late_minutes: number | null = null;
 
-    if (now.isAfter(lateThresholdLocal)) {
+    if (now.isAfter(lateThreshold)) {
       status = "Late";
-
-      const diffMinutes = now.diff(shiftStartLocal, "minutes");
+      const diffMinutes = now.diff(shiftStart, "minutes");
       const lateHours = Math.floor(diffMinutes / 60);
       const lateMins = diffMinutes % 60;
-
       lateMessage = `You are ${lateHours > 0 ? lateHours + " hr " : ""}${lateMins} mins late`;
-    } else if (now.isBefore(shiftStartLocal)) {
+      late_minutes = diffMinutes;
+    } else if (now.isBefore(shiftStart)) {
       status = "Early";
     }
 
-    let late_minutes: number | null = null;
-
-    if (status === "Late") {
-      late_minutes = now.diff(shiftStartLocal, "minutes");
-    }
-
-    // ✅ Save attendance record
+    // Save attendance
     const newRecord = await prisma.attendance_records.create({
       data: {
         employee_id,
@@ -143,9 +115,9 @@ export const checkIn = async (
       include: { shift: true },
     });
 
-    const clockInTimeLocal = now.format("hh:mm A"); // local time
+    const clockInTimeLocal = now.format("hh:mm A");
 
-    // ✅ Send notifications
+    // Notifications
     const baseNotification = {
       title: "Clock In",
       message: `${userMeta.full_name} clocked in at ${clockInTimeLocal} (${status})`,
@@ -154,45 +126,36 @@ export const checkIn = async (
     };
 
     const promises = [];
-
     if (roleName === "user" && sub_department_id) {
-      promises.push(
-        createScopedNotification({
-          scope: "TEAMLEADS_SUBDEPT",
-          data: baseNotification,
-          target_ids: { sub_department_id },
-          visibilityLevel: 3,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({
+        scope: "TEAMLEADS_SUBDEPT",
+        data: baseNotification,
+        target_ids: { sub_department_id },
+        visibilityLevel: 3,
+        excludeUserId: user_id,
+      }));
     } else if (roleName === "teamlead" && department_id) {
-      promises.push(
-        createScopedNotification({
-          scope: "MANAGERS_DEPT",
-          data: baseNotification,
-          target_ids: { department_id },
-          visibilityLevel: 2,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({
+        scope: "MANAGERS_DEPT",
+        data: baseNotification,
+        target_ids: { department_id },
+        visibilityLevel: 2,
+        excludeUserId: user_id,
+      }));
     } else if (roleName === "manager" && role_tag === "HR") {
-      promises.push(
-        createScopedNotification({
-          scope: "DIRECTORS_HR",
-          data: baseNotification,
-          visibilityLevel: 1,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({
+        scope: "DIRECTORS_HR",
+        data: baseNotification,
+        visibilityLevel: 1,
+        excludeUserId: user_id,
+      }));
     } else if (roleName === "director") {
-      promises.push(
-        createScopedNotification({
-          scope: "ADMIN_ONLY",
-          data: baseNotification,
-          visibilityLevel: 0,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({
+        scope: "ADMIN_ONLY",
+        data: baseNotification,
+        visibilityLevel: 0,
+        excludeUserId: user_id,
+      }));
     }
 
     await Promise.all(promises);
@@ -204,13 +167,13 @@ export const checkIn = async (
       clockIn: now.utc().toISOString(),
       fullData: newRecord,
     });
+
   } catch (err) {
     console.error("Check-in error:", err);
     next(err);
   }
 };
 
-// POST /api/attendance/check-out
 export const checkOut = async (
   req: Request,
   res: Response,
@@ -220,13 +183,10 @@ export const checkOut = async (
     const user = req.user as unknown as CustomJwtPayload;
     const user_id = user.userId;
 
+    // Fetch employee info
     const employee = await prisma.employees.findUnique({
       where: { user_id },
-      include: {
-        user: {
-          include: { role: true, sub_role: true },
-        },
-      },
+      include: { user: { include: { role: true, sub_role: true } } },
     });
 
     if (!employee) {
@@ -234,60 +194,40 @@ export const checkOut = async (
       return;
     }
 
-    const {
-      id: employee_id,
-      sub_department_id,
-      department_id,
-      user: userMeta,
-    } = employee;
+    const { id: employee_id, sub_department_id, department_id, user: userMeta } = employee;
     const roleName = userMeta.role.name.toLowerCase();
     const role_tag = userMeta.role_tag;
 
-    const today = new Date();
-    const todayStart = new Date(today.setHours(0, 0, 0, 0));
-    const todayEnd = new Date(today.setHours(23, 59, 59, 999));
-
+    // Find latest active check-in
     const attendance = await prisma.attendance_records.findFirst({
-      where: {
-        employee_id,
-        date: { gte: todayStart, lte: todayEnd },
-      },
+      where: { employee_id, clock_out: null },
+      orderBy: { clock_in: "desc" },
     });
 
-    if (!attendance || !attendance.clock_in) {
-      res.status(400).json({ message: "No check-in record found." });
-      return;
-    }
-
-    if (attendance.clock_out) {
-      res.status(400).json({ message: "Already checked out today." });
+    if (!attendance) {
+      res.status(400).json({ message: "No active check-in found to check out." });
       return;
     }
 
     const now = new Date();
-    const breaks = await prisma.breaks.findMany({
-      where: { attendance_record_id: attendance.id },
-    });
 
+    // Calculate break duration
+    const breaks = await prisma.breaks.findMany({ where: { attendance_record_id: attendance.id } });
     let totalBreakMs = 0;
     for (const brk of breaks) {
       if (brk.break_start && brk.break_end) {
-        totalBreakMs +=
-          new Date(brk.break_end).getTime() - new Date(brk.break_start).getTime();
+        totalBreakMs += new Date(brk.break_end).getTime() - new Date(brk.break_start).getTime();
       }
     }
 
-    const net_working_minutes = Math.floor(
-      (now.getTime() - new Date(attendance.clock_in).getTime() - totalBreakMs) /
-      (1000 * 60)
-    );
+    const net_working_minutes = Math.floor((now.getTime() - new Date(attendance.clock_in).getTime() - totalBreakMs) / (1000 * 60));
 
     const updatedRecord = await prisma.attendance_records.update({
       where: { id: attendance.id },
       data: { clock_out: now, net_working_minutes },
     });
 
-    const clockOutTime = now.toLocaleTimeString();
+    const clockOutTime = moment(now).tz("Asia/Karachi").format("hh:mm A");
     const baseNotification = {
       title: "Clock Out",
       message: `${userMeta.full_name} clocked out at ${clockOutTime}`,
@@ -296,52 +236,20 @@ export const checkOut = async (
     };
 
     const promises = [];
-
     if (roleName === "user" && sub_department_id) {
-      promises.push(
-        createScopedNotification({
-          scope: "TEAMLEADS_SUBDEPT",
-          data: baseNotification,
-          target_ids: { sub_department_id },
-          visibilityLevel: 3,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({ scope: "TEAMLEADS_SUBDEPT", data: baseNotification, target_ids: { sub_department_id }, visibilityLevel: 3, excludeUserId: user_id }));
     } else if (roleName === "teamlead" && department_id) {
-      promises.push(
-        createScopedNotification({
-          scope: "MANAGERS_DEPT",
-          data: baseNotification,
-          target_ids: { department_id },
-          visibilityLevel: 2,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({ scope: "MANAGERS_DEPT", data: baseNotification, target_ids: { department_id }, visibilityLevel: 2, excludeUserId: user_id }));
     } else if (roleName === "manager" && role_tag === "HR") {
-      promises.push(
-        createScopedNotification({
-          scope: "DIRECTORS_HR",
-          data: baseNotification,
-          visibilityLevel: 1,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({ scope: "DIRECTORS_HR", data: baseNotification, visibilityLevel: 1, excludeUserId: user_id }));
     } else if (roleName === "director") {
-      promises.push(
-        createScopedNotification({
-          scope: "ADMIN_ONLY",
-          data: baseNotification,
-          visibilityLevel: 0,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({ scope: "ADMIN_ONLY", data: baseNotification, visibilityLevel: 0, excludeUserId: user_id }));
     }
 
     await Promise.all(promises);
 
-    res
-      .status(200)
-      .json({ message: "Check-out successful", attendance: updatedRecord });
+    res.status(200).json({ message: "Check-out successful", attendance: updatedRecord });
+
   } catch (err) {
     console.error("Check-out error:", err);
     next(err);

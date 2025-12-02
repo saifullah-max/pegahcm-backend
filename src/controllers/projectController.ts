@@ -141,6 +141,8 @@ export const get_all_projects = async (req: Request, res: Response) => {
         },
         bid: true,
         milestones: true,
+        upwork_profile: true,
+        project_type: true
       },
       orderBy: { created_at: "desc" },
     });
