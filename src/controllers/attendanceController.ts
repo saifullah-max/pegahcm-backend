@@ -1325,3 +1325,136 @@ export const getEmployeesAttendanceSummary = async (
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+
+// Filtered summary with total hours calculation
+export const getEmployeesAttendanceSummaryFiltered = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { limit = "5", lastCursorId, filterType, startDate, endDate } = req.query;
+    const limitNumber = parseInt(limit as string);
+
+    const total = await prisma.employees.count({});
+
+    // Date range calculation
+    let rangeStart: Date, rangeEnd: Date;
+    const today = moment().startOf("day");
+
+    switch ((filterType || '').toString().toLowerCase()) {
+      case "yesterday":
+        rangeStart = today.clone().subtract(1, 'day').toDate();
+        rangeEnd = today.clone().subtract(1, 'day').endOf('day').toDate();
+        break;
+      case "this_week":
+        rangeStart = today.clone().startOf('week').toDate();
+        rangeEnd = today.clone().endOf('week').toDate();
+        break;
+      case "last_week":
+        rangeStart = today.clone().subtract(1, 'week').startOf('week').toDate();
+        rangeEnd = today.clone().subtract(1, 'week').endOf('week').toDate();
+        break;
+      case "past_week": // previous 7 days excluding today
+        rangeStart = today.clone().subtract(7, 'days').toDate();
+        rangeEnd = today.clone().subtract(1, 'day').endOf('day').toDate();
+        break;
+      case "this_month":
+        rangeStart = today.clone().startOf('month').toDate();
+        rangeEnd = today.clone().endOf('month').toDate();
+        break;
+      case "custom":
+        if (startDate && endDate) {
+          const startStr = Array.isArray(startDate) ? startDate[0] : startDate as string;
+          const endStr = Array.isArray(endDate) ? endDate[0] : endDate as string;
+          rangeStart = moment(startStr).startOf('day').toDate();
+          rangeEnd = moment(endStr).endOf('day').toDate();
+        } else {
+          return res.status(400).json({ success: false, message: "Custom range requires startDate and endDate." });
+        }
+        break;
+      case "today":
+      default:
+        rangeStart = today.toDate();
+        rangeEnd = today.clone().endOf('day').toDate();
+    }
+
+    const employees = await prisma.employees.findMany({
+      skip: lastCursorId ? 1 : 0,
+      take: limitNumber,
+      cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
+      include: {
+        user: { select: { full_name: true, email: true } },
+        department: true,
+      },
+      orderBy: { id: "desc" },
+    });
+
+    const summary = await Promise.all(
+      employees.map(async (emp: any) => {
+        // Attendance for this period
+        const attendanceRecords = await prisma.attendance_records.findMany({
+          where: {
+            employee_id: emp.id,
+            clock_in: { gte: rangeStart, lte: rangeEnd },
+          },
+        });
+
+        // Total hours = sum of net_working_minutes (if present) or (clock_out - clock_in)
+        let totalMinutes = 0;
+        for (const rec of attendanceRecords) {
+          if (rec.net_working_minutes != null) {
+            totalMinutes += rec.net_working_minutes;
+          } else if (rec.clock_in && rec.clock_out) {
+            totalMinutes += Math.floor((new Date(rec.clock_out).getTime() - new Date(rec.clock_in).getTime()) / (1000 * 60));
+          }
+        }
+        const total_hours = Number((totalMinutes / 60).toFixed(2));
+
+        // Leave records
+        const leaves = await prisma.leave_requests.findMany({
+          where: {
+            employee_id: emp.id,
+            status: "Approved",
+            start_date: { lte: rangeEnd },
+            end_date: { gte: rangeStart },
+          },
+        });
+        
+        // Define status for today (as baseline)
+        let period_status = "Absent";
+        if (attendanceRecords.length > 0)
+          period_status = attendanceRecords.some((r: any) => r.status === "Present") ? "Present" : attendanceRecords[0].status;
+        else if (leaves.length > 0)
+          period_status = "OnLeave";
+        
+        const late_arrivals = attendanceRecords.filter((r: any) => r.status === "Late").length;
+        const total_leaves = leaves.length;
+
+        return {
+          employee_id: emp.id,
+          full_name: emp.user.full_name,
+          email: emp.user.email,
+          department: emp.department?.name || "N/A",
+          period_status,
+          total_leaves,
+          late_arrivals,
+          total_hours,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: summary,
+      pagination: {
+        limit,
+        total,
+        total_pages: Math.ceil(total / limitNumber),
+      },
+      filter: { start: rangeStart, end: rangeEnd, filterType },
+    });
+  } catch (error) {
+    console.error("Failed to fetch filtered employee summary:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
