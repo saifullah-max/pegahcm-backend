@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { JwtPayload } from "jsonwebtoken";
 import { createScopedNotification, notifyLeaveApprovers } from "../utils/notificationUtils";
 import prisma from "../utils/Prisma";
+import moment from "moment-timezone";
 interface CustomJwtPayload extends JwtPayload {
     id: string;
 }
@@ -38,15 +39,24 @@ export const submitFixAttendanceRequest = async (req: Request, res: Response) =>
 
         // Step 3: Insert AttendanceFixRequest
         // Validate requestedCheckIn and requestedCheckOut before using them
-        const validCheckIn =
-            request_type === 'CheckIn' || request_type === 'Both'
-                ? requested_check_in && !isNaN(new Date(`${date}T${requested_check_in}`).getTime())
-                    ? new Date(`${date}T${requested_check_in}`)
-                    : null
-                : null;
+        let validCheckIn = null;
+
+        if (request_type === "check_in" || request_type === "Both") {
+            if (requested_check_in) {
+                // Case 1: full ISO timestamp
+                if (!isNaN(new Date(requested_check_in).getTime())) {
+                    validCheckIn = new Date(requested_check_in);
+                }
+                // Case 2: time only (HH:mm)
+                else if (!isNaN(new Date(`${date}T${requested_check_in}`).getTime())) {
+                    validCheckIn = new Date(`${date}T${requested_check_in}`);
+                }
+            }
+        }
+
 
         const validCheckOut =
-            request_type === 'CheckOut' || request_type === 'Both'
+            request_type === 'check_out' || request_type === 'Both'
                 ? requested_check_out
                     ? (() => {
                         let out = new Date(`${date}T${requested_check_out}`);
@@ -111,82 +121,125 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
     try {
         const request = await prisma.attendance_fix_requests.findUnique({
             where: { id: requestId },
-            include: {
-                employee: true,
-            },
+            include: { employee: true },
         });
 
-        if (!request) {
-            return res.status(404).json({ message: "Fix request not found." });
-        }
-
-        if (request.status !== "Pending") {
-            return res.status(400).json({ message: "Only pending requests can be approved or rejected." });
-        }
+        if (!request) return res.status(404).json({ message: "Fix request not found." });
+        if (request.status !== "Pending") return res.status(400).json({ message: "Only pending requests can be approved or rejected." });
 
         let attendance_record_id = request.attendance_record_id;
-        let updatedOrCreatedRecord = null;
+        let updatedOrCreatedRecord: any = null;
 
-        // ✅ If Approved: create or update attendance record
+        // User timezone fallback
+        const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
+        const reqCheckIn = request.requested_check_in ? moment(request.requested_check_in).tz(userTimezone) : null;
+
+        // Helper: same-day bounds
+        const dayStart = reqCheckIn ? moment(reqCheckIn).startOf("day").toDate() : undefined;
+        const dayEnd = reqCheckIn ? moment(reqCheckIn).endOf("day").toDate() : undefined;
+
         if (status === "Approved") {
-            if (!attendance_record_id) {
-                // No attendance record yet → create one
-                const newRecord = await prisma.attendance_records.create({
+            // --- Fetch existing attendance record if available ---
+            let record = null;
+
+            if (attendance_record_id) {
+                record = await prisma.attendance_records.findUnique({ where: { id: attendance_record_id } });
+            } else if (reqCheckIn && dayStart && dayEnd) {
+                record = await prisma.attendance_records.findFirst({
+                    where: { employee_id: request.employee_id, date: { gte: dayStart, lte: dayEnd } },
+                });
+            }
+
+            if (record) {
+                // Compare actual clock_in with requested_check_in
+                if (reqCheckIn && record.clock_in) {
+                    const actualClockIn = moment(record.clock_in).tz(userTimezone);
+                    const expectedClockIn = reqCheckIn; // moment object
+
+                    // minutes employee was late relative to expected time (0 if earlier)
+                    const lateMinutes = Math.max(0, actualClockIn.diff(expectedClockIn, "minutes"));
+
+                    // If actualClockIn is same-or-before expectedClockIn => approved late,
+                    // otherwise remain Late even after approval.
+                    const statusValue = actualClockIn.isSameOrBefore(expectedClockIn, "minute")
+                        ? "approved_late"
+                        : "Late";
+
+                    updatedOrCreatedRecord = await prisma.attendance_records.update({
+                        where: { id: record.id },
+                        data: {
+                            // DO NOT override clock_in — keep the actual time employee checked in
+                            clock_out: request.requested_check_out ?? record.clock_out,
+                            status: statusValue,
+                            late_minutes: lateMinutes,
+                        },
+                    });
+                } else {
+                    // No requested_check_in, just update (approval without check-in time)
+                    updatedOrCreatedRecord = await prisma.attendance_records.update({
+                        where: { id: record.id },
+                        data: {
+                            // Keep clock_in unchanged
+                            clock_out: request.requested_check_out ?? record.clock_out,
+                        },
+                    });
+                }
+
+                attendance_record_id = record.id;
+                await prisma.attendance_fix_requests.update({ where: { id: requestId }, data: { attendance_record_id } });
+            } else {
+                // No record exists, create a new one
+                // Try to compute late_minutes based on employee shift if available
+                let computedLateMinutes: number | null = null;
+                if (request.employee.shift_id && request.requested_check_in) {
+                    const shift = await prisma.shifts.findUnique({ where: { id: request.employee.shift_id } });
+                    if (shift && shift.start_time) {
+                        const shiftStart = moment(shift.start_time).tz(userTimezone);
+                        const expected = moment(request.requested_check_in).tz(userTimezone);
+                        computedLateMinutes = Math.max(0, expected.diff(shiftStart, "minutes"));
+                    }
+                }
+
+                const created = await prisma.attendance_records.create({
                     data: {
                         employee_id: request.employee_id,
                         date: request.requested_check_in ?? request.requested_check_out ?? new Date(),
                         clock_in: request.requested_check_in ?? new Date(),
                         clock_out: request.requested_check_out ?? null,
                         shift_id: request.employee.shift_id!,
-                        status: 'Present',
+                        // On approval create as approved_late (we treat the requested time as accepted)
+                        status: "approved_late",
+                        late_minutes: computedLateMinutes,
                     },
                 });
 
-                attendance_record_id = newRecord.id;
-                updatedOrCreatedRecord = newRecord;
+                attendance_record_id = created.id;
+                updatedOrCreatedRecord = created;
 
-                await prisma.attendance_fix_requests.update({
-                    where: { id: requestId },
-                    data: { attendance_record_id }
-                });
-            } else {
-                // Update existing record
-                updatedOrCreatedRecord = await prisma.attendance_records.update({
-                    where: { id: attendance_record_id },
-                    data: {
-                        clock_in: request.requested_check_in ?? undefined,
-                        clock_out: request.requested_check_out ?? undefined,
-                    },
-                });
+                await prisma.attendance_fix_requests.update({ where: { id: requestId }, data: { attendance_record_id } });
             }
 
-            // ✅ Handle requested breaks
-            const parsedBreaks = Array.isArray(request.requested_breaks)
-                ? request.requested_breaks
-                : [];
-
-            if (parsedBreaks.length > 0 && attendance_record_id) {
-                await prisma.breaks.deleteMany({ where: { attendance_record_id } });
-
-
-                await prisma.breaks.createMany({
-                    data: parsedBreaks.map((br: any) => ({
-                        attendance_record_id: attendance_record_id as string, // ✅ ensured to be string
-                        break_start: new Date(br.break_start),
-                        break_end: br.break_end ? new Date(br.break_end) : null,
-                        break_type_id: br.break_type_id ?? null,
-                    })),
-                });
-            }
+            // Handle requested_breaks
+            // const parsedBreaks = Array.isArray(request.requested_breaks) ? request.requested_breaks : [];
+            // if (parsedBreaks.length > 0 && attendance_record_id) {
+            //     await prisma.breaks.deleteMany({ where: { attendance_record_id } });
+            //     await prisma.breaks.createMany({
+            //         data: parsedBreaks.map((br: any) => ({
+            //             attendance_record_id: attendance_record_id!,
+            //             break_start: new Date(br.break_start),
+            //             break_end: br.break_end ? new Date(br.break_end) : null,
+            //             break_type_id: br.break_type_id ?? null,
+            //         })),
+            //     });
+            // }
         }
 
-        const user = await prisma.users.findUnique({ where: { id: request.employee.user_id } })
-
+        // --- Notifications (same as before) ---
+        const user = await prisma.users.findUnique({ where: { id: request.employee.user_id } });
         try {
-            // 🔔 Prepare notification title and message
             const employeeName = `${user?.full_name}`;
             const approverName = await prisma.users.findUnique({ where: { id: reviewer_id } });
-            const isApproved = status === 'Approved';
+            const isApproved = status === "Approved";
 
             const baseNotification = {
                 title: `Attendance Fix Request ${status}`,
@@ -195,77 +248,37 @@ export const updateFixRequestStatus = async (req: Request, res: Response) => {
                     : `Your attendance fix request was rejected.`,
             };
 
-            // 🔔 Notify EMPLOYEE_ONLY
             await createScopedNotification({
-                scope: 'EMPLOYEE_ONLY',
+                scope: "EMPLOYEE_ONLY",
                 target_ids: { user_id: request.employee.user_id },
-                data: {
-                    title: baseNotification.title,
-                    message: baseNotification.message,
-                    type: 'INFO',
-                },
+                data: { title: baseNotification.title, message: baseNotification.message, type: "INFO" },
                 visibilityLevel: 3,
-                showPopup: true
+                showPopup: true,
             });
 
-            // 🔔 Notify others (managers, directors, team leads, HR)
-            const commonData = {
-                title: `Attendance Fix Request ${status}`,
-                message: `${employeeName}'s attendance fix request was ${status.toLowerCase()}.`,
-                type: 'INFO',
-            };
+            const commonData = { title: `Attendance Fix Request ${status}`, message: `${employeeName}'s attendance fix request was ${status.toLowerCase()}.`, type: "INFO" };
 
-            // notify HR (DIRECTORS_HR)
-            await createScopedNotification({
-                scope: 'DIRECTORS_HR',
-                target_ids: {},
-                data: commonData,
-                visibilityLevel: 1,
-                excludeUserId: reviewer_id, // reviewer shouldn’t get self-notification
-            });
+            await createScopedNotification({ scope: "DIRECTORS_HR", target_ids: {}, data: commonData, visibilityLevel: 1, excludeUserId: reviewer_id });
 
-            // notify managers in same dept
             if (request.employee.department_id) {
-                await createScopedNotification({
-                    scope: 'MANAGERS_DEPT',
-                    target_ids: { department_id: request.employee.department_id },
-                    data: commonData,
-                    visibilityLevel: 2,
-                    excludeUserId: reviewer_id,
-                });
+                await createScopedNotification({ scope: "MANAGERS_DEPT", target_ids: { department_id: request.employee.department_id }, data: commonData, visibilityLevel: 2, excludeUserId: reviewer_id });
             }
 
-            // notify team leads in same sub-dept
             if (request.employee.sub_department_id) {
-                await createScopedNotification({
-                    scope: 'TEAMLEADS_SUBDEPT',
-                    target_ids: { sub_department_id: request.employee.sub_department_id },
-                    data: commonData,
-                    visibilityLevel: 2,
-                    excludeUserId: reviewer_id,
-                });
+                await createScopedNotification({ scope: "TEAMLEADS_SUBDEPT", target_ids: { sub_department_id: request.employee.sub_department_id }, data: commonData, visibilityLevel: 2, excludeUserId: reviewer_id });
             }
-
-        } catch (error) {
-
+        } catch (notificationErr) {
+            console.error("Notification error:", notificationErr);
         }
 
-        // ✅ Update fix request status
+        // --- Update fix request status ---
         const updatedRequest = await prisma.attendance_fix_requests.update({
             where: { id: requestId },
-            data: {
-                status,
-                reviewed_by_id: reviewer_id,
-                reviewed_at: new Date(),
-                remarks: remarks ?? undefined,
-            },
+            data: { status, reviewed_by_id: reviewer_id, reviewed_at: new Date(), remarks: remarks ?? undefined },
         });
 
-        res.status(200).json({
-            message: `Fix request ${status.toLowerCase()} successfully.`,
-            request: updatedRequest,
-            attendanceRecord: updatedOrCreatedRecord,
-        });
+        res.status(200).json({ message: `Fix request ${status.toLowerCase()} successfully.`, request: updatedRequest, attendanceRecord: updatedOrCreatedRecord });
+
     } catch (error) {
         console.error("Error updating fix request status:", error);
         res.status(500).json({ message: "Internal server error" });
@@ -474,14 +487,8 @@ export const deleteFixRequest = async (req: Request, res: Response) => {
             return res.status(404).json({ message: 'Fix request not found.' });
         }
 
-        // Delete linked attendance record if any
-        if (request.attendance_record_id) {
-            await prisma.attendance_records.delete({
-                where: { id: request.attendance_record_id },
-            });
-        }
-
-        // Delete the fix request itself
+        // Delete only the fix request itself
+        // Keep the linked attendance record unchanged
         await prisma.attendance_fix_requests.delete({
             where: { id: requestId },
         });

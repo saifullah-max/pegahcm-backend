@@ -10,16 +10,230 @@ interface CustomJwtPayload extends JwtPayload {
   id: string;
 }
 
-export const checkIn = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+// export const checkIn = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction
+// ): Promise<void> => {
+//   try {
+//     const user = req.user as unknown as CustomJwtPayload;
+//     const user_id = user.userId;
+
+//     // Fetch employee info
+//     const employee = await prisma.employees.findUnique({
+//       where: { user_id },
+//       include: { user: { include: { role: true, sub_role: true } } },
+//     });
+
+//     if (!employee) {
+//       res.status(404).json({ message: "Employee not found." });
+//       return;
+//     }
+
+//     const {
+//       id: employee_id,
+//       sub_department_id,
+//       department_id,
+//       user: userMeta,
+//     } = employee;
+
+//     const roleName = userMeta.role.name.toLowerCase();
+//     const role_tag = (userMeta as any).role_tag;
+
+//     // Timezone
+//     const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
+//     const now = moment().tz(userTimezone);
+
+//     /**
+//      * ---------------------------------------------------------
+//      * FIX #1 — Correct same-day attendance matching
+//      * Attendance must be for TODAY in user timezone
+//      * ---------------------------------------------------------
+//      */
+//     const dayStart = now.clone().startOf("day");
+//     const dayEnd = now.clone().endOf("day");
+
+//     const alreadyCheckedIn = await prisma.attendance_records.findFirst({
+//       where: {
+//         employee_id,
+//         // Convert dayStart/dayEnd to UTC for DB filtering
+//         date: {
+//           gte: dayStart.utc().toDate(),
+//           lte: dayEnd.utc().toDate(),
+//         },
+//       },
+//     });
+
+//     if (alreadyCheckedIn) {
+//       res.status(400).json({ message: "Already checked in today." });
+//       return;
+//     }
+
+//     // Shift info
+//     const { shift_id } = req.body;
+//     if (!shift_id) {
+//       res.status(400).json({ message: "Shift ID is required." });
+//       return;
+//     }
+
+//     const shift = await prisma.shifts.findUnique({ where: { id: shift_id } });
+//     if (!shift) {
+//       res.status(404).json({ message: "Shift not found." });
+//       return;
+//     }
+
+//     /**
+//      * ---------------------------------------------------------
+//      * FIX #2 — Correct "today shiftStart/shiftEnd" construction
+//      * moment("08:00") is INVALID. We combine today's date + time
+//      * ---------------------------------------------------------
+//      */
+//     const shiftStart = moment.tz(now.format('YYYY-MM-DD') + ' ' + moment(shift.start_time).format('HH:mm:ss'), userTimezone);
+//     let shiftEnd = moment.tz(now.format('YYYY-MM-DD') + ' ' + moment(shift.end_time).format('HH:mm:ss'), userTimezone);
+
+//     if (shiftEnd.isBefore(shiftStart)) shiftEnd.add(1, 'day'); // handle overnight
+
+
+//     /**
+//      * ---------------------------------------------------------
+//      * FIX #3 — Late calculation uses same-day shiftStart
+//      * ---------------------------------------------------------
+//      */
+//     const lateThreshold = shiftStart.clone().add(30, "minutes");
+
+//     let status = "Present";
+//     let lateMessage = "";
+//     let late_minutes: number | null = null;
+
+//     if (now.isAfter(lateThreshold)) {
+//       status = "Late";
+
+//       const diffMinutes = now.diff(shiftStart, "minutes");
+//       const lateHours = Math.floor(diffMinutes / 60);
+//       const lateMins = diffMinutes % 60;
+
+//       lateMessage = `You are ${lateHours > 0 ? lateHours + " hr " : ""}${lateMins} mins late`;
+//       late_minutes = diffMinutes;
+
+//       // FIX request logic
+//       const approvedFix = await prisma.attendance_fix_requests.findFirst({
+//         where: {
+//           employee_id,
+//           status: "Approved",
+//           request_type: { in: ["check_in", "Both", "both"] } as any,
+//           requested_check_in: {
+//             gte: dayStart.toDate(),
+//             lte: dayEnd.toDate(),
+//           },
+//         },
+//       });
+
+//       if (approvedFix?.requested_check_in) {
+//         const approvedTime = moment(approvedFix.requested_check_in).tz(userTimezone);
+
+//         // If the actual check-in (now) is same-or-before the approved expected time,
+//         // treat this attendance as approved_late and compute late_minutes based on approvedTime.
+//         if (now.isSameOrBefore(approvedTime, "minute")) {
+//           status = "approved_late";
+//           late_minutes = Math.max(0, approvedTime.diff(shiftStart, "minutes"));
+//           lateMessage = `Approved late (expected ${approvedTime.format("hh:mm A")})`;
+//         } else {
+//           // checked in after approved expected time -> remain Late (late_minutes already set)
+//         }
+//       }
+//     } else if (now.isBefore(shiftStart)) {
+//       status = "Early";
+//     }
+
+//     /**
+//      * ---------------------------------------------------------
+//      * Save record using UTC for consistency
+//      * ---------------------------------------------------------
+//      */
+//     const newRecord = await prisma.attendance_records.create({
+//       data: {
+//         employee_id,
+//         shift_id,
+//         date: now.utc().toDate(),
+//         clock_in: now.utc().toDate(),
+//         status,
+//         late_minutes,
+//       },
+//       include: { shift: true },
+//     });
+
+//     const clockInTimeLocal = now.format("hh:mm A");
+
+//     // Notifications (same logic)
+//     const baseNotification = {
+//       title: "Clock In",
+//       message: `${userMeta.full_name} clocked in at ${clockInTimeLocal} (${status})`,
+//       type: "ClockIn" as const,
+//       employee_id,
+//     };
+
+//     const promises: Promise<any>[] = [];
+//     if (roleName === "user" && sub_department_id) {
+//       promises.push(
+//         createScopedNotification({
+//           scope: "TEAMLEADS_SUBDEPT",
+//           data: baseNotification,
+//           target_ids: { sub_department_id },
+//           visibilityLevel: 3,
+//           excludeUserId: user_id,
+//         })
+//       );
+//     } else if (roleName === "teamlead" && department_id) {
+//       promises.push(
+//         createScopedNotification({
+//           scope: "MANAGERS_DEPT",
+//           data: baseNotification,
+//           target_ids: { department_id },
+//           visibilityLevel: 2,
+//           excludeUserId: user_id,
+//         })
+//       );
+//     } else if (roleName === "manager" && role_tag === "HR") {
+//       promises.push(
+//         createScopedNotification({
+//           scope: "DIRECTORS_HR",
+//           data: baseNotification,
+//           visibilityLevel: 1,
+//           excludeUserId: user_id,
+//         })
+//       );
+//     } else if (roleName === "director") {
+//       promises.push(
+//         createScopedNotification({
+//           scope: "ADMIN_ONLY",
+//           data: baseNotification,
+//           visibilityLevel: 0,
+//           excludeUserId: user_id,
+//         })
+//       );
+//     }
+
+//     await Promise.all(promises);
+
+//     res.status(200).json({
+//       message: `Check-in successful (${status})`,
+//       status,
+//       lateMessage: lateMessage || null,
+//       clockIn: now.utc().toISOString(),
+//       fullData: newRecord,
+//     });
+
+//   } catch (err) {
+//     console.error("Check-in error:", err);
+//     next(err);
+//   }
+// };
+
+export const checkIn = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const user = req.user as unknown as CustomJwtPayload;
     const user_id = user.userId;
 
-    // Fetch employee info
     const employee = await prisma.employees.findUnique({
       where: { user_id },
       include: { user: { include: { role: true, sub_role: true } } },
@@ -32,32 +246,23 @@ export const checkIn = async (
 
     const { id: employee_id, sub_department_id, department_id, user: userMeta } = employee;
     const roleName = userMeta.role.name.toLowerCase();
-    const role_tag = userMeta.role_tag;
+    const role_tag = (userMeta as any).role_tag;
 
-    // Timezone & current time
+    // Timezone
     const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
     const now = moment().tz(userTimezone);
 
-    // Check if on leave
-    const onLeave = await prisma.leave_requests.findFirst({
-      where: {
-        employee_id,
-        status: "Approved",
-        start_date: { lte: now.toDate() },
-        end_date: { gte: now.toDate() },
-      },
-    });
+    // Check if already checked in today
+    const dayStart = now.clone().startOf("day");
+    const dayEnd = now.clone().endOf("day");
 
-    if (onLeave) {
-      res.status(403).json({ message: "Cannot check-in while on leave." });
-      return;
-    }
-
-    // Already checked in today?
     const alreadyCheckedIn = await prisma.attendance_records.findFirst({
       where: {
         employee_id,
-        date: { gte: moment(now).startOf("day").toDate(), lte: moment(now).endOf("day").toDate() },
+        date: {
+          gte: dayStart.utc().toDate(),
+          lte: dayEnd.utc().toDate(),
+        },
       },
     });
 
@@ -79,30 +284,61 @@ export const checkIn = async (
       return;
     }
 
-    // Shift start & end in user's timezone
-    const shiftStart = moment(shift.start_time).tz(userTimezone);
-    let shiftEnd = moment(shift.end_time).tz(userTimezone);
-    if (shiftEnd.isBefore(shiftStart)) shiftEnd.add(1, "day"); // overnight shift
+    // Construct shift start/end times anchored to today
+    const shiftStart = moment.tz(now.format('YYYY-MM-DD') + ' ' + moment(shift.start_time).format('HH:mm:ss'), userTimezone);
+    let shiftEnd = moment.tz(now.format('YYYY-MM-DD') + ' ' + moment(shift.end_time).format('HH:mm:ss'), userTimezone);
 
-    // Late threshold
+    if (shiftEnd.isBefore(shiftStart)) shiftEnd.add(1, 'day'); // handle overnight
+
+    // Determine status based on check-in time
     const lateThreshold = shiftStart.clone().add(30, "minutes");
 
     let status = "Present";
     let lateMessage = "";
     let late_minutes: number | null = null;
 
-    if (now.isAfter(lateThreshold)) {
+    if (now.isBefore(shiftStart)) {
+      // Check-in before shift start
+      status = "Early";
+      const earlyMinutes = shiftStart.diff(now, "minutes");
+      const earlyHours = Math.floor(earlyMinutes / 60);
+      const earlyMins = earlyMinutes % 60;
+      lateMessage = `You are ${earlyHours > 0 ? earlyHours + " hr " : ""}${earlyMins} mins early`;
+    } else if (now.isAfter(lateThreshold)) {
+      // Check-in after grace period
       status = "Late";
       const diffMinutes = now.diff(shiftStart, "minutes");
       const lateHours = Math.floor(diffMinutes / 60);
       const lateMins = diffMinutes % 60;
       lateMessage = `You are ${lateHours > 0 ? lateHours + " hr " : ""}${lateMins} mins late`;
       late_minutes = diffMinutes;
-    } else if (now.isBefore(shiftStart)) {
-      status = "Early";
+
+      // Check for approved late fix request
+      const approvedFix = await prisma.attendance_fix_requests.findFirst({
+        where: {
+          employee_id,
+          status: "Approved",
+          request_type: { in: ["check_in", "Both", "both"] } as any,
+          requested_check_in: {
+            gte: dayStart.toDate(),
+            lte: dayEnd.toDate(),
+          },
+        },
+      });
+
+      if (approvedFix?.requested_check_in) {
+        const approvedTime = moment(approvedFix.requested_check_in).tz(userTimezone);
+
+        // If actual check-in is same-or-before approved expected time, mark as approved_late
+        if (now.isSameOrBefore(approvedTime, "minute")) {
+          status = "approved_late";
+          late_minutes = Math.max(0, approvedTime.diff(shiftStart, "minutes"));
+          lateMessage = `Approved late (expected ${approvedTime.format("hh:mm A")})`;
+        }
+      }
     }
 
-    // Save attendance
+    // Create attendance record
     const newRecord = await prisma.attendance_records.create({
       data: {
         employee_id,
@@ -117,7 +353,7 @@ export const checkIn = async (
 
     const clockInTimeLocal = now.format("hh:mm A");
 
-    // Notifications
+    // Notification
     const baseNotification = {
       title: "Clock In",
       message: `${userMeta.full_name} clocked in at ${clockInTimeLocal} (${status})`,
@@ -125,37 +361,45 @@ export const checkIn = async (
       employee_id,
     };
 
-    const promises = [];
+    const promises: Promise<any>[] = [];
     if (roleName === "user" && sub_department_id) {
-      promises.push(createScopedNotification({
-        scope: "TEAMLEADS_SUBDEPT",
-        data: baseNotification,
-        target_ids: { sub_department_id },
-        visibilityLevel: 3,
-        excludeUserId: user_id,
-      }));
+      promises.push(
+        createScopedNotification({
+          scope: "TEAMLEADS_SUBDEPT",
+          data: baseNotification,
+          target_ids: { sub_department_id },
+          visibilityLevel: 3,
+          excludeUserId: user_id,
+        })
+      );
     } else if (roleName === "teamlead" && department_id) {
-      promises.push(createScopedNotification({
-        scope: "MANAGERS_DEPT",
-        data: baseNotification,
-        target_ids: { department_id },
-        visibilityLevel: 2,
-        excludeUserId: user_id,
-      }));
+      promises.push(
+        createScopedNotification({
+          scope: "MANAGERS_DEPT",
+          data: baseNotification,
+          target_ids: { department_id },
+          visibilityLevel: 2,
+          excludeUserId: user_id,
+        })
+      );
     } else if (roleName === "manager" && role_tag === "HR") {
-      promises.push(createScopedNotification({
-        scope: "DIRECTORS_HR",
-        data: baseNotification,
-        visibilityLevel: 1,
-        excludeUserId: user_id,
-      }));
+      promises.push(
+        createScopedNotification({
+          scope: "DIRECTORS_HR",
+          data: baseNotification,
+          visibilityLevel: 1,
+          excludeUserId: user_id,
+        })
+      );
     } else if (roleName === "director") {
-      promises.push(createScopedNotification({
-        scope: "ADMIN_ONLY",
-        data: baseNotification,
-        visibilityLevel: 0,
-        excludeUserId: user_id,
-      }));
+      promises.push(
+        createScopedNotification({
+          scope: "ADMIN_ONLY",
+          data: baseNotification,
+          visibilityLevel: 0,
+          excludeUserId: user_id,
+        })
+      );
     }
 
     await Promise.all(promises);
@@ -173,6 +417,96 @@ export const checkIn = async (
     next(err);
   }
 };
+
+// export const checkOut = async (
+//   req: Request,
+//   res: Response,
+//   next: NextFunction
+// ): Promise<void> => {
+//   try {
+//     const user = req.user as unknown as CustomJwtPayload;
+//     const user_id = user.userId;
+
+//     // Fetch employee info
+//     const employee = await prisma.employees.findUnique({
+//       where: { user_id },
+//       include: { user: { include: { role: true, sub_role: true } } },
+//     });
+
+//     if (!employee) {
+//       res.status(404).json({ message: "Employee not found." });
+//       return;
+//     }
+
+//     const { id: employee_id, sub_department_id, department_id, user: userMeta } = employee;
+//     const roleName = userMeta.role.name.toLowerCase();
+//     const role_tag = userMeta.role_tag;
+
+//     // Find latest active check-in
+//     const attendance = await prisma.attendance_records.findFirst({
+//       where: {
+//         employee_id,
+//         clock_out: null,
+//         status: { not: "AutoCheckout" },
+//       },
+//       orderBy: { clock_in: "desc" },
+//     });
+
+//     if (!attendance) {
+//       res.status(400).json({ message: "No active check-in found to check out." });
+//       return;
+//     }
+
+//     const now = new Date();
+
+//     // Calculate break duration
+//     const breaks = await prisma.breaks.findMany({ where: { attendance_record_id: attendance.id } });
+//     let totalBreakMs = 0;
+//     for (const brk of breaks) {
+//       if (brk.break_start && brk.break_end) {
+//         totalBreakMs += new Date(brk.break_end).getTime() - new Date(brk.break_start).getTime();
+//       }
+//     }
+
+//     const net_working_minutes = Math.floor((now.getTime() - new Date(attendance.clock_in).getTime() - totalBreakMs) / (1000 * 60));
+
+//     const updatedRecord = await prisma.attendance_records.update({
+//       where: { id: attendance.id },
+//       data: { clock_out: now, net_working_minutes },
+//     });
+
+//     const clockOutTime = moment(now).tz("Asia/Karachi").format("hh:mm A");
+//     const baseNotification = {
+//       title: "Clock Out",
+//       message: `${userMeta.full_name} clocked out at ${clockOutTime}`,
+//       type: "ClockOut" as const,
+//       employee_id,
+//     };
+
+//     const promises = [];
+//     if (roleName === "user" && sub_department_id) {
+//       promises.push(createScopedNotification({ scope: "TEAMLEADS_SUBDEPT", data: baseNotification, target_ids: { sub_department_id }, visibilityLevel: 3, excludeUserId: user_id }));
+//     } else if (roleName === "teamlead" && department_id) {
+//       promises.push(createScopedNotification({ scope: "MANAGERS_DEPT", data: baseNotification, target_ids: { department_id }, visibilityLevel: 2, excludeUserId: user_id }));
+//     } else if (roleName === "manager" && role_tag === "HR") {
+//       promises.push(createScopedNotification({ scope: "DIRECTORS_HR", data: baseNotification, visibilityLevel: 1, excludeUserId: user_id }));
+//     } else if (roleName === "director") {
+//       promises.push(createScopedNotification({ scope: "ADMIN_ONLY", data: baseNotification, visibilityLevel: 0, excludeUserId: user_id }));
+//     }
+
+//     await Promise.all(promises);
+
+//     res.status(200).json({ message: "Check-out successful", attendance: updatedRecord });
+
+//   } catch (err) {
+//     console.error("Check-out error:", err);
+//     next(err);
+//   }
+// };
+
+
+
+// GET /api/attendance/today
 
 export const checkOut = async (
   req: Request,
@@ -194,40 +528,73 @@ export const checkOut = async (
       return;
     }
 
-    const { id: employee_id, sub_department_id, department_id, user: userMeta } = employee;
+    const {
+      id: employee_id,
+      sub_department_id,
+      department_id,
+      user: userMeta
+    } = employee;
+
     const roleName = userMeta.role.name.toLowerCase();
     const role_tag = userMeta.role_tag;
 
-    // Find latest active check-in
-    const attendance = await prisma.attendance_records.findFirst({
-      where: { employee_id, clock_out: null },
+    // Get latest attendance (doesn’t matter if it's active or closed)
+    let attendance = await prisma.attendance_records.findFirst({
+      where: { employee_id },
       orderBy: { clock_in: "desc" },
     });
 
-    if (!attendance) {
-      res.status(400).json({ message: "No active check-in found to check out." });
-      return;
-    }
-
     const now = new Date();
 
-    // Calculate break duration
-    const breaks = await prisma.breaks.findMany({ where: { attendance_record_id: attendance.id } });
+    // ➤ If NO attendance exists → create a mock record
+    if (!attendance) {
+      attendance = await prisma.attendance_records.create({
+        data: {
+          employee_id,
+          shift_id: "00000000-0000-0000-0000-000000000000", // test mode
+          date: now,
+          clock_in: now,
+          status: "Present",
+          net_working_minutes: 0,
+        },
+      });
+    }
+
+    // ➤ Calculate break time (same as old code)
+    const breaks = await prisma.breaks.findMany({
+      where: { attendance_record_id: attendance.id },
+    });
+
     let totalBreakMs = 0;
     for (const brk of breaks) {
       if (brk.break_start && brk.break_end) {
-        totalBreakMs += new Date(brk.break_end).getTime() - new Date(brk.break_start).getTime();
+        totalBreakMs +=
+          new Date(brk.break_end).getTime() -
+          new Date(brk.break_start).getTime();
       }
     }
 
-    const net_working_minutes = Math.floor((now.getTime() - new Date(attendance.clock_in).getTime() - totalBreakMs) / (1000 * 60));
+    const net_working_minutes = Math.floor(
+      (now.getTime() -
+        new Date(attendance.clock_in).getTime() -
+        totalBreakMs) /
+      (1000 * 60)
+    );
 
+    // ➤ Update checkout
     const updatedRecord = await prisma.attendance_records.update({
       where: { id: attendance.id },
-      data: { clock_out: now, net_working_minutes },
+      data: {
+        clock_out: now,
+        net_working_minutes,
+      },
     });
 
-    const clockOutTime = moment(now).tz("Asia/Karachi").format("hh:mm A");
+    // ➤ Notification logic preserved (unchanged)
+    const clockOutTime = moment(now)
+      .tz("Asia/Karachi")
+      .format("hh:mm A");
+
     const baseNotification = {
       title: "Clock Out",
       message: `${userMeta.full_name} clocked out at ${clockOutTime}`,
@@ -235,20 +602,54 @@ export const checkOut = async (
       employee_id,
     };
 
-    const promises = [];
+    const notifications = [];
+
     if (roleName === "user" && sub_department_id) {
-      promises.push(createScopedNotification({ scope: "TEAMLEADS_SUBDEPT", data: baseNotification, target_ids: { sub_department_id }, visibilityLevel: 3, excludeUserId: user_id }));
+      notifications.push(
+        createScopedNotification({
+          scope: "TEAMLEADS_SUBDEPT",
+          data: baseNotification,
+          target_ids: { sub_department_id },
+          visibilityLevel: 3,
+          excludeUserId: user_id,
+        })
+      );
     } else if (roleName === "teamlead" && department_id) {
-      promises.push(createScopedNotification({ scope: "MANAGERS_DEPT", data: baseNotification, target_ids: { department_id }, visibilityLevel: 2, excludeUserId: user_id }));
+      notifications.push(
+        createScopedNotification({
+          scope: "MANAGERS_DEPT",
+          data: baseNotification,
+          target_ids: { department_id },
+          visibilityLevel: 2,
+          excludeUserId: user_id,
+        })
+      );
     } else if (roleName === "manager" && role_tag === "HR") {
-      promises.push(createScopedNotification({ scope: "DIRECTORS_HR", data: baseNotification, visibilityLevel: 1, excludeUserId: user_id }));
+      notifications.push(
+        createScopedNotification({
+          scope: "DIRECTORS_HR",
+          data: baseNotification,
+          visibilityLevel: 1,
+          excludeUserId: user_id,
+        })
+      );
     } else if (roleName === "director") {
-      promises.push(createScopedNotification({ scope: "ADMIN_ONLY", data: baseNotification, visibilityLevel: 0, excludeUserId: user_id }));
+      notifications.push(
+        createScopedNotification({
+          scope: "ADMIN_ONLY",
+          data: baseNotification,
+          visibilityLevel: 0,
+          excludeUserId: user_id,
+        })
+      );
     }
 
-    await Promise.all(promises);
+    await Promise.all(notifications);
 
-    res.status(200).json({ message: "Check-out successful", attendance: updatedRecord });
+    res.status(200).json({
+      message: "Check-out successful (TEST MODE)",
+      attendance: updatedRecord,
+    });
 
   } catch (err) {
     console.error("Check-out error:", err);
@@ -256,15 +657,12 @@ export const checkOut = async (
   }
 };
 
-// GET /api/attendance/today
 export const checkTodayAttendance = async (req: Request, res: Response) => {
   try {
     const user_id = req.user?.userId;
 
     if (!user_id) {
-      return res
-        .status(401)
-        .json({ message: "Unauthorized: userId not found in token." });
+      return res.status(401).json({ message: "Unauthorized: userId not found in token." });
     }
 
     // Step 1: Get employeeId using userId
@@ -276,21 +674,19 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Employee not found." });
     }
 
-    // Step 2: Get today's date range (00:00 to 23:59)
+    // Step 2: Generate date boundaries (00:00 - 23:59)
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Step 3: Check if attendance exists today
+    // Step 3: Fetch today's attendance
     const attendance = await prisma.attendance_records.findFirst({
       where: {
         employee_id: employee.id,
-        clock_in: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
+        clock_in: { gte: startOfDay, lte: endOfDay },
+        // status: { not: "AutoCheckout" },
       },
       include: {
         breaks: {
@@ -301,27 +697,57 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
     });
 
     if (!attendance) {
-      return res.status(200).json({ checkedIn: false, checkedOut: false });
+      return res.status(200).json({
+        checkedIn: false,
+        checkedOut: false,
+        attendance: null,
+        attendanceStatus: null,
+        breaks: [],
+        activeBreak: null,
+      });
     }
 
-    let activeBreak = null;
+    // ------------------------------
+    // 🔥 Extract break segments
+    // ------------------------------
+    // const breakSegments = attendance.breaks
+    //   .filter((b: any) => b.break_start && b.break_end) // completed breaks only
+    //   .map((b: any) => ({
+    //     id: b.id,
+    //     start: b.break_start,
+    //     end: b.break_end,
+    //     type: b.break_type.name,
+    //   }));
 
-    if (attendance) {
-      const ongoing = attendance.breaks.find((b: any) => b.break_end === null);
-      if (ongoing) {
-        activeBreak = {
-          id: ongoing.id,
-          break_start: ongoing.break_start,
-          break_type: ongoing.break_type, // includes name
-        };
-      }
-    }
+    // ------------------------------
+    // 🔥 Check active (ongoing) break
+    // ------------------------------
+    // let activeBreak = null;
 
+    // const ongoingBreak = attendance.breaks.find((b: any) => b.break_end === null);
+
+    // if (ongoingBreak) {
+    //   activeBreak = {
+    //     id: ongoingBreak.id,
+    //     breakStart: ongoingBreak.break_start,
+    //     breakType: ongoingBreak.break_type.name,
+    //   };
+    // }
+
+    // ------------------------------
+    // 🔥 Build final response
+    // ------------------------------
     return res.status(200).json({
       checkedIn: true,
       checkedOut: attendance.clock_out !== null,
+      checkInTime: attendance.clock_in,
+      checkOutTime: attendance.clock_out,
+      attendanceStatus: attendance.status, // Late / Present / approved_late etc.
       attendance,
-      activeBreak, // ✅ Now included in response
+
+      // break segments + active break
+      // breaks: breakSegments,
+      // activeBreak: activeBreak,
     });
   } catch (error) {
     console.error("Error checking today’s attendance:", error);
@@ -512,7 +938,7 @@ export const createLeaveType = async (req: Request, res: Response) => {
 export const getAllLeaveTypes = async (req: Request, res: Response) => {
   try {
     const leaveTypes = await prisma.leave_types.findMany();
-    console.log("LEAVE API hit: ", leaveTypes);
+    // console.log("LEAVE API hit: ", leaveTypes);
     return res.status(200).json({ success: true, data: leaveTypes });
   } catch (error) {
     console.error("Error fetching leave types:", error);
@@ -1193,6 +1619,7 @@ export const getEmployeesAttendanceSummary = async (
         if (onLeaveToday) today_status = "OnLeave"
         else if (todayAttendance?.status === "Late") today_status = "Late";
         else if (todayAttendance?.status === "Present") today_status = "Present";
+        else if (todayAttendance?.status === "approved_late") today_status = "approved_late";
 
         const total_leaves = await prisma.leave_requests.count({
           where: {
@@ -1230,6 +1657,137 @@ export const getEmployeesAttendanceSummary = async (
     });
   } catch (error) {
     console.error("Failed to fetch employee summary:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// Filtered summary with total hours calculation
+export const getEmployeesAttendanceSummaryFiltered = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const { limit = "5", lastCursorId, filterType, startDate, endDate } = req.query;
+    const limitNumber = parseInt(limit as string);
+
+    const total = await prisma.employees.count({});
+
+    // Date range calculation
+    let rangeStart: Date, rangeEnd: Date;
+    const today = moment().startOf("day");
+
+    switch ((filterType || '').toString().toLowerCase()) {
+      case "yesterday":
+        rangeStart = today.clone().subtract(1, 'day').toDate();
+        rangeEnd = today.clone().subtract(1, 'day').endOf('day').toDate();
+        break;
+      case "this_week":
+        rangeStart = today.clone().startOf('week').toDate();
+        rangeEnd = today.clone().endOf('week').toDate();
+        break;
+      case "last_week":
+        rangeStart = today.clone().subtract(1, 'week').startOf('week').toDate();
+        rangeEnd = today.clone().subtract(1, 'week').endOf('week').toDate();
+        break;
+      case "past_week": // previous 7 days excluding today
+        rangeStart = today.clone().subtract(7, 'days').toDate();
+        rangeEnd = today.clone().subtract(1, 'day').endOf('day').toDate();
+        break;
+      case "this_month":
+        rangeStart = today.clone().startOf('month').toDate();
+        rangeEnd = today.clone().endOf('month').toDate();
+        break;
+      case "custom":
+        if (startDate && endDate) {
+          const startStr = Array.isArray(startDate) ? startDate[0] : startDate as string;
+          const endStr = Array.isArray(endDate) ? endDate[0] : endDate as string;
+          rangeStart = moment(startStr).startOf('day').toDate();
+          rangeEnd = moment(endStr).endOf('day').toDate();
+        } else {
+          return res.status(400).json({ success: false, message: "Custom range requires startDate and endDate." });
+        }
+        break;
+      case "today":
+      default:
+        rangeStart = today.toDate();
+        rangeEnd = today.clone().endOf('day').toDate();
+    }
+
+    const employees = await prisma.employees.findMany({
+      skip: lastCursorId ? 1 : 0,
+      take: limitNumber,
+      cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
+      include: {
+        user: { select: { full_name: true, email: true } },
+        department: true,
+      },
+      orderBy: { id: "desc" },
+    });
+
+    const summary = await Promise.all(
+      employees.map(async (emp: any) => {
+        // Attendance for this period
+        const attendanceRecords = await prisma.attendance_records.findMany({
+          where: {
+            employee_id: emp.id,
+            clock_in: { gte: rangeStart, lte: rangeEnd },
+          },
+        });
+
+        // Total hours = sum of (clock_out - clock_in) for all records with both times
+        let totalMinutes = 0;
+        for (const rec of attendanceRecords) {
+          if (rec.clock_in && rec.clock_out) {
+            totalMinutes += Math.floor((new Date(rec.clock_out).getTime() - new Date(rec.clock_in).getTime()) / (1000 * 60));
+          }
+        }
+        const total_hours = Number((totalMinutes / 60).toFixed(2));
+
+        // Leave records
+        const leaves = await prisma.leave_requests.findMany({
+          where: {
+            employee_id: emp.id,
+            status: "Approved",
+            start_date: { lte: rangeEnd },
+            end_date: { gte: rangeStart },
+          },
+        });
+
+        // Define status for period
+        let period_status = "Absent";
+        if (attendanceRecords.length > 0)
+          period_status = attendanceRecords.some((r: any) => r.status === "Present") ? "Present" : attendanceRecords[0].status;
+        else if (leaves.length > 0)
+          period_status = "OnLeave";
+
+        const late_arrivals = attendanceRecords.filter((r: any) => r.status === "Late").length;
+        const total_leaves = leaves.length;
+
+        return {
+          employee_id: emp.id,
+          full_name: emp.user.full_name,
+          email: emp.user.email,
+          department: emp.department?.name || "N/A",
+          period_status,
+          total_leaves,
+          late_arrivals,
+          total_hours,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: summary,
+      pagination: {
+        limit,
+        total,
+        total_pages: Math.ceil(total / limitNumber),
+      },
+      filter: { start: rangeStart, end: rangeEnd, filterType },
+    });
+  } catch (error) {
+    console.error("Failed to fetch filtered employee summary:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
