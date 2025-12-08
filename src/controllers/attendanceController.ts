@@ -1667,29 +1667,53 @@ export const getEmployeesAttendanceSummaryFiltered = async (
   res: Response
 ) => {
   try {
-    const { limit = "5", lastCursorId, filterType, startDate, endDate } = req.query;
+    const { limit = "5", lastCursorId, filterType, startDate, endDate, departmentId, userId } = req.query;
     const limitNumber = parseInt(limit as string);
 
-    const total = await prisma.employees.count({});
+    // Return empty data until a department or user is selected
+    if (!departmentId && !userId) {
+      return res.status(200).json({ success: true, data: [], pagination: { limit, total: 0, total_pages: 0 }, filterType, filter: {} });
+    }
 
-    // Date range calculation
+    // Employees filtering logic
+    let employeeWhere: any = {};
+    if (departmentId && departmentId !== "All") {
+      employeeWhere.department_id = departmentId;
+    }
+    if (userId && userId !== "All") {
+      employeeWhere.id = userId;
+    }
+
+    const total = await prisma.employees.count({ where: employeeWhere });
+    const employees = await prisma.employees.findMany({
+      where: employeeWhere,
+      skip: lastCursorId ? 1 : 0,
+      take: limitNumber,
+      cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
+      include: {
+        user: { select: { full_name: true, email: true } },
+        department: true,
+      },
+      orderBy: { id: "desc" },
+    });
+
+    // Date range calculation (same as before)
     let rangeStart: Date, rangeEnd: Date;
     const today = moment().startOf("day");
-
     switch ((filterType || '').toString().toLowerCase()) {
       case "yesterday":
         rangeStart = today.clone().subtract(1, 'day').toDate();
         rangeEnd = today.clone().subtract(1, 'day').endOf('day').toDate();
         break;
       case "this_week":
-        rangeStart = today.clone().startOf('week').toDate();
-        rangeEnd = today.clone().endOf('week').toDate();
+        rangeStart = today.clone().startOf('isoWeek').toDate();
+        rangeEnd = today.clone().endOf('isoWeek').toDate();
         break;
       case "last_week":
-        rangeStart = today.clone().subtract(1, 'week').startOf('week').toDate();
-        rangeEnd = today.clone().subtract(1, 'week').endOf('week').toDate();
+        rangeStart = today.clone().subtract(1, 'week').startOf('isoWeek').toDate();
+        rangeEnd = today.clone().subtract(1, 'week').endOf('isoWeek').toDate();
         break;
-      case "past_week": // previous 7 days excluding today
+      case "past_week":
         rangeStart = today.clone().subtract(7, 'days').toDate();
         rangeEnd = today.clone().subtract(1, 'day').endOf('day').toDate();
         break;
@@ -1712,17 +1736,6 @@ export const getEmployeesAttendanceSummaryFiltered = async (
         rangeStart = today.toDate();
         rangeEnd = today.clone().endOf('day').toDate();
     }
-
-    const employees = await prisma.employees.findMany({
-      skip: lastCursorId ? 1 : 0,
-      take: limitNumber,
-      cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
-      include: {
-        user: { select: { full_name: true, email: true } },
-        department: true,
-      },
-      orderBy: { id: "desc" },
-    });
 
     const summary = await Promise.all(
       employees.map(async (emp: any) => {
@@ -1752,7 +1765,6 @@ export const getEmployeesAttendanceSummaryFiltered = async (
             end_date: { gte: rangeStart },
           },
         });
-
         // Define status for period
         let period_status = "Absent";
         if (attendanceRecords.length > 0)
