@@ -5,6 +5,7 @@ import { createScopedNotification } from "../utils/notificationUtils";
 import { JwtPayload } from "jsonwebtoken";
 import prisma from "../utils/Prisma";
 import { PermissionSource } from "@prisma/client";
+import { connect } from "http2";
 
 enum RoleTag {
   HR = "HR",
@@ -479,7 +480,7 @@ export const listEmployees = async (req: Request, res: Response) => {
           total,
           page: pageNumber,
           limit: limitNumber,
-          totalPages: Math.ceil(total / limitNumber),
+          total_pages: Math.ceil(total / limitNumber),
         },
       },
     });
@@ -606,6 +607,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
       skills,
       work_location,
       father_name,
+      shift_id
     } = req.body;
 
     // Handle file uploads
@@ -707,6 +709,12 @@ export const updateEmployee = async (req: Request, res: Response) => {
       res.status(400).json({ message: "Provided designation doesnt exist" })
     }
 
+    const shift_exists = await prisma.shifts.findUnique({
+      where: {
+        id: shift_id
+      }
+    })
+
     // Update employee
     const updatedEmployee = await prisma.employees.update({
       where: { id },
@@ -720,6 +728,7 @@ export const updateEmployee = async (req: Request, res: Response) => {
         status,
         skills: processedSkills.length > 0 ? processedSkills.join(",") : null,
         work_location,
+        shift: shift_exists ? { connect: { id: shift_exists.id } } : undefined,
         gender,
         address,
         emergency_contact_name,

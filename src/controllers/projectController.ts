@@ -94,7 +94,9 @@ export const create_project = async (req: Request, res: Response) => {
           : undefined,
         documents: documentsObj,
         created_by: user_id,
-        bid_id
+        bid: {
+          connect: { id: bid_id }
+        }
       },
     });
 
@@ -139,6 +141,8 @@ export const get_all_projects = async (req: Request, res: Response) => {
         },
         bid: true,
         milestones: true,
+        upwork_profile: true,
+        project_type: true
       },
       orderBy: { created_at: "desc" },
     });

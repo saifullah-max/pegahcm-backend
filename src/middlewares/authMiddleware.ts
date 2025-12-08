@@ -40,14 +40,14 @@ export const authenticateToken = (
       process.env.JWT_SECRET!
     ) as JwtPayload;
 
-    // console.log('[Auth Middleware] Decoded payload:', decoded);
-    if (decoded.impersonatedBy) {
-      console.log(
-        `[IMPERSONATION] This request is impersonated by admin ID: ${decoded.impersonatedBy}`
-      );
-    } else {
-      console.log('[AUTH] Normal user login');
-    }
+    // // console.log('[Auth Middleware] Decoded payload:', decoded);
+    // if (decoded.impersonatedBy) {
+    //   console.log(
+    //     `[IMPERSONATION] This request is impersonated by admin ID: ${decoded.impersonatedBy}`
+    //   );
+    // } else {
+    //   console.log('[AUTH] Normal user login');
+    // }
 
     req.user = decoded;
     next();

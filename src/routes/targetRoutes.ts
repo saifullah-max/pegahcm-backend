@@ -18,7 +18,8 @@ router.use(authenticateToken);
 router.route('/cost').post(create_cost).get(get_costs)
 router.route('/cost/:id').put(update_cost)
 
-router.route('/').post(create_target).get(get_all_targets);
+router.route('/').post(create_target)
+    .get(get_all_targets);
 router
     .route('/:id')
     .get(get_target_by_id)

@@ -47,6 +47,13 @@ export const createTicket = async (req: Request, res: Response) => {
             });
         }
 
+        if (milestone.revenue == null || milestone.revenue == 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Milestone is not funded",
+            });
+        }
+
         const milestonesInProject = await prisma.milestones.findMany({
             where: { project_id: milestone.project.id },
             orderBy: { created_at: "asc" },
@@ -64,11 +71,11 @@ export const createTicket = async (req: Request, res: Response) => {
         // const milestoneInitial = milestone.name.charAt(0).toUpperCase();
 
         const ticketNumber = `P${milestone.project.auto_id ?? 1
-        }M${milestone.auto_id ?? 1
-        }-${String(ticketCount + 1).padStart(
-            3,
-            "0"
-        )}`;
+            }M${milestone.auto_id ?? 1
+            }-${String(ticketCount + 1).padStart(
+                3,
+                "0"
+            )}`;
 
         // ✅ Handle file uploads
         const files = (req.files || {}) as {

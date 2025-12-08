@@ -71,11 +71,12 @@ export const get_all_targets = async (req: Request, res: Response) => {
 export const get_target_by_id = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const target = await prisma.target.findUnique({
-            where: { id },
+
+        const target = await prisma.target.findFirst({
+            where: { employee_id: id },
+            orderBy: { created_at: 'desc' }, // latest first
             include: { employee: { include: { department: true } } },
         });
-        console.log("Target:", target);
 
         if (!target) {
             return res.status(404).json({ error: 'Target not found' });
@@ -163,12 +164,12 @@ export const create_cost = async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'cost is required' });
         }
 
-        const desiredStatus = (status?.trim() || 'Active');
+        const desiredStatus = (status?.trim() || 'active');
 
         const result = await prisma.$transaction(async (tx) => {
             if (desiredStatus.toLowerCase() === 'active') {
                 await tx.connect_costs.updateMany({
-                    where: { status: 'Active' },
+                    where: { status: 'active' },
                     data: { status: 'inactive', updated_by: user_id },
                 });
             }
@@ -204,7 +205,7 @@ export const update_cost = async (req: Request, res: Response) => {
         const result = await prisma.$transaction(async (tx) => {
             if (updates.status && updates.status.toLowerCase() === 'active') {
                 await tx.connect_costs.updateMany({
-                    where: { status: 'Active', NOT: { id } },
+                    where: { status: 'active', NOT: { id } },
                     data: { status: 'inactive', updated_by: user_id },
                 });
             }

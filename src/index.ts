@@ -28,7 +28,7 @@ import targetRoutes from './routes/targetRoutes';
 import designationRoutes from './routes/designationRoutes'
 import upworkRoutes from './routes/upworkRoutes'
 import ticketRoutes from './routes/ticketRoutes'
-import { startCleanupJobs } from './utils/CronJob';
+import { runAutoCheckout, startCleanupJobs, autoCheckoutCron } from './utils/CronJob';
 import ticketCommentsRoutes from './routes/ticketCommentsRoutes'
 import { initSocket } from './utils/socket';
 
@@ -88,6 +88,10 @@ app.get('/api/health', (req, res) => {
 })
 
 startCleanupJobs();
+
+// start the scheduled auto checkout cron (schedule created in CronJob.ts will run automatically)
+// calling .start() is safe if you want to ensure it is started explicitly
+autoCheckoutCron.start();
 
 // Start server
 server.listen(port, () => {

@@ -85,18 +85,31 @@ export const getShiftById = async (req: Request, res: Response) => {
 };
 
 function convertTimeToDate(date_time_str: string): Date {
-  // Example input: "2025-09-03 10:00 PM"
-  const [datePart, timePart, modifier] = date_time_str.split(/[\s]+/);
-  const [year, month, day] = datePart.split('-').map(Number);
-  const [hoursStr, minutesStr] = timePart.split(':');
+  if (!date_time_str) return new Date();
+
+  // CASE 1 → Already ISO string: 2025-12-03T11:40:00.000Z
+  if (date_time_str.includes("T")) {
+    const d = new Date(date_time_str);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // CASE 2 → Format: "2025-09-03 10:00 PM"
+  const parts = date_time_str.split(" ");
+  if (parts.length < 3) {
+    throw new Error("Invalid datetime format.");
+  }
+
+  const [datePart, timePart, modifier] = parts;
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hoursStr, minutesStr] = timePart.split(":");
 
   let hours = parseInt(hoursStr, 10);
   const minutes = parseInt(minutesStr, 10);
 
-  if (modifier === 'PM' && hours !== 12) hours += 12;
-  if (modifier === 'AM' && hours === 12) hours = 0;
+  if (modifier === "PM" && hours !== 12) hours += 12;
+  if (modifier === "AM" && hours === 12) hours = 0;
 
-  return new Date(year, month - 1, day, hours, minutes, 0, 0);
+  return new Date(year, month - 1, day, hours, minutes, 0);
 }
 
 export const updateShift = async (req: Request, res: Response) => {
