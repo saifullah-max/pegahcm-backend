@@ -266,10 +266,10 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
       },
     });
 
-    if (alreadyCheckedIn) {
-      res.status(400).json({ message: "Already checked in today." });
-      return;
-    }
+    // if (alreadyCheckedIn) {
+    //   res.status(400).json({ message: "Already checked in today." });
+    //   return;
+    // }
 
     // Shift info
     const { shift_id } = req.body;
