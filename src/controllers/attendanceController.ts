@@ -550,14 +550,14 @@ export const checkOut = async (
     if (!attendance) {
       attendance = await prisma.attendance_records.create({
         data: {
-          employee_id,
+        employee_id,
           shift_id: "00000000-0000-0000-0000-000000000000", // test mode
           date: now,
           clock_in: now,
           status: "Present",
           net_working_minutes: 0,
-        },
-      });
+      },
+    });
     }
 
     // ➤ Calculate break time (same as old code)
@@ -1661,145 +1661,240 @@ export const getEmployeesAttendanceSummary = async (
   }
 };
 
-// Filtered summary with total hours calculation
+// Filtered summary with daily attendance for selected user
 export const getEmployeesAttendanceSummaryFiltered = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const { limit = "5", lastCursorId, filterType, startDate, endDate, departmentId, userId } = req.query;
+    const {
+      limit = "5",
+      lastCursorId,
+      filterType,
+      startDate,
+      endDate,
+      departmentId,
+      userId,
+    } = req.query;
+
     const limitNumber = parseInt(limit as string);
 
-    // Return empty data until a department or user is selected
-    if (!departmentId && !userId) {
-      return res.status(200).json({ success: true, data: [], pagination: { limit, total: 0, total_pages: 0 }, filterType, filter: {} });
+    // ✅ Validate all three required fields
+    if (!filterType || !departmentId || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: "filterType, departmentId, and userId are required.",
+      });
     }
 
-    // Employees filtering logic
-    let employeeWhere: any = {};
-    if (departmentId && departmentId !== "All") {
-      employeeWhere.department_id = departmentId;
-    }
-    if (userId && userId !== "All") {
-      employeeWhere.id = userId;
-    }
-
-    const total = await prisma.employees.count({ where: employeeWhere });
-    const employees = await prisma.employees.findMany({
-      where: employeeWhere,
-      skip: lastCursorId ? 1 : 0,
-      take: limitNumber,
-      cursor: lastCursorId ? { id: lastCursorId as string } : undefined,
+    // ✅ Find the specific employee
+    const employee = await prisma.employees.findUnique({
+      where: { id: userId as string },
       include: {
         user: { select: { full_name: true, email: true } },
         department: true,
       },
-      orderBy: { id: "desc" },
     });
 
-    // Date range calculation (same as before)
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found.",
+      });
+    }
+
+    // ✅ Validate department matches
+    if (employee.department_id !== departmentId && departmentId !== "All") {
+      return res.status(400).json({
+        success: false,
+        message: "Employee does not belong to the specified department.",
+      });
+    }
+
+    // -------------------------
+    // DATE RANGE CALCULATION
+    // -------------------------
     let rangeStart: Date, rangeEnd: Date;
     const today = moment().startOf("day");
-    switch ((filterType || '').toString().toLowerCase()) {
+
+    switch ((filterType || "").toString().toLowerCase()) {
       case "yesterday":
-        rangeStart = today.clone().subtract(1, 'day').toDate();
-        rangeEnd = today.clone().subtract(1, 'day').endOf('day').toDate();
+        rangeStart = today.clone().subtract(1, "day").toDate();
+        rangeEnd = today.clone().subtract(1, "day").endOf("day").toDate();
         break;
+
       case "this_week":
-        rangeStart = today.clone().startOf('isoWeek').toDate();
-        rangeEnd = today.clone().endOf('isoWeek').toDate();
+        rangeStart = today.clone().startOf("isoWeek").toDate();
+        rangeEnd = today.clone().endOf("isoWeek").toDate();
         break;
+
       case "last_week":
-        rangeStart = today.clone().subtract(1, 'week').startOf('isoWeek').toDate();
-        rangeEnd = today.clone().subtract(1, 'week').endOf('isoWeek').toDate();
+        rangeStart = today.clone().subtract(1, "week").startOf("isoWeek").toDate();
+        rangeEnd = today.clone().subtract(1, "week").endOf("isoWeek").toDate();
         break;
+
       case "past_week":
-        rangeStart = today.clone().subtract(7, 'days').toDate();
-        rangeEnd = today.clone().subtract(1, 'day').endOf('day').toDate();
+        rangeStart = today.clone().subtract(7, "days").toDate();
+        rangeEnd = today.clone().subtract(1, "day").endOf("day").toDate();
         break;
+
       case "this_month":
-        rangeStart = today.clone().startOf('month').toDate();
-        rangeEnd = today.clone().endOf('month').toDate();
+        rangeStart = today.clone().startOf("month").toDate();
+        rangeEnd = today.clone().endOf("month").toDate();
         break;
+
       case "custom":
-        if (startDate && endDate) {
-          const startStr = Array.isArray(startDate) ? startDate[0] : startDate as string;
-          const endStr = Array.isArray(endDate) ? endDate[0] : endDate as string;
-          rangeStart = moment(startStr).startOf('day').toDate();
-          rangeEnd = moment(endStr).endOf('day').toDate();
-        } else {
-          return res.status(400).json({ success: false, message: "Custom range requires startDate and endDate." });
+        if (!startDate || !endDate) {
+          return res.status(400).json({
+            success: false,
+            message: "Custom range requires startDate and endDate.",
+          });
         }
+        const startStr = Array.isArray(startDate) ? startDate[0] : (startDate as string);
+        const endStr = Array.isArray(endDate) ? endDate[0] : (endDate as string);
+        rangeStart = moment(startStr).startOf("day").toDate();
+        rangeEnd = moment(endStr).endOf("day").toDate();
         break;
+
       case "today":
       default:
         rangeStart = today.toDate();
-        rangeEnd = today.clone().endOf('day').toDate();
+        rangeEnd = today.clone().endOf("day").toDate();
     }
 
-    const summary = await Promise.all(
-      employees.map(async (emp: any) => {
-        // Attendance for this period
-        const attendanceRecords = await prisma.attendance_records.findMany({
-          where: {
-            employee_id: emp.id,
-            clock_in: { gte: rangeStart, lte: rangeEnd },
-          },
-        });
+    // -------------------------
+    // GET ALL ATTENDANCE RECORDS FOR THE RANGE
+    // -------------------------
+    const attendanceRecords = await prisma.attendance_records.findMany({
+      where: {
+        employee_id: employee.id,
+        clock_in: { gte: rangeStart, lte: rangeEnd },
+      },
+      orderBy: { clock_in: "asc" },
+    });
 
-        // Total hours = sum of (clock_out - clock_in) for all records with both times
-        let totalMinutes = 0;
-        for (const rec of attendanceRecords) {
-          if (rec.clock_in && rec.clock_out) {
-            totalMinutes += Math.floor((new Date(rec.clock_out).getTime() - new Date(rec.clock_in).getTime()) / (1000 * 60));
-          }
+    // Create a map of date -> attendance record for quick lookup
+    const attendanceMap = new Map<string, any>();
+    attendanceRecords.forEach((rec) => {
+      const dateKey = moment(rec.clock_in).format("YYYY-MM-DD");
+      attendanceMap.set(dateKey, rec);
+    });
+
+    // -------------------------
+    // BUILD DAILY ATTENDANCE ARRAY (one row per day)
+    // -------------------------
+    const allDailyAttendance: any[] = [];
+    const currentDate = moment(rangeStart);
+    const endDateMoment = moment(rangeEnd);
+
+    // Calculate total days in range for pagination
+    const totalDays = endDateMoment.diff(moment(rangeStart), "days") + 1;
+
+    // Handle pagination: skip if lastCursorId provided
+    // lastCursorId should be a date (YYYY-MM-DD), but frontend might send employee_id (UUID)
+    let skipDays = 0;
+    if (lastCursorId) {
+      const cursorStr = lastCursorId as string;
+      
+      // Check if it's a valid date format (YYYY-MM-DD)
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+      if (datePattern.test(cursorStr)) {
+        // It's a date, use it for pagination
+        const lastDate = moment(cursorStr);
+        if (lastDate.isValid() && lastDate.isSameOrAfter(moment(rangeStart))) {
+          // Skip to the day AFTER the last date we showed
+          skipDays = lastDate.diff(moment(rangeStart), "days") + 1;
         }
-        const total_hours = Number((totalMinutes / 60).toFixed(2));
-
-        // Leave records
-        const leaves = await prisma.leave_requests.findMany({
-          where: {
-            employee_id: emp.id,
-            status: "Approved",
-            start_date: { lte: rangeEnd },
-            end_date: { gte: rangeStart },
-          },
+      } else {
+        // Invalid cursor format - return helpful error instead of defaulting to skipDays = 0
+        // This prevents repeated data when frontend sends employee_id instead of date
+        return res.status(400).json({
+          success: false,
+          message: "Invalid pagination cursor format.",
+          details: "lastCursorId must be a date in YYYY-MM-DD format (e.g., '2025-12-05').",
+          received: cursorStr,
+          solution: "Use the 'date' field from the last item in previous response, or use 'pagination.nextCursor' from the pagination object."
         });
-        // Define status for period
-        let period_status = "Absent";
-        if (attendanceRecords.length > 0)
-          period_status = attendanceRecords.some((r: any) => r.status === "Present") ? "Present" : attendanceRecords[0].status;
-        else if (leaves.length > 0)
-          period_status = "OnLeave";
+      }
+    }
 
-        const late_arrivals = attendanceRecords.filter((r: any) => r.status === "Late").length;
-        const total_leaves = leaves.length;
+    // Build all days first
+    while (currentDate.isSameOrBefore(endDateMoment, "day")) {
+      const dateKey = currentDate.format("YYYY-MM-DD");
+      const dayName = currentDate.format("dddd");
+      const attendanceRecord = attendanceMap.get(dateKey);
 
-        return {
-          employee_id: emp.id,
-          full_name: emp.user.full_name,
-          email: emp.user.email,
-          department: emp.department?.name || "N/A",
-          period_status,
-          total_leaves,
-          late_arrivals,
-          total_hours,
-        };
-      })
-    );
+      let checkIn = null;
+      let checkOut = null;
+      let status = "Absent";
+      let netWorkingMinutes = 0;
+      let lateMinutes = null;
+
+      if (attendanceRecord) {
+        // Employee has attendance for this day
+        checkIn = attendanceRecord.clock_in
+          ? moment(attendanceRecord.clock_in).format("HH:mm")
+          : null;
+        checkOut = attendanceRecord.clock_out
+          ? moment(attendanceRecord.clock_out).format("HH:mm")
+          : null;
+        status = attendanceRecord.status || "Absent";
+        netWorkingMinutes = attendanceRecord.net_working_minutes || 0;
+        lateMinutes = attendanceRecord.late_minutes || null;
+      }
+
+      // Create a row for each day with employee info + day info
+      allDailyAttendance.push({
+        employee_id: employee.id,
+        full_name: employee.user.full_name,
+        email: employee.user.email,
+        department: employee.department?.name || "N/A",
+        period_status: status,
+        total_leaves: 0, // Ignored as per requirement
+        late_arrivals: status === "Late" ? 1 : 0,
+        total_hours: Number((netWorkingMinutes / 60).toFixed(2)),
+        attendance_days: `${dayName} (${dateKey})`,
+        date: dateKey,
+        day: dayName,
+        check_in: checkIn,
+        check_out: checkOut,
+        net_working_minutes: netWorkingMinutes,
+        late_minutes: lateMinutes,
+      });
+
+      currentDate.add(1, "day");
+    }
+
+    // Apply pagination: skip and take
+    const dailyAttendance = allDailyAttendance.slice(skipDays, skipDays + limitNumber);
+
+    // Calculate next cursor (date of last item) for frontend pagination
+    const nextCursor = dailyAttendance.length > 0 
+      ? dailyAttendance[dailyAttendance.length - 1].date 
+      : null;
 
     return res.status(200).json({
       success: true,
-      data: summary,
+      data: dailyAttendance, // Array of daily records (paginated)
       pagination: {
-        limit,
-        total,
-        total_pages: Math.ceil(total / limitNumber),
+        limit: limitNumber,
+        total: totalDays,
+        total_pages: Math.ceil(totalDays / limitNumber),
+        nextCursor, // Date to use as lastCursorId for next page
       },
-      filter: { start: rangeStart, end: rangeEnd, filterType },
+      filter: {
+        start: rangeStart,
+        end: rangeEnd,
+        filterType,
+        departmentId,
+        userId,
+      },
     });
   } catch (error) {
     console.error("Failed to fetch filtered employee summary:", error);
-    res.status(500).json({ success: false, message: "Internal server error" });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
