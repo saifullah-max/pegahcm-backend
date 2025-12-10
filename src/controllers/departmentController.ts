@@ -69,7 +69,11 @@ export const getAllDepartments = async (req: Request, res: Response) => {
     const departments = await prisma.departments.findMany({
       include: {
         head: true,
-        employees: true
+        employees: {
+          include: {
+            user: true
+          }
+        },
       }
     });
 
