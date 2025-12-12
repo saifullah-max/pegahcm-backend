@@ -46,9 +46,10 @@ jobs:
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             nvm use 20.19.5
-            # Clean install to avoid conflicts
-            rm -rf node_modules package-lock.json
-            npm ci --production
+            # Clean node_modules to avoid conflicts (keep package-lock.json for npm ci)
+            rm -rf node_modules
+            # Install all dependencies (including dev) to get Prisma CLI
+            npm ci
             # Build is already done, but ensure Prisma client is generated
             npm run prisma:generate
             /home/apipegahub/.nvm/versions/node/v20.19.5/bin/pm2 restart 0
