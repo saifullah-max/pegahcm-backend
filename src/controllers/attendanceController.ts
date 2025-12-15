@@ -115,15 +115,15 @@ interface CustomJwtPayload extends JwtPayload {
 //       lateMessage = `You are ${lateHours > 0 ? lateHours + " hr " : ""}${lateMins} mins late`;
 //       late_minutes = diffMinutes;
 
-//       // FIX request logic
+//       // Check for approved late fix request
 //       const approvedFix = await prisma.attendance_fix_requests.findFirst({
 //         where: {
 //           employee_id,
 //           status: "Approved",
 //           request_type: { in: ["check_in", "Both", "both"] } as any,
 //           requested_check_in: {
-//             gte: dayStart.toDate(),
-//             lte: dayEnd.toDate(),
+//             $gte: dayStart,
+//             $lte: dayEnd,
 //           },
 //         },
 //       });
@@ -145,17 +145,14 @@ interface CustomJwtPayload extends JwtPayload {
 //       status = "Early";
 //     }
 
-//     /**
-//      * ---------------------------------------------------------
-//      * Save record using UTC for consistency
-//      * ---------------------------------------------------------
-//      */
+//     // Create attendance record
 //     const newRecord = await prisma.attendance_records.create({
 //       data: {
 //         employee_id,
 //         shift_id,
 //         date: now.utc().toDate(),
 //         clock_in: now.utc().toDate(),
+//         clock_out: null, // explicitly set to null
 //         status,
 //         late_minutes,
 //       },
@@ -252,10 +249,28 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
     const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
     const now = moment().tz(userTimezone);
 
-    // For testing: allow multiple check-ins per day (removed the check)
-    // const dayStart = now.clone().startOf("day");
-    // const dayEnd = now.clone().endOf("day");
-    // const alreadyCheckedIn = ...
+    // Check if user has an attendance record for today
+    const dayStart = now.clone().startOf("day");
+    const dayEnd = now.clone().endOf("day");
+
+    const todayAttendance = await prisma.attendance_records.findFirst({
+      where: {
+        employee_id,
+        date: {
+          gte: dayStart.utc().toDate(),
+          lte: dayEnd.utc().toDate(),
+        },
+      },
+      orderBy: { clock_in: 'asc' },
+    });
+
+    // If already checked in (no checkout), prevent duplicate check-in
+    if (todayAttendance && todayAttendance.clock_out === null) {
+      res.status(400).json({ 
+        message: "You have an active check-in. Please check out before checking in again." 
+      });
+      return;
+    }
 
     // Shift info
     const { shift_id } = req.body;
@@ -276,22 +291,37 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 
     if (shiftEnd.isBefore(shiftStart)) shiftEnd.add(1, 'day'); // handle overnight
 
+    // If re-checking in (after previous checkout), validate against last shift's end time
+    if (todayAttendance && todayAttendance.clock_out !== null) {
+      // Get all shifts and find the one with the latest end time
+      const allShifts = await prisma.shifts.findMany();
+      
+      let latestShiftEndTime = moment.tz(now.format('YYYY-MM-DD') + ' 00:00:00', userTimezone);
+      
+      allShifts.forEach(s => {
+        const sEnd = moment.tz(now.format('YYYY-MM-DD') + ' ' + moment(s.end_time).format('HH:mm:ss'), userTimezone);
+        if (sEnd.isAfter(latestShiftEndTime)) {
+          latestShiftEndTime = sEnd;
+        }
+      });
+
+      // Block check-in after the last shift's end time
+      if (now.isAfter(latestShiftEndTime)) {
+        res.status(400).json({ 
+          message: `Cannot check in after last shift end time (${latestShiftEndTime.format('hh:mm A')}). All shifts have ended.` 
+        });
+        return;
+      }
+    }
+
     // Determine status based on check-in time
     const lateThreshold = shiftStart.clone().add(30, "minutes");
 
-    let status = "Present";
+    let status = "OnTime";
     let lateMessage = "";
     let late_minutes: number | null = null;
 
-    if (now.isBefore(shiftStart)) {
-      // Check-in before shift start
-      status = "Early";
-      const earlyMinutes = shiftStart.diff(now, "minutes");
-      const earlyHours = Math.floor(earlyMinutes / 60);
-      const earlyMins = earlyMinutes % 60;
-      lateMessage = `You are ${earlyHours > 0 ? earlyHours + " hr " : ""}${earlyMins} mins early`;
-    } else if (now.isAfter(lateThreshold)) {
-      // Check-in after grace period
+    if (now.isAfter(lateThreshold)) {
       status = "Late";
       const diffMinutes = now.diff(shiftStart, "minutes");
       const lateHours = Math.floor(diffMinutes / 60);
@@ -300,25 +330,20 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
       late_minutes = diffMinutes;
 
       // Check for approved late fix request
-      const dayStart = now.clone().startOf("day").toDate();
-      const dayEnd = now.clone().endOf("day").toDate();
-
       const approvedFix = await prisma.attendance_fix_requests.findFirst({
         where: {
           employee_id,
           status: "Approved",
           request_type: { in: ["check_in", "Both", "both"] } as any,
           requested_check_in: {
-            gte: dayStart,
-            lte: dayEnd,
+            gte: dayStart.toDate(),
+            lte: dayEnd.toDate(),
           },
         },
       });
 
       if (approvedFix?.requested_check_in) {
         const approvedTime = moment(approvedFix.requested_check_in).tz(userTimezone);
-
-        // If actual check-in is same-or-before approved expected time, mark as approved_late
         if (now.isSameOrBefore(approvedTime, "minute")) {
           status = "approved_late";
           late_minutes = Math.max(0, approvedTime.diff(shiftStart, "minutes"));
@@ -327,23 +352,38 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
       }
     }
 
-    // Create attendance record (fresh each time for testing)
-    const newRecord = await prisma.attendance_records.create({
-      data: {
-        employee_id,
-        shift_id,
-        date: now.utc().toDate(),
-        clock_in: now.utc().toDate(),
-        clock_out: null, // explicitly set to null
-        status,
-        late_minutes,
-      },
-      include: { shift: true },
-    });
+    // Create or update attendance record
+    let attendanceRecord;
+    if (todayAttendance) {
+      // Re-opening after checkout - keep first check-in time, clear checkout
+      attendanceRecord = await prisma.attendance_records.update({
+        where: { id: todayAttendance.id },
+        data: {
+          clock_out: null, // Clear checkout to reopen
+          // Keep the original clock_in time (first check-in of the day)
+          // Don't update status or late_minutes as they're based on first check-in
+        },
+        include: { shift: true },
+      });
+    } else {
+      // First check-in of the day
+      attendanceRecord = await prisma.attendance_records.create({
+        data: {
+          employee_id,
+          shift_id,
+          date: now.utc().toDate(),
+          clock_in: now.utc().toDate(),
+          clock_out: null,
+          status,
+          late_minutes,
+        },
+        include: { shift: true },
+      });
+    }
 
     const clockInTimeLocal = now.format("hh:mm A");
 
-    // Notification
+    // Notifications
     const baseNotification = {
       title: "Clock In",
       message: `${userMeta.full_name} clocked in at ${clockInTimeLocal} (${status})`,
@@ -353,53 +393,25 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 
     const promises: Promise<any>[] = [];
     if (roleName === "user" && sub_department_id) {
-      promises.push(
-        createScopedNotification({
-          scope: "TEAMLEADS_SUBDEPT",
-          data: baseNotification,
-          target_ids: { sub_department_id },
-          visibilityLevel: 3,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({ scope: "TEAMLEADS_SUBDEPT", data: baseNotification, target_ids: { sub_department_id }, visibilityLevel: 3, excludeUserId: user_id }));
     } else if (roleName === "teamlead" && department_id) {
-      promises.push(
-        createScopedNotification({
-          scope: "MANAGERS_DEPT",
-          data: baseNotification,
-          target_ids: { department_id },
-          visibilityLevel: 2,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({ scope: "MANAGERS_DEPT", data: baseNotification, target_ids: { department_id }, visibilityLevel: 2, excludeUserId: user_id }));
     } else if (roleName === "manager" && role_tag === "HR") {
-      promises.push(
-        createScopedNotification({
-          scope: "DIRECTORS_HR",
-          data: baseNotification,
-          visibilityLevel: 1,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({ scope: "DIRECTORS_HR", data: baseNotification, visibilityLevel: 1, excludeUserId: user_id }));
     } else if (roleName === "director") {
-      promises.push(
-        createScopedNotification({
-          scope: "ADMIN_ONLY",
-          data: baseNotification,
-          visibilityLevel: 0,
-          excludeUserId: user_id,
-        })
-      );
+      promises.push(createScopedNotification({ scope: "ADMIN_ONLY", data: baseNotification, visibilityLevel: 0, excludeUserId: user_id }));
     }
 
     await Promise.all(promises);
 
+    const isReCheckIn = todayAttendance !== null;
     res.status(200).json({
-      message: `Check-in successful (${status})`,
-      status,
-      lateMessage: lateMessage || null,
-      clockIn: now.utc().toISOString(),
-      fullData: newRecord,
+      message: isReCheckIn ? `Re-check-in successful` : `Check-in successful (${status})`,
+      status: todayAttendance?.status || status,
+      lateMessage: isReCheckIn ? null : (lateMessage || null),
+      clockIn: moment(attendanceRecord.clock_in).tz(userTimezone).format('hh:mm A'),
+      isReCheckIn,
+      fullData: attendanceRecord,
     });
 
   } catch (err) {
@@ -407,6 +419,118 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
     next(err);
   }
 };
+
+// GET /api/attendance/today
+
+export const checkOut = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const user = req.user as unknown as CustomJwtPayload;
+    const user_id = user.userId;
+
+    // Fetch employee info
+    const employee = await prisma.employees.findUnique({
+      where: { user_id },
+      include: { user: { include: { role: true, sub_role: true } } },
+    });
+
+    if (!employee) {
+      res.status(404).json({ message: "Employee not found." });
+      return;
+    }
+
+    const { id: employee_id, sub_department_id, department_id, user: userMeta } = employee;
+    const roleName = userMeta.role.name.toLowerCase();
+    const role_tag = userMeta.role_tag;
+
+    const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
+    const now = moment().tz(userTimezone);
+
+    // Find latest active check-in
+    const attendance = await prisma.attendance_records.findFirst({
+      where: {
+        employee_id,
+        clock_out: null,
+      },
+      orderBy: { clock_in: "desc" },
+    });
+
+    if (!attendance) {
+      res.status(400).json({ message: "No active check-in found. Please check in first." });
+      return;
+    }
+
+    // Get day boundaries for reference
+    const dayStart = now.clone().startOf("day");
+    const dayEnd = now.clone().endOf("day");
+    
+    // First check-in is already stored in attendance.clock_in
+    const firstCheckIn = attendance.clock_in;
+
+    // Calculate break duration for current session
+    const breaks = await prisma.breaks.findMany({ where: { attendance_record_id: attendance.id } });
+    let totalBreakMs = 0;
+    for (const brk of breaks) {
+      if (brk.break_start && brk.break_end) {
+        totalBreakMs += new Date(brk.break_end).getTime() - new Date(brk.break_start).getTime();
+      }
+    }
+
+    // Calculate net working minutes for this session
+    const sessionWorkingMinutes = Math.floor((now.toDate().getTime() - new Date(attendance.clock_in).getTime() - totalBreakMs) / (1000 * 60));
+
+    // Calculate total working minutes from first check-in to current check-out (including gaps)
+    const totalWorkingMinutes = Math.floor((now.toDate().getTime() - new Date(firstCheckIn).getTime()) / (1000 * 60));
+
+    const updatedRecord = await prisma.attendance_records.update({
+      where: { id: attendance.id },
+      data: { clock_out: now.toDate(), net_working_minutes: sessionWorkingMinutes },
+    });
+
+    const clockOutTime = now.format("hh:mm A");
+    const totalHours = Math.floor(totalWorkingMinutes / 60);
+    const totalMins = totalWorkingMinutes % 60;
+
+    const baseNotification = {
+      title: "Clock Out",
+      message: `${userMeta.full_name} clocked out at ${clockOutTime}. Total hours today: ${totalHours}h ${totalMins}m`,
+      type: "ClockOut" as const,
+      employee_id,
+    };
+
+    const promises = [];
+    if (roleName === "user" && sub_department_id) {
+      promises.push(createScopedNotification({ scope: "TEAMLEADS_SUBDEPT", data: baseNotification, target_ids: { sub_department_id }, visibilityLevel: 3, excludeUserId: user_id }));
+    } else if (roleName === "teamlead" && department_id) {
+      promises.push(createScopedNotification({ scope: "MANAGERS_DEPT", data: baseNotification, target_ids: { department_id }, visibilityLevel: 2, excludeUserId: user_id }));
+    } else if (roleName === "manager" && role_tag === "HR") {
+      promises.push(createScopedNotification({ scope: "DIRECTORS_HR", data: baseNotification, visibilityLevel: 1, excludeUserId: user_id }));
+    } else if (roleName === "director") {
+      promises.push(createScopedNotification({ scope: "ADMIN_ONLY", data: baseNotification, visibilityLevel: 0, excludeUserId: user_id }));
+    }
+
+    await Promise.all(promises);
+
+    res.status(200).json({ 
+      message: "Check-out successful", 
+      attendance: updatedRecord,
+      sessionWorkingMinutes,
+      totalWorkingMinutes,
+      totalHoursToday: `${totalHours}h ${totalMins}m`,
+      firstCheckIn: moment(firstCheckIn).tz(userTimezone).format('hh:mm A'),
+      lastCheckOut: clockOutTime,
+    });
+
+  } catch (err) {
+    console.error("Check-out error:", err);
+    next(err);
+  }
+};
+
+// GET /api/attendance/today
 
 // export const checkOut = async (
 //   req: Request,
@@ -428,44 +552,39 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 //       return;
 //     }
 
-//     const { id: employee_id, sub_department_id, department_id, user: userMeta } = employee;
+//     const {
+//       id: employee_id,
+//       sub_department_id,
+//       department_id,
+//       user: userMeta
+//     } = employee;
+
 //     const roleName = userMeta.role.name.toLowerCase();
 //     const role_tag = userMeta.role_tag;
 
-//     // Get latest attendance record without clock_out (most recent pending check-out)
+//     // Get latest attendance (doesn’t matter if it's active or closed)
 //     let attendance = await prisma.attendance_records.findFirst({
-//       where: {
-//         employee_id,
-//         clock_out: null,
-//       },
+//       where: { employee_id },
 //       orderBy: { clock_in: "desc" },
 //     });
 
-//     // Fallback: if no pending check-out, get the most recent record
-//     if (!attendance) {
-//       attendance = await prisma.attendance_records.findFirst({
-//         where: { employee_id },
-//         orderBy: { clock_in: "desc" },
-//       });
-//     }
-
 //     const now = new Date();
 
-//     // If still no record, create a mock one (shouldn't happen in normal flow)
+//     // ➤ If NO attendance exists → create a mock record
 //     if (!attendance) {
 //       attendance = await prisma.attendance_records.create({
 //         data: {
-//           employee_id,
-//           shift_id: "00000000-0000-0000-0000-000000000000",
+//         employee_id,
+//           shift_id: "00000000-0000-0000-0000-000000000000", // test mode
 //           date: now,
 //           clock_in: now,
 //           status: "Present",
 //           net_working_minutes: 0,
-//         },
-//       });
+//       },
+//     });
 //     }
 
-//     // Calculate break time
+//     // ➤ Calculate break time (same as old code)
 //     const breaks = await prisma.breaks.findMany({
 //       where: { attendance_record_id: attendance.id },
 //     });
@@ -480,11 +599,13 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 //     }
 
 //     const net_working_minutes = Math.floor(
-//       (now.getTime() - new Date(attendance.clock_in).getTime() - totalBreakMs) /
+//       (now.getTime() -
+//         new Date(attendance.clock_in).getTime() -
+//         totalBreakMs) /
 //       (1000 * 60)
 //     );
 
-//     // Update checkout
+//     // ➤ Update checkout
 //     const updatedRecord = await prisma.attendance_records.update({
 //       where: { id: attendance.id },
 //       data: {
@@ -493,8 +614,10 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 //       },
 //     });
 
-//     // Notification logic
-//     const clockOutTime = moment(now).tz("Asia/Karachi").format("hh:mm A");
+//     // ➤ Notification logic preserved (unchanged)
+//     const clockOutTime = moment(now)
+//       .tz("Asia/Karachi")
+//       .format("hh:mm A");
 
 //     const baseNotification = {
 //       title: "Clock Out",
@@ -548,7 +671,7 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 //     await Promise.all(notifications);
 
 //     res.status(200).json({
-//       message: "Check-out successful",
+//       message: "Check-out successful (TEST MODE)",
 //       attendance: updatedRecord,
 //     });
 
@@ -558,222 +681,6 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 //   }
 // };
 
-// export const checkTodayAttendance = async (req: Request, res: Response) => {
-//   try {
-//     const user_id = req.user?.userId;
-
-//     if (!user_id) {
-//       return res.status(401).json({ message: "Unauthorized: userId not found in token." });
-//     }
-
-//     // Step 1: Get employeeId using userId
-//     const employee = await prisma.employees.findUnique({
-//       where: { user_id },
-//     });
-
-//     if (!employee) {
-//       return res.status(404).json({ message: "Employee not found." });
-//     }
-
-//     // Step 2: Generate date boundaries (00:00 - 23:59)
-//     const startOfDay = new Date();
-//     startOfDay.setHours(0, 0, 0, 0);
-
-//     const endOfDay = new Date();
-//     endOfDay.setHours(23, 59, 59, 999);
-
-//     // Step 3: Fetch the latest attendance record for today
-//     const attendance = await prisma.attendance_records.findFirst({
-//       where: {
-//         employee_id: employee.id,
-//         clock_in: { gte: startOfDay, lte: endOfDay },
-//       },
-//       orderBy: { clock_in: "desc" }, // Get the most recent one
-//       include: {
-//         breaks: {
-//           orderBy: { break_start: "asc" },
-//           include: { break_type: true },
-//         },
-//       },
-//     });
-
-//     if (!attendance) {
-//       return res.status(200).json({
-//         checkedIn: false,
-//         checkedOut: false,
-//         attendance: null,
-//         attendanceStatus: null,
-//         breaks: [],
-//         activeBreak: null,
-//       });
-//     }
-
-//     // Return checked-in status; checkout status based on clock_out
-//     return res.status(200).json({
-//       checkedIn: true,
-//       checkedOut: attendance.clock_out !== null,
-//       checkInTime: attendance.clock_in,
-//       checkOutTime: attendance.clock_out,
-//       attendanceStatus: attendance.status,
-//       attendance,
-//     });
-//   } catch (error) {
-//     console.error("Error checking today's attendance:", error);
-//     return res.status(500).json({ message: "Internal server error" });
-//   }
-// };
-
-// GET /api/attendance/today
-
-export const checkOut = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const user = req.user as unknown as CustomJwtPayload;
-    const user_id = user.userId;
-
-    // Fetch employee info
-    const employee = await prisma.employees.findUnique({
-      where: { user_id },
-      include: { user: { include: { role: true, sub_role: true } } },
-    });
-
-    if (!employee) {
-      res.status(404).json({ message: "Employee not found." });
-      return;
-    }
-
-    const {
-      id: employee_id,
-      sub_department_id,
-      department_id,
-      user: userMeta
-    } = employee;
-
-    const roleName = userMeta.role.name.toLowerCase();
-    const role_tag = userMeta.role_tag;
-
-    // Get latest attendance (doesn’t matter if it's active or closed)
-    let attendance = await prisma.attendance_records.findFirst({
-      where: { employee_id },
-      orderBy: { clock_in: "desc" },
-    });
-
-    const now = new Date();
-
-    // ➤ If NO attendance exists → create a mock record
-    if (!attendance) {
-      attendance = await prisma.attendance_records.create({
-        data: {
-        employee_id,
-          shift_id: "00000000-0000-0000-0000-000000000000", // test mode
-          date: now,
-          clock_in: now,
-          status: "Present",
-          net_working_minutes: 0,
-      },
-    });
-    }
-
-    // ➤ Calculate break time (same as old code)
-    const breaks = await prisma.breaks.findMany({
-      where: { attendance_record_id: attendance.id },
-    });
-
-    let totalBreakMs = 0;
-    for (const brk of breaks) {
-      if (brk.break_start && brk.break_end) {
-        totalBreakMs +=
-          new Date(brk.break_end).getTime() -
-          new Date(brk.break_start).getTime();
-      }
-    }
-
-    const net_working_minutes = Math.floor(
-      (now.getTime() -
-        new Date(attendance.clock_in).getTime() -
-        totalBreakMs) /
-      (1000 * 60)
-    );
-
-    // ➤ Update checkout
-    const updatedRecord = await prisma.attendance_records.update({
-      where: { id: attendance.id },
-      data: {
-        clock_out: now,
-        net_working_minutes,
-      },
-    });
-
-    // ➤ Notification logic preserved (unchanged)
-    const clockOutTime = moment(now)
-      .tz("Asia/Karachi")
-      .format("hh:mm A");
-
-    const baseNotification = {
-      title: "Clock Out",
-      message: `${userMeta.full_name} clocked out at ${clockOutTime}`,
-      type: "ClockOut" as const,
-      employee_id,
-    };
-
-    const notifications = [];
-
-    if (roleName === "user" && sub_department_id) {
-      notifications.push(
-        createScopedNotification({
-          scope: "TEAMLEADS_SUBDEPT",
-          data: baseNotification,
-          target_ids: { sub_department_id },
-          visibilityLevel: 3,
-          excludeUserId: user_id,
-        })
-      );
-    } else if (roleName === "teamlead" && department_id) {
-      notifications.push(
-        createScopedNotification({
-          scope: "MANAGERS_DEPT",
-          data: baseNotification,
-          target_ids: { department_id },
-          visibilityLevel: 2,
-          excludeUserId: user_id,
-        })
-      );
-    } else if (roleName === "manager" && role_tag === "HR") {
-      notifications.push(
-        createScopedNotification({
-          scope: "DIRECTORS_HR",
-          data: baseNotification,
-          visibilityLevel: 1,
-          excludeUserId: user_id,
-        })
-      );
-    } else if (roleName === "director") {
-      notifications.push(
-        createScopedNotification({
-          scope: "ADMIN_ONLY",
-          data: baseNotification,
-          visibilityLevel: 0,
-          excludeUserId: user_id,
-        })
-      );
-    }
-
-    await Promise.all(notifications);
-
-    res.status(200).json({
-      message: "Check-out successful (TEST MODE)",
-      attendance: updatedRecord,
-    });
-
-  } catch (err) {
-    console.error("Check-out error:", err);
-    next(err);
-  }
-};
-
 export const checkTodayAttendance = async (req: Request, res: Response) => {
   try {
     const user_id = req.user?.userId;
@@ -782,7 +689,7 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Unauthorized: userId not found in token." });
     }
 
-    // Step 1: Get employeeId using userId
+    // Get employeeId using userId
     const employee = await prisma.employees.findUnique({
       where: { user_id },
     });
@@ -791,20 +698,19 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Employee not found." });
     }
 
-    // Step 2: Generate date boundaries (00:00 - 23:59)
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
+    const now = moment().tz(userTimezone);
 
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    // Generate date boundaries (00:00 - 23:59)
+    const startOfDay = now.clone().startOf('day').toDate();
+    const endOfDay = now.clone().endOf('day').toDate();
 
-    // Step 3: Fetch the latest attendance record for today
+    // Fetch attendance record for today (should be only one per day now)
     const attendance = await prisma.attendance_records.findFirst({
       where: {
         employee_id: employee.id,
         clock_in: { gte: startOfDay, lte: endOfDay },
       },
-      orderBy: { clock_in: "desc" }, // Get the most recent one
       include: {
         breaks: {
           orderBy: { break_start: "asc" },
@@ -824,14 +730,35 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
       });
     }
 
-    // Return checked-in status; checkout status based on clock_out
+    // Check if currently checked in (attendance has no clock_out)
+    const isCurrentlyCheckedIn = attendance.clock_out === null;
+
+    // Calculate total working time from first check-in to now (or last check-out)
+    const firstCheckIn = attendance.clock_in;
+    const lastCheckOut = isCurrentlyCheckedIn ? now.toDate() : attendance.clock_out;
+
+    let totalWorkingMinutes = 0;
+    if (lastCheckOut) {
+      totalWorkingMinutes = Math.floor(
+        (new Date(lastCheckOut).getTime() - new Date(firstCheckIn).getTime()) /
+        (1000 * 60)
+      );
+    }
+
+    const totalHours = Math.floor(totalWorkingMinutes / 60);
+    const totalMins = totalWorkingMinutes % 60;
+
+    // Return checked-in status
     return res.status(200).json({
-      checkedIn: true,
-      checkedOut: attendance.clock_out !== null,
+      checkedIn: isCurrentlyCheckedIn,
+      checkedOut: !isCurrentlyCheckedIn,
       checkInTime: attendance.clock_in,
       checkOutTime: attendance.clock_out,
       attendanceStatus: attendance.status,
-      attendance,
+      attendance: attendance,
+      firstCheckInToday: moment(firstCheckIn).tz(userTimezone).format('hh:mm A'),
+      lastCheckOutToday: lastCheckOut ? moment(lastCheckOut).tz(userTimezone).format('hh:mm A') : null,
+      totalWorkingTime: `${totalHours}h ${totalMins}m`,
     });
   } catch (error) {
     console.error("Error checking today's attendance:", error);
@@ -839,7 +766,7 @@ export const checkTodayAttendance = async (req: Request, res: Response) => {
   }
 };
 
-// GET /api/attendance/employee/all
+// GET /api/attendance/employee/all - Current month working days only
 export const getAllAttendanceRecords = async (req: Request, res: Response) => {
   try {
     const user_id = req.user?.userId;
@@ -850,7 +777,6 @@ export const getAllAttendanceRecords = async (req: Request, res: Response) => {
         .json({ message: "Unauthorized: userId not found in token." });
     }
 
-    // Step 1: Get employeeId using userId
     const employee = await prisma.employees.findUnique({
       where: { user_id },
     });
@@ -859,20 +785,148 @@ export const getAllAttendanceRecords = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Employee not found." });
     }
 
-    // Step 2: Get all attendance records for this employee
+    const { filter = "last_5_days" } = req.query; // default to last 5 working days
+
+    const userTimezone = req.headers["x-timezone"]?.toString() || "Asia/Karachi";
+    const now = moment().tz(userTimezone);
+    const todayDateOnly = now.clone().startOf('day');
+
+    // Get current month boundaries (from 1st to today, not future dates) in user timezone
+    const startOfMonth = now.clone().startOf('month').startOf('day');
+    const endOfMonth = now.clone().endOf('month').endOf('day');
+
+    // For database query, convert to UTC
+    // Query from start of month to end of month (we'll filter to today in the loop)
     const attendanceRecords = await prisma.attendance_records.findMany({
       where: {
         employee_id: employee.id,
+        date: {
+          gte: startOfMonth.clone().utc().toDate(),
+          lte: endOfMonth.clone().utc().toDate(),
+        },
       },
       orderBy: {
-        clock_in: "desc", // Optional: latest first
+        date: "asc",
       },
+    })
+
+    // Create a map of date -> attendance record using the date field
+    const attendanceMap = new Map<string, any>();
+    attendanceRecords.forEach((record) => {
+      // Use the date field instead of clock_in for mapping
+      const dateKey = moment(record.date).tz(userTimezone).format('YYYY-MM-DD');
+      attendanceMap.set(dateKey, record);
     });
+
+    // Generate all working days (Mon-Fri) from start of month to today (inclusive)
+    const allWorkingDays: any[] = [];
+    const currentDate = startOfMonth.clone(); // Start from Dec 1 in user timezone
+
+    // Loop through all days up to and including today
+    while (currentDate.isSameOrBefore(todayDateOnly, 'day')) {
+      const dayOfWeek = currentDate.day(); // 0 = Sunday, 6 = Saturday
+      const dateKey = currentDate.format('YYYY-MM-DD');
+      const isToday = currentDate.isSame(todayDateOnly, 'day');
+            
+      // Include Monday (1) to Friday (5) OR today (regardless of day)
+      if ((dayOfWeek >= 1 && dayOfWeek <= 5) || isToday) {
+        const attendance = attendanceMap.get(dateKey);
+
+        let status = "Absent";
+        let clockIn = null;
+        let clockOut = null;
+        let workingHours = 0;
+        let lateMinutes = null;
+
+        if (attendance) {
+          status = attendance.status || "Absent";
+          clockIn = attendance.clock_in;
+          clockOut = attendance.clock_out;
+          lateMinutes = attendance.late_minutes;
+          
+          // Calculate working hours if checked out
+          if (clockOut && clockIn) {
+            workingHours = Number(
+              ((new Date(clockOut).getTime() - new Date(clockIn).getTime()) / (1000 * 60 * 60)).toFixed(2)
+            );
+          }
+        }
+
+        allWorkingDays.push({
+          date: dateKey,
+          day: currentDate.format('dddd'),
+          status,
+          clock_in: clockIn ? new Date(clockIn).toISOString() : null,
+          clock_out: clockOut ? new Date(clockOut).toISOString() : null,
+          working_hours: workingHours,
+          late_minutes: lateMinutes,
+          net_working_minutes: attendance?.net_working_minutes || 0,
+        });
+      }
+
+      currentDate.add(1, 'day');
+    }
+
+    // Count statuses from ALL working days (month-wise)
+    const statusCounts = {
+      on_time: allWorkingDays.filter(d => d.status === 'on_time').length,
+      late: allWorkingDays.filter(d => d.status === 'Late').length,
+      approved_late: allWorkingDays.filter(d => d.status === 'approved_late').length,
+      absent: allWorkingDays.filter(d => d.status === 'Absent').length,
+    };
+
+    // Apply filter to records
+    let filteredRecords = allWorkingDays;
+    
+    switch (filter) {
+      case "last_5_days":
+        filteredRecords = allWorkingDays.slice(-5);
+        break;
+      
+      case "last_week":
+        const lastWeekStart = now.clone().subtract(7, 'days').startOf('day');
+        filteredRecords = allWorkingDays.filter(d => 
+          moment(d.date).isSameOrAfter(lastWeekStart)
+        );
+        break;
+      
+      case "last_2_weeks":
+        const last2WeeksStart = now.clone().subtract(14, 'days').startOf('day');
+        filteredRecords = allWorkingDays.filter(d => 
+          moment(d.date).isSameOrAfter(last2WeeksStart)
+        );
+        break;
+      
+      case "current_month":
+        // Already showing current month, so use all
+        filteredRecords = allWorkingDays;
+        break;
+      
+      case "custom":
+        // Support custom date range via query params
+        const { start_date, end_date } = req.query;
+        if (start_date && end_date) {
+          const customStart = moment(start_date as string).startOf('day');
+          const customEnd = moment(end_date as string).endOf('day');
+          filteredRecords = allWorkingDays.filter(d => {
+            const recordDate = moment(d.date);
+            return recordDate.isSameOrAfter(customStart) && recordDate.isSameOrBefore(customEnd);
+          });
+        }
+        break;
+      
+      default:
+        // Default to last 5 working days
+        filteredRecords = allWorkingDays.slice(-5);
+    }
 
     return res.status(200).json({
       employee_id: employee.id,
-      totalRecords: attendanceRecords.length,
-      records: attendanceRecords,
+      month: now.format('MMMM YYYY'),
+      totalWorkingDays: allWorkingDays.length, // Month-wise total
+      statusCounts, // Month-wise status counts
+      filter: filter || "last_5_days",
+      records: filteredRecords, // Filtered records based on filter
     });
   } catch (error) {
     console.error("Error fetching attendance records:", error);
@@ -1764,10 +1818,10 @@ export const getEmployeesAttendanceSummaryFiltered = async (
     const limitNumber = parseInt(limit as string);
 
     // ✅ Validate all three required fields
-    if (!filterType || !departmentId || !userId) {
+    if (!filterType || !userId) {
       return res.status(400).json({
         success: false,
-        message: "filterType, departmentId, and userId are required.",
+        message: "filterType and userId are required.",
       });
     }
 
@@ -1787,12 +1841,52 @@ export const getEmployeesAttendanceSummaryFiltered = async (
       });
     }
 
-    // ✅ Validate department matches
-    if (employee.department_id !== departmentId && departmentId !== "All") {
-      return res.status(400).json({
-        success: false,
-        message: "Employee does not belong to the specified department.",
-      });
+    // ✅ EDGE CASE VALIDATION
+    // Determine which filters are selected
+    const hasDepartment = departmentId && departmentId !== "All" && departmentId !== "";
+    const hasEmployee = userId && userId !== "";
+    const isDepartmentOnly = hasDepartment && !hasEmployee;
+    const isDepartmentAndEmployee = hasDepartment && hasEmployee;
+    const isEmployeeOnly = !hasDepartment && hasEmployee;
+
+    // EDGE CASE 1: Department only selected
+    // Only yesterday, today, and specific date are allowed
+    if (isDepartmentOnly) {
+      const allowedFilters = ["today", "yesterday", "specific_date"];
+      if (!allowedFilters.includes((filterType as string).toLowerCase())) {
+        return res.status(400).json({
+          success: false,
+          message: "When only department is selected, only 'today', 'yesterday', or 'specific_date' filters are allowed.",
+          allowedFilters,
+        });
+      }
+
+      // If specific_date is selected, require startDate
+      if ((filterType as string).toLowerCase() === "specific_date" && !startDate) {
+        return res.status(400).json({
+          success: false,
+          message: "specific_date filter requires startDate parameter.",
+        });
+      }
+    }
+
+    // EDGE CASE 2: Department AND Employee selected
+    // Allow all date filters including custom and predefined options
+    if (isDepartmentAndEmployee) {
+      // Validate department matches employee
+      if (employee.department_id !== departmentId && departmentId !== "All") {
+        return res.status(400).json({
+          success: false,
+          message: "Employee does not belong to the specified department.",
+        });
+      }
+      // All filters are allowed in this case
+    }
+
+    // EDGE CASE 3: Only Employee selected (no department)
+    // Allow all date filters including custom and predefined options
+    if (isEmployeeOnly) {
+      // All filters are allowed in this case
     }
 
     // -------------------------
@@ -1801,7 +1895,9 @@ export const getEmployeesAttendanceSummaryFiltered = async (
     let rangeStart: Date, rangeEnd: Date;
     const today = moment().startOf("day");
 
-    switch ((filterType || "").toString().toLowerCase()) {
+    const filterTypeStr = (filterType || "today").toString().toLowerCase();
+
+    switch (filterTypeStr) {
       case "yesterday":
         rangeStart = today.clone().subtract(1, "day").toDate();
         rangeEnd = today.clone().subtract(1, "day").endOf("day").toDate();
@@ -1838,6 +1934,18 @@ export const getEmployeesAttendanceSummaryFiltered = async (
         const endStr = Array.isArray(endDate) ? endDate[0] : (endDate as string);
         rangeStart = moment(startStr).startOf("day").toDate();
         rangeEnd = moment(endStr).endOf("day").toDate();
+        break;
+
+      case "specific_date":
+        if (!startDate) {
+          return res.status(400).json({
+            success: false,
+            message: "specific_date filter requires startDate parameter.",
+          });
+        }
+        const dateStr = Array.isArray(startDate) ? startDate[0] : (startDate as string);
+        rangeStart = moment(dateStr).startOf("day").toDate();
+        rangeEnd = moment(dateStr).endOf("day").toDate();
         break;
 
       case "today":

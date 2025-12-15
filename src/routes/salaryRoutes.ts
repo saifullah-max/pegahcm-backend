@@ -12,7 +12,7 @@ router.use(authenticateToken as any)
 router.get('/my', checkPermission("Salary", "view"), getMySalary as any);
 router.get('/download/:employeeId', checkPermission("Salary", "view"), getSalarySlip as any)
 
-router.use(canAccessSalary as any)
+// router.use(canAccessSalary as any)
 
 // Admin & finance managers
 router.post('/', checkPermission("Salary", "create"), createSalary as any);

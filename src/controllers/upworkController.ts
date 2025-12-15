@@ -65,10 +65,20 @@ export const update_upwork_id = async (req: Request, res: Response) => {
 
 export const get_all_upwork_ids = async (req: Request, res: Response) => {
     try {
-        const upwork_ids = await prisma.upwork_ids.findMany({})
-        return res.status(200).json({ message: true, upwork_ids })
-    } catch (error) {
+        const current_user_id = req.user?.userId;
+        const permissionScope = (req as any).permissionScope || "all"; // 'own' | 'all'
 
+        let where: any = {};
+        if (permissionScope === "own") {
+            where = {
+                OR: [{ created_by: current_user_id }],
+            };
+        }
+
+        const upwork_ids = await prisma.upwork_ids.findMany({ where });
+        return res.status(200).json({ message: true, upwork_ids });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: "Internal server error" });
     }
 }
 

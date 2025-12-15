@@ -381,6 +381,9 @@ export const listEmployees = async (req: Request, res: Response) => {
       work_location,
     } = req.query;
 
+    const current_user_id = req.user?.userId;
+    const permissionScope = (req as any).permissionScope || "all"; // 'own' | 'all'
+
     const pageNumber = parseInt(page as string);
     const limitNumber = parseInt(limit as string);
     const skip = (pageNumber - 1) * limitNumber;
@@ -404,6 +407,12 @@ export const listEmployees = async (req: Request, res: Response) => {
     if (department) where.department_id = department;
     if (status) where.status = status;
     if (work_location) where.work_location = work_location;
+
+    // Apply permission scope filtering
+    if (permissionScope === "own") {
+      // Only show employee's own record
+      where.user_id = current_user_id;
+    }
 
     const total = await prisma.employees.count({ where });
 

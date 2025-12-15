@@ -58,7 +58,18 @@ export const create_target = async (req: Request, res: Response) => {
 // Get all targets
 export const get_all_targets = async (req: Request, res: Response) => {
     try {
+        const current_user_id = req.user?.userId;
+        const permissionScope = (req as any).permissionScope || "all"; // 'own' | 'all'
+
+        let where: any = {};
+        if (permissionScope === "own") {
+            where = {
+                OR: [{ created_by: current_user_id }],
+            };
+        }
+
         const targets = await prisma.target.findMany({
+            where,
             include: { employee: { include: { department: true } } },
         });
         res.status(200).json(targets);

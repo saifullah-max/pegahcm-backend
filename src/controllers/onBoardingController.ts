@@ -85,8 +85,18 @@ export const getAllHREmployees = async (req: Request, res: Response) => {
 
 export const getAllOnboardings = async (req: Request, res: Response) => {
     try {
-        // ✅ FIXED: getAllOnboardings
+        const current_user_id = req.user?.userId;
+        const permissionScope = (req as any).permissionScope || "all"; // 'own' | 'all'
+
+        let where: any = {};
+        if (permissionScope === "own") {
+            where = {
+                OR: [{ created_by: current_user_id }],
+            };
+        }
+
         const onboardings = await prisma.onboarding_processes.findMany({
+            where,
             include: {
                 employee: {
                     include: {
