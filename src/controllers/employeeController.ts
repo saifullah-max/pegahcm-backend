@@ -384,9 +384,9 @@ export const listEmployees = async (req: Request, res: Response) => {
     const current_user_id = req.user?.userId;
     const permissionScope = (req as any).permissionScope || "all"; // 'own' | 'all'
 
-    const pageNumber = parseInt(page as string);
-    const limitNumber = parseInt(limit as string);
-    const skip = (pageNumber - 1) * limitNumber;
+    const pageNumber = Math.max(1, parseInt(page as string) || 1);
+    const limitNumber = Math.max(1, parseInt(limit as string) || 10);
+    const skip = Math.max(0, (pageNumber - 1) * limitNumber);
 
     // Build where clause
     const where: any = {

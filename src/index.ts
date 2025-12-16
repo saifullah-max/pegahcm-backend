@@ -30,6 +30,7 @@ import upworkRoutes from './routes/upworkRoutes'
 import ticketRoutes from './routes/ticketRoutes'
 import { runAutoCheckout, startCleanupJobs, autoCheckoutCron } from './utils/CronJob';
 import ticketCommentsRoutes from './routes/ticketCommentsRoutes'
+import salesDashboardRoutes from './routes/salesDashboardRoutes'
 import { initSocket } from './utils/socket';
 
 
@@ -78,6 +79,7 @@ app.use('/api/designations', designationRoutes)
 app.use('/api/upwork', upworkRoutes)
 app.use('/api/tickets', ticketRoutes)
 app.use('/api/tickets/comments', ticketCommentsRoutes)
+app.use('/api/sales/dashboard', salesDashboardRoutes)
 // Basic route
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to PegaHCM API' });
