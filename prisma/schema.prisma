@@ -290,8 +290,8 @@ model attendance_records {
 model shifts {
   id                 String               @id @default(uuid())
   name               String               @unique
-  start_time         DateTime
-  end_time           DateTime
+  start_time         DateTime             @db.Time
+  end_time           DateTime             @db.Time
   description        String?
   attendance_records attendance_records[]
   employees          employees[]
