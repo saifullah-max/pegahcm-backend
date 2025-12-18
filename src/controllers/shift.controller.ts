@@ -30,8 +30,8 @@ export const createShift = async (req: Request, res: Response) => {
     const shift = await prisma.shifts.create({
       data: {
         name,
-        start_time: new Date(start_time),
-        end_time: new Date(end_time),
+        start_time: convertTimeToDate(start_time),
+        end_time: convertTimeToDate(end_time),
         description
       }
     });
@@ -84,32 +84,25 @@ export const getShiftById = async (req: Request, res: Response) => {
   }
 };
 
-function convertTimeToDate(date_time_str: string): Date {
-  if (!date_time_str) return new Date();
+// Convert time string to Date object (for MySQL TIME type)
+function convertTimeToDate(time_str: string): Date {
+  if (!time_str) return new Date();
 
-  // CASE 1 → Already ISO string: 2025-12-03T11:40:00.000Z
-  if (date_time_str.includes("T")) {
-    const d = new Date(date_time_str);
-    if (!isNaN(d.getTime())) return d;
-  }
+  // Parse time format: "10:00 AM", "10:00 PM", or "10:00" (24-hour)
+  const parts = time_str.trim().split(" ");
+  const timePart = parts[0];
+  const modifier = parts[1]?.toUpperCase(); // AM or PM
 
-  // CASE 2 → Format: "2025-09-03 10:00 PM"
-  const parts = date_time_str.split(" ");
-  if (parts.length < 3) {
-    throw new Error("Invalid datetime format.");
-  }
-
-  const [datePart, timePart, modifier] = parts;
-  const [year, month, day] = datePart.split("-").map(Number);
   const [hoursStr, minutesStr] = timePart.split(":");
-
   let hours = parseInt(hoursStr, 10);
-  const minutes = parseInt(minutesStr, 10);
+  const minutes = parseInt(minutesStr || "0", 10);
 
+  // Handle 12-hour format with AM/PM
   if (modifier === "PM" && hours !== 12) hours += 12;
   if (modifier === "AM" && hours === 12) hours = 0;
 
-  return new Date(year, month - 1, day, hours, minutes, 0);
+  // Use epoch date (1970-01-01) - only time portion matters for MySQL TIME
+  return new Date(1970, 0, 1, hours, minutes, 0);
 }
 
 export const updateShift = async (req: Request, res: Response) => {
