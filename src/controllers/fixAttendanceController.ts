@@ -297,7 +297,6 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
             where: { id: reviewerId },
             include: {
                 role: true,
-                sub_role: true,
             },
         });
 
@@ -335,45 +334,45 @@ export const getAllFixRequests = async (req: Request, res: Response) => {
         }
 
         // Sub-role-based access (get requests of users with lower level)
-        if (reviewer.sub_role?.level !== undefined) {
-            const requests = await prisma.attendance_fix_requests.findMany({
-                take: limitNumber,
-                skip: lastCursorId ? 1 : 0,
-                cursor: localStorage ? { id: lastCursorId as string } : undefined,
-                where: {
-                    employee: {
-                        user: {
-                            sub_role: {
-                                level: {
-                                    gt: reviewer.sub_role.level, // Only lower level
-                                },
-                            },
-                        },
-                    },
-                },
-                include: {
-                    employee: {
-                        include: {
-                            user: true,
-                        },
-                    },
-                    reviewed_by: true,
-                },
-                orderBy: {
-                    requested_at: 'desc',
-                },
-            });
-            const total = await prisma.attendance_fix_requests.count({})
+        // if (reviewer.sub_role?.level !== undefined) {
+        //     const requests = await prisma.attendance_fix_requests.findMany({
+        //         take: limitNumber,
+        //         skip: lastCursorId ? 1 : 0,
+        //         cursor: localStorage ? { id: lastCursorId as string } : undefined,
+        //         where: {
+        //             employee: {
+        //                 user: {
+        //                     sub_role: {
+        //                         level: {
+        //                             gt: reviewer.sub_role.level, // Only lower level
+        //                         },
+        //                     },
+        //                 },
+        //             },
+        //         },
+        //         include: {
+        //             employee: {
+        //                 include: {
+        //                     user: true,
+        //                 },
+        //             },
+        //             reviewed_by: true,
+        //         },
+        //         orderBy: {
+        //             requested_at: 'desc',
+        //         },
+        //     });
+        //     const total = await prisma.attendance_fix_requests.count({})
 
-            const pagination = {
-                limit,
-                total,
-                totalPages: Math.ceil(total / limitNumber)
-            }
+        //     const pagination = {
+        //         limit,
+        //         total,
+        //         totalPages: Math.ceil(total / limitNumber)
+        //     }
 
 
-            return res.status(200).json({ success: true, data: requests, pagination });
-        }
+        //     return res.status(200).json({ success: true, data: requests, pagination });
+        // }
 
         return res.status(403).json({ message: "You are not authorized to view requests" });
 

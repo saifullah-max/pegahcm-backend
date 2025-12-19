@@ -6,7 +6,7 @@ import { PermissionSource } from '@prisma/client';
 // Create a new role
 export const createRole = async (req: Request, res: Response) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, level } = req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -18,7 +18,8 @@ export const createRole = async (req: Request, res: Response) => {
     const role = await prisma.roles.create({
       data: {
         name,
-        description
+        description,
+        level: typeof level === 'number' ? level : null
       }
     });
 
@@ -84,7 +85,7 @@ export const getRoleById = async (req: Request, res: Response) => {
 export const updateRole = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { name, description, level } = req.body;
 
     if (!name) {
       return res.status(400).json({
@@ -97,7 +98,8 @@ export const updateRole = async (req: Request, res: Response) => {
       where: { id },
       data: {
         name,
-        description
+        description,
+        ...(level !== undefined ? { level } : {})
       }
     });
 

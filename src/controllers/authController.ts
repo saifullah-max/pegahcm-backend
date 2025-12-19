@@ -16,7 +16,7 @@ export const register = async (req: Request, res: Response) => {
       email,
       fullName,
       roleName = 'user', // <- Use roleName instead of role
-      subRoleId
+      // subRoleId removed
     } = req.body;
 
     if (!password || !email || !fullName || !roleName) {
@@ -53,12 +53,10 @@ export const register = async (req: Request, res: Response) => {
         email,
         full_name: fullName,
         role_id: role.id, // Use roleId from fetched role
-        sub_role_id: subRoleId || null,
         status: 'active',
         date_joined: new Date()
       },
       include: {
-        sub_role: true,
         role: true // 👈 include role.name for JWT and response
       }
     });
@@ -66,8 +64,7 @@ export const register = async (req: Request, res: Response) => {
     const token = jwt.sign(
       {
         userId: user.id,
-        role: user.role.name,
-        sub_role_id: user.sub_role_id
+        role: user.role.name
       } as any,
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '24h' }
@@ -82,7 +79,6 @@ export const register = async (req: Request, res: Response) => {
           username: user.username,
           full_name: user.full_name,
           role: user.role.name,
-          sub_role: user.sub_role,
           status: user.status
         },
         token
@@ -107,7 +103,6 @@ export const login = async (req: Request, res: Response) => {
       where: { email },
       include: {
         role: true,     // 👈 include full role
-        sub_role: true,
         employee: true
       }
     });
@@ -122,11 +117,7 @@ export const login = async (req: Request, res: Response) => {
         role: user.role.name,
         email: user.email,
         full_name: user.full_name,
-        employee: user.employee,
-        sub_role: {
-          id: user.sub_role_id,
-          name: user.sub_role?.name || null
-        }
+        employee: user.employee
       } as any,
       process.env.JWT_SECRET || 'poiuytrewasdfghjkl0998877!!!3?><>:&^&hjn',
       { expiresIn: '24h' }
@@ -146,7 +137,6 @@ export const login = async (req: Request, res: Response) => {
           username: user.username,
           full_name: user.full_name,
           role: user.role.name,
-          sub_role: user.sub_role,
           status: user.status,
           employee: user.employee
         },

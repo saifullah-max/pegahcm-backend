@@ -24,7 +24,7 @@ export const impersonateUser = async (req: Request, res: Response) => {
         // Fetch the user to impersonate (include employee as well)
         const user = await prisma.users.findUnique({
             where: { id: user_id },
-            include: { role: true, sub_role: true, employee: true },
+            include: { role: true, employee: true },
         });
 
         if (!user || !user.role) {
@@ -39,13 +39,6 @@ export const impersonateUser = async (req: Request, res: Response) => {
                 full_name: user.full_name,
                 email: user.email,
                 role: user.role.name,
-                sub_role: user.sub_role
-                    ? {
-                        id: user.sub_role.id,
-                        name: user.sub_role.name,
-                        description: user.sub_role.description,
-                    }
-                    : null,
                 employee_id: user.employee?.id || null,
                 impersonated_by: admin!.userId, // optional
             },
@@ -61,7 +54,6 @@ export const impersonateUser = async (req: Request, res: Response) => {
                 full_name: user.full_name,
                 email: user.email,
                 role: user.role.name,
-                sub_role: user.sub_role,
                 status: user.status,
                 employee: user.employee,
                 impersonated_by: admin!.userId 

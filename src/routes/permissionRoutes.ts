@@ -1,5 +1,5 @@
 import express from 'express';
-import { assignPermissionsToUser, createPermission, getAllPermissions, getPermissionIdOfUser, getPermissionsOfRole, getPermissionsOfUser, updateSubRolePermissions } from '../controllers/permissionController';
+import { assignPermissionsToUser, createPermission, getAllPermissions, getPermissionIdOfUser, getPermissionsOfRole, getPermissionsOfUser } from '../controllers/permissionController';
 import { checkPermission } from '../middlewares/checkPermissions';
 import { authenticateToken } from '../middlewares/authMiddleware';
 
@@ -12,8 +12,6 @@ router.post("/", checkPermission("Permission", "create"), createPermission as an
 router.get('/', checkPermission("Permission", "view"), getAllPermissions as any)
 
 router.get('/:RoleId', checkPermission("Permission", "view"), getPermissionsOfRole as any)
-
-router.put('/sub-role/:subRoleId', checkPermission("Permission", "update"), updateSubRolePermissions as any)
 
 router.post('/user', checkPermission("Permission", "create"), assignPermissionsToUser as any)
 

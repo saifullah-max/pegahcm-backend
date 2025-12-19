@@ -28,28 +28,13 @@ enum NotificationScope {
   DIRECTORS_HR
 }
 
-model sub_roles {
-  id          String                 @id @default(cuid())
-  name        String                 @unique
-  description String?
-  users       users[]                @relation("UserSubRole")
-  level       Int
-  permissions sub_role_permissions[] // 👈 This is the join relation
-
-  created_at DateTime? @default(now())
-  created_by String?
-  updated_at DateTime? @updatedAt
-  updated_by String?
-}
-
 model permissions {
-  id          String                 @id @default(uuid())
+  id          String             @id @default(uuid())
   module      String
   action      String
   description String?
   roles       role_permissions[]
   users       user_permissions[]
-  sub_roles   sub_role_permissions[] // 👈 Join relation only
 
   created_at DateTime? @default(now())
   created_by String?
@@ -72,22 +57,6 @@ model role_permissions {
   permission_id String
 
   @@unique([role_id, permission_id], name: "roleId_permissionId")
-}
-
-model sub_role_permissions {
-  id            String @id @default(cuid())
-  sub_role_id   String
-  permission_id String
-
-  sub_role   sub_roles   @relation(fields: [sub_role_id], references: [id])
-  permission permissions @relation(fields: [permission_id], references: [id])
-
-  created_at DateTime? @default(now())
-  created_by String?
-  updated_at DateTime? @updatedAt
-  updated_by String?
-
-  @@unique([sub_role_id, permission_id], name: "subRole_permission")
 }
 
 enum PermissionSource {
@@ -122,8 +91,6 @@ model users {
   status                 String
   date_joined            DateTime   @default(now())
   last_login             DateTime?
-  sub_role_id            String?
-  sub_role               sub_roles? @relation("UserSubRole", fields: [sub_role_id], references: [id])
   role_tag               RoleTag?
   reset_password_token   String?    @unique
   reset_password_expires DateTime?
@@ -217,6 +184,7 @@ model roles {
   description     String?
   users           users[]
   role_permission role_permissions[]
+  level           Int?
 
   created_at DateTime? @default(now())
   created_by String?
@@ -275,11 +243,19 @@ model attendance_records {
   shift                shifts                    @relation(fields: [shift_id], references: [id])
   shift_id             String
   absence_reason       String?
-  net_working_minutes  Int? // <-- Add this
+  net_working_minutes  Int?
   late_minutes         Int?
   status               String
   breaks               breaks[]
   AttendanceFixRequest attendance_fix_requests[]
+
+  check_in_ip          String?
+  check_in_longitude   Float?
+  check_in_latitude    Float?
+
+  check_out_ip          String?
+  check_out_longitude   Float?
+  check_out_latitude    Float?
 
   created_at DateTime? @default(now())
   created_by String?
@@ -694,14 +670,14 @@ model bids {
   boosted_connects Int
   total            Int
 
-  cost             Decimal     @db.Decimal(10, 4)
+  cost        Decimal     @db.Decimal(10, 4)
   bid_status  String
   id_name     String
   description String?
   client_name String
   price       String
-  attend_by   employees[]   @relation("BidAttendBy")
-  project     projects?     @relation("BidToProject")
+  attend_by   employees[] @relation("BidAttendBy")
+  project     projects?   @relation("BidToProject")
 
   price_type String?
 
@@ -883,10 +859,10 @@ model ticket_comments {
 }
 
 model connect_costs {
-  id     String  @id @default(uuid())
-  cost   Decimal @db.Decimal(10, 4)
+  id   String  @id @default(uuid())
+  cost Decimal @db.Decimal(10, 4)
 
-  status String? @default("Active")
+  status     String?   @default("Active")
   created_at DateTime? @default(now())
   created_by String?
   updated_at DateTime? @updatedAt

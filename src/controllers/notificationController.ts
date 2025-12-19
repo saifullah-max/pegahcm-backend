@@ -4,7 +4,6 @@ import prisma from "../utils/Prisma";
 export interface CustomJwtPayload {
   userId: string;
   role: string;
-  sub_role?: string;
   visibility_level?: number;
   department_id?: string;
   sub_department_id?: string;
@@ -17,7 +16,6 @@ export const getUserNotifications = async (req: Request, res: Response) => {
         const {
             userId,
             role,
-            sub_role,
             visibility_level = 99,
             department_id,
             sub_department_id

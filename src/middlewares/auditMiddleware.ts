@@ -44,6 +44,12 @@ export function auditMiddleware(req: Request, res: Response, next: NextFunction)
     query: maskSensitive(req.query),
     params: maskSensitive(req.params),
     body: maskSensitive(req.body),
+    // Add check-in location info for check-in POST requests
+    ...(req.method === 'POST' && req.originalUrl?.includes('/check-in') ? {
+      check_in_ip: req.body?.check_in_ip || req.ip || null,
+      check_in_longitude: req.body?.check_in_longitude ?? null,
+      check_in_latitude: req.body?.check_in_latitude ?? null,
+    } : {})
   } as any;
 
   const shouldLog = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) || /\/api\//.test(req.path);
@@ -86,7 +92,9 @@ export function auditMiddleware(req: Request, res: Response, next: NextFunction)
       after: maskSensitive(bodyPayload),
     });
     // Fire-and-forget to not block response
-    // Promise.resolve(log.save()).catch(() => {}); Commented out to not flood DB with testing logs
+    Promise.resolve(log.save()).catch((err) => {
+      console.error('Failed to save audit log:', err);
+    });
   };
 
   resAny.json = (data?: any) => {

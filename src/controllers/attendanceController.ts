@@ -231,9 +231,12 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
     const user = req.user as unknown as CustomJwtPayload;
     const user_id = user.userId;
 
+    // Accept location and IP from request body (optional)
+    const { check_in_ip, check_in_longitude, check_in_latitude } = req.body;
+
     const employee = await prisma.employees.findUnique({
       where: { user_id },
-      include: { user: { include: { role: true, sub_role: true } } },
+      include: { user: { include: { role: true } } },
     });
 
     if (!employee) {
@@ -266,8 +269,8 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 
     // If already checked in (no checkout), prevent duplicate check-in
     if (todayAttendance && todayAttendance.clock_out === null) {
-      res.status(400).json({ 
-        message: "You have an active check-in. Please check out before checking in again." 
+      res.status(400).json({
+        message: "You have an active check-in. Please check out before checking in again."
       });
       return;
     }
@@ -295,9 +298,9 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
     if (todayAttendance && todayAttendance.clock_out !== null) {
       // Get all shifts and find the one with the latest end time
       const allShifts = await prisma.shifts.findMany();
-      
+
       let latestShiftEndTime = moment.tz(now.format('YYYY-MM-DD') + ' 00:00:00', userTimezone);
-      
+
       allShifts.forEach(s => {
         const sEnd = moment.tz(now.format('YYYY-MM-DD') + ' ' + moment(s.end_time).format('HH:mm:ss'), userTimezone);
         if (sEnd.isAfter(latestShiftEndTime)) {
@@ -307,8 +310,8 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
 
       // Block check-in after the last shift's end time
       if (now.isAfter(latestShiftEndTime)) {
-        res.status(400).json({ 
-          message: `Cannot check in after last shift end time (${latestShiftEndTime.format('hh:mm A')}). All shifts have ended.` 
+        res.status(400).json({
+          message: `Cannot check in after last shift end time (${latestShiftEndTime.format('hh:mm A')}). All shifts have ended.`
         });
         return;
       }
@@ -376,6 +379,9 @@ export const checkIn = async (req: Request, res: Response, next: NextFunction): 
           clock_out: null,
           status,
           late_minutes,
+          check_in_ip: check_in_ip || req.ip || null,
+          check_in_longitude: check_in_longitude ?? null,
+          check_in_latitude: check_in_latitude ?? null,
         },
         include: { shift: true },
       });
@@ -431,10 +437,13 @@ export const checkOut = async (
     const user = req.user as unknown as CustomJwtPayload;
     const user_id = user.userId;
 
+    const { check_out_ip, check_out_longitude, check_out_latitude } = req.body;
+
+
     // Fetch employee info
     const employee = await prisma.employees.findUnique({
       where: { user_id },
-      include: { user: { include: { role: true, sub_role: true } } },
+      include: { user: { include: { role: true } } },
     });
 
     if (!employee) {
@@ -466,7 +475,7 @@ export const checkOut = async (
     // Get day boundaries for reference
     const dayStart = now.clone().startOf("day");
     const dayEnd = now.clone().endOf("day");
-    
+
     // First check-in is already stored in attendance.clock_in
     const firstCheckIn = attendance.clock_in;
 
@@ -487,7 +496,13 @@ export const checkOut = async (
 
     const updatedRecord = await prisma.attendance_records.update({
       where: { id: attendance.id },
-      data: { clock_out: now.toDate(), net_working_minutes: sessionWorkingMinutes },
+      data: {
+        clock_out: now.toDate(),
+        net_working_minutes: sessionWorkingMinutes,
+        check_out_ip: check_out_ip || req.ip || null,
+        check_out_longitude: check_out_longitude ?? null,
+        check_out_latitude: check_out_latitude ?? null,
+      },
     });
 
     const clockOutTime = now.format("hh:mm A");
@@ -514,8 +529,8 @@ export const checkOut = async (
 
     await Promise.all(promises);
 
-    res.status(200).json({ 
-      message: "Check-out successful", 
+    res.status(200).json({
+      message: "Check-out successful",
       attendance: updatedRecord,
       sessionWorkingMinutes,
       totalWorkingMinutes,
@@ -827,7 +842,7 @@ export const getAllAttendanceRecords = async (req: Request, res: Response) => {
       const dayOfWeek = currentDate.day(); // 0 = Sunday, 6 = Saturday
       const dateKey = currentDate.format('YYYY-MM-DD');
       const isToday = currentDate.isSame(todayDateOnly, 'day');
-            
+
       // Include Monday (1) to Friday (5) OR today (regardless of day)
       if ((dayOfWeek >= 1 && dayOfWeek <= 5) || isToday) {
         const attendance = attendanceMap.get(dateKey);
@@ -843,7 +858,7 @@ export const getAllAttendanceRecords = async (req: Request, res: Response) => {
           clockIn = attendance.clock_in;
           clockOut = attendance.clock_out;
           lateMinutes = attendance.late_minutes;
-          
+
           // Calculate working hours if checked out
           if (clockOut && clockIn) {
             workingHours = Number(
@@ -877,31 +892,31 @@ export const getAllAttendanceRecords = async (req: Request, res: Response) => {
 
     // Apply filter to records
     let filteredRecords = allWorkingDays;
-    
+
     switch (filter) {
       case "last_5_days":
         filteredRecords = allWorkingDays.slice(-5);
         break;
-      
+
       case "last_week":
         const lastWeekStart = now.clone().subtract(7, 'days').startOf('day');
-        filteredRecords = allWorkingDays.filter(d => 
+        filteredRecords = allWorkingDays.filter(d =>
           moment(d.date).isSameOrAfter(lastWeekStart)
         );
         break;
-      
+
       case "last_2_weeks":
         const last2WeeksStart = now.clone().subtract(14, 'days').startOf('day');
-        filteredRecords = allWorkingDays.filter(d => 
+        filteredRecords = allWorkingDays.filter(d =>
           moment(d.date).isSameOrAfter(last2WeeksStart)
         );
         break;
-      
+
       case "current_month":
         // Already showing current month, so use all
         filteredRecords = allWorkingDays;
         break;
-      
+
       case "custom":
         // Support custom date range via query params
         const { start_date, end_date } = req.query;
@@ -914,7 +929,7 @@ export const getAllAttendanceRecords = async (req: Request, res: Response) => {
           });
         }
         break;
-      
+
       default:
         // Default to last 5 working days
         filteredRecords = allWorkingDays.slice(-5);
@@ -1164,7 +1179,6 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
       where: { id: current_user_id },
       include: {
         role: true,
-        sub_role: true,
       },
     });
 
@@ -1190,7 +1204,6 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
           include: {
             user: {
               include: {
-                sub_role: true,
               },
             },
             department: true,
@@ -1206,34 +1219,34 @@ export const updateLeaveStatus = async (req: Request, res: Response) => {
         .json({ success: false, message: "Leave request not found." });
     }
 
-    // 🔐 Sub-role level checks for non-admins
-    if (roleName !== "admin") {
-      if (!user.sub_role || typeof user.sub_role.level !== "number") {
-        return res.status(403).json({
-          success: false,
-          message:
-            "Approver sub-role level not found. Ensure approver has valid subRole assigned.",
-        });
-      }
+    // // 🔐 Sub-role level checks for non-admins
+    // if (roleName !== "admin") {
+    //   if (!user.sub_role || typeof user.sub_role.level !== "number") {
+    //     return res.status(403).json({
+    //       success: false,
+    //       message:
+    //         "Approver sub-role level not found. Ensure approver has valid subRole assigned.",
+    //     });
+    //   }
 
-      const approverLevel = user.sub_role.level;
-      const requesterLevel = targetLeaveRequest.employee?.user?.sub_role?.level;
+    //   const approverLevel = user.sub_role.level;
+    //   const requesterLevel = targetLeaveRequest.employee?.user?.sub_role?.level;
 
-      if (requesterLevel === undefined || requesterLevel === null) {
-        return res.status(403).json({
-          success: false,
-          message: "Requester sub-role level not found.",
-        });
-      }
+    //   if (requesterLevel === undefined || requesterLevel === null) {
+    //     return res.status(403).json({
+    //       success: false,
+    //       message: "Requester sub-role level not found.",
+    //     });
+    //   }
 
-      if (approverLevel >= requesterLevel) {
-        return res.status(403).json({
-          success: false,
-          message:
-            "You cannot approve/reject requests of equal or higher-level employees.",
-        });
-      }
-    }
+    //   if (approverLevel >= requesterLevel) {
+    //     return res.status(403).json({
+    //       success: false,
+    //       message:
+    //         "You cannot approve/reject requests of equal or higher-level employees.",
+    //     });
+    //   }
+    // }
 
     // ✅ Update leave status
     const updated = await prisma.leave_requests.update({
@@ -1987,7 +2000,7 @@ export const getEmployeesAttendanceSummaryFiltered = async (
     let skipDays = 0;
     if (lastCursorId) {
       const cursorStr = lastCursorId as string;
-      
+
       // Check if it's a valid date format (YYYY-MM-DD)
       const datePattern = /^\d{4}-\d{2}-\d{2}$/;
       if (datePattern.test(cursorStr)) {
@@ -2061,8 +2074,8 @@ export const getEmployeesAttendanceSummaryFiltered = async (
     const dailyAttendance = allDailyAttendance.slice(skipDays, skipDays + limitNumber);
 
     // Calculate next cursor (date of last item) for frontend pagination
-    const nextCursor = dailyAttendance.length > 0 
-      ? dailyAttendance[dailyAttendance.length - 1].date 
+    const nextCursor = dailyAttendance.length > 0
+      ? dailyAttendance[dailyAttendance.length - 1].date
       : null;
 
     return res.status(200).json({

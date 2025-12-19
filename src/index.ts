@@ -7,7 +7,6 @@ import { connectMongo } from './utils/mongo';
 import { auditMiddleware } from './middlewares/auditMiddleware';
 import authRoutes from './routes/authRoutes';
 import roleRoutes from './routes/roleRoutes';
-import subRoleRoutes from './routes/subRolesRoutes'
 import employeeRoutes from './routes/employeeRoutes';
 import shiftRoutes from './routes/shift.routes';
 import departmentRoutes from './routes/department.routes';
@@ -31,6 +30,7 @@ import ticketRoutes from './routes/ticketRoutes'
 import { runAutoCheckout, startCleanupJobs, autoCheckoutCron } from './utils/CronJob';
 import ticketCommentsRoutes from './routes/ticketCommentsRoutes'
 import salesDashboardRoutes from './routes/salesDashboardRoutes'
+import auditLogRoutes from './routes/auditLogRoutes'
 import { initSocket } from './utils/socket';
 
 
@@ -50,14 +50,13 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // Connect Mongo for audit logs and register audit middleware early
-connectMongo('mongodb+srv://saifullahahmed380:dsu241064@pegahub.zmgqxdy.mongodb.net/?appName=pegahub');
+connectMongo(process.env.MONGODB_URL);
 app.use(auditMiddleware);
 
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/roles', roleRoutes);
-app.use('/api/sub-roles', subRoleRoutes)
 app.use('/api/employees', employeeRoutes);
 app.use('/api/shifts', shiftRoutes);
 app.use('/api/departments', departmentRoutes);
@@ -80,6 +79,7 @@ app.use('/api/upwork', upworkRoutes)
 app.use('/api/tickets', ticketRoutes)
 app.use('/api/tickets/comments', ticketCommentsRoutes)
 app.use('/api/sales/dashboard', salesDashboardRoutes)
+app.use('/api/audit-logs', auditLogRoutes)
 // Basic route
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to PegaHCM API' });

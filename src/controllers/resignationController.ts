@@ -99,7 +99,6 @@ export const processResignation = async (req: Request, res: Response) => {
             where: { id: current_user_id },
             include: {
                 role: true,
-                sub_role: true,
             },
         });
 
@@ -120,9 +119,6 @@ export const processResignation = async (req: Request, res: Response) => {
                 employee: {
                     include: {
                         user: {
-                            include: {
-                                sub_role: true,
-                            },
                         },
                     },
                 },
@@ -138,21 +134,20 @@ export const processResignation = async (req: Request, res: Response) => {
         }
 
         // If not admin, enforce hierarchy level check
-        if (roleName !== 'admin') {
-            const approverLevel = approver.sub_role?.level;
-            const requesterLevel = existingResignation.employee?.user?.sub_role?.level;
+        // if (roleName !== 'admin') {
+        //     const requesterLevel = existingResignation.employee?.user?.sub_role?.level;
 
-            if (approverLevel === undefined || requesterLevel === undefined) {
-                return res.status(403).json({ message: 'Sub-role level missing for either approver or requester.' });
-            }
+        //     if (approverLevel === undefined || requesterLevel === undefined) {
+        //         return res.status(403).json({ message: 'Sub-role level missing for either approver or requester.' });
+        //     }
 
-            if (approverLevel >= requesterLevel) {
-                return res.status(403).json({
-                    message: 'You cannot approve/reject resignations of users at equal or higher sub-role level.',
-                });
-            }
+        //     if (approverLevel >= requesterLevel) {
+        //         return res.status(403).json({
+        //             message: 'You cannot approve/reject resignations of users at equal or higher sub-role level.',
+        //         });
+        //     }
 
-        }
+        // }
 
         // ✅ Prepare update data
         const dataToUpdate: {

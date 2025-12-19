@@ -74,7 +74,13 @@ const getPermissionFilter = async (req: Request) => {
 // COMPREHENSIVE DASHBOARD - Combines multiple endpoints into one
 export const getComprehensiveDashboard = async (req: Request, res: Response) => {
   try {
-    const { projectFilter, bidFilter } = await getPermissionFilter(req);
+    const { projectFilter, bidFilter, current_user_id } = await getPermissionFilter(req);
+    // Check if user is admin
+    const user = await prisma.users.findUnique({
+      where: { id: current_user_id },
+      select: { role: { select: { name: true } } }
+    });
+    const isAdmin = user?.role?.name.toLocaleLowerCase() === "admin";
     const now = moment();
     const currentMonthStart = now.clone().startOf('month').toDate();
     const lastMonthStart = now.clone().subtract(1, 'month').startOf('month').toDate();
@@ -96,33 +102,33 @@ export const getComprehensiveDashboard = async (req: Request, res: Response) => 
     ] = await Promise.all([
       // Projects data
       prisma.projects.findMany({
-        where: projectFilter,
+        where: isAdmin ? {} : projectFilter,
         include: {
           milestones: { select: { id: true, status: true, revenue: true } },
           assignees: { include: { user: { select: { id: true, full_name: true } } } }
         }
       }),
       prisma.projects.findMany({
-        where: { ...projectFilter, created_at: { gte: currentMonthStart } },
+        where: isAdmin ? { created_at: { gte: currentMonthStart } } : { ...projectFilter, created_at: { gte: currentMonthStart } },
         include: { milestones: { select: { revenue: true } } }
       }),
       prisma.projects.findMany({
-        where: { ...projectFilter, created_at: { gte: lastMonthStart, lte: lastMonthEnd } },
+        where: isAdmin ? { created_at: { gte: lastMonthStart, lte: lastMonthEnd } } : { ...projectFilter, created_at: { gte: lastMonthStart, lte: lastMonthEnd } },
         include: { milestones: { select: { revenue: true } } }
       }),
       // Bid counts
-      prisma.bids.count({ where: bidFilter }),
-      prisma.bids.count({ where: { ...bidFilter, bid_status: 'awarded' } }),
-      prisma.bids.count({ where: { ...bidFilter, bid_status: { in: ['pending', 'proposal_shared'] } } }),
-      prisma.bids.count({ where: { ...bidFilter, bid_status: 'proposal_shared' } }),
-      prisma.bids.count({ where: { ...bidFilter, bid_status: 'interviewed' } }),
-      prisma.bids.count({ where: { ...bidFilter, bid_status: 'awarded' } }),
+      prisma.bids.count({ where: isAdmin ? {} : bidFilter }),
+      prisma.bids.count({ where: isAdmin ? { bid_status: 'awarded' } : { ...bidFilter, bid_status: 'awarded' } }),
+      prisma.bids.count({ where: isAdmin ? { bid_status: { in: ['proposal_pending', 'proposal_shared'] } } : { ...bidFilter, bid_status: { in: ['proposal_pending', 'proposal_shared'] } } }),
+      prisma.bids.count({ where: isAdmin ? { bid_status: 'proposal_shared' } : { ...bidFilter, bid_status: 'proposal_shared' } }),
+      prisma.bids.count({ where: isAdmin ? { bid_status: 'interviewed' } : { ...bidFilter, bid_status: 'interviewed' } }),
+      prisma.bids.count({ where: isAdmin ? { bid_status: 'awarded' } : { ...bidFilter, bid_status: 'awarded' } }),
       // Upcoming deadlines
       prisma.milestones.findMany({
         where: {
           deadline: { gte: moment.utc().startOf('day').toDate(), lte: moment.utc().add(10, 'days').endOf('day').toDate() },
           status: { not: 'completed' },
-          ...(Object.keys(projectFilter).length > 0 ? { project: projectFilter } : {})
+          ...(isAdmin ? {} : (Object.keys(projectFilter).length > 0 ? { project: projectFilter } : {}))
         },
         take: 5,
         orderBy: { deadline: 'asc' },
@@ -136,7 +142,7 @@ export const getComprehensiveDashboard = async (req: Request, res: Response) => 
         where: {
           deadline: { lte: moment.utc().subtract(30, 'days').endOf('day').toDate() },
           status: { not: 'completed' },
-          ...(Object.keys(projectFilter).length > 0 ? { project: projectFilter } : {})
+          ...(isAdmin ? {} : (Object.keys(projectFilter).length > 0 ? { project: projectFilter } : {}))
         },
         take: 5,
         orderBy: { deadline: 'asc' },
@@ -271,18 +277,25 @@ export const getComprehensiveDashboard = async (req: Request, res: Response) => 
 // GET /api/sales/dashboard/revenue-chart - Kept for flexible chart periods and detailed historical data
 export const getRevenueChart = async (req: Request, res: Response) => {
   try {
-    const { projectFilter } = await getPermissionFilter(req);
+    const { projectFilter, current_user_id } = await getPermissionFilter(req);
     const { period = '6months' } = req.query;
+
+    // Check if user is admin
+    const user = await prisma.users.findUnique({
+      where: { id: current_user_id },
+      select: { role: { select: { name: true } } }
+    });
+    const isAdmin = user?.role?.name === "Admin";
 
     let monthsBack = 6;
     if (period === '12months') monthsBack = 12;
     else if (period === 'year') monthsBack = 12;
 
     const startDate = moment().subtract(monthsBack, 'months').startOf('month').toDate();
-    
+
     const projects = await prisma.projects.findMany({
       where: {
-        ...projectFilter,
+        ...(isAdmin ? {} : projectFilter),
         created_at: { gte: startDate }
       },
       select: {
@@ -370,12 +383,19 @@ export const getRevenueChart = async (req: Request, res: Response) => {
 // GET /api/sales/dashboard/recent-bids - Kept for detailed bid listing with filtering
 export const getRecentBids = async (req: Request, res: Response) => {
   try {
-    const { bidFilter } = await getPermissionFilter(req);
+    const { bidFilter, current_user_id } = await getPermissionFilter(req);
     const { limit = '5', status_filter } = req.query;
     const limitNum = parseInt(limit as string);
 
+    // Check if user is admin
+    const user = await prisma.users.findUnique({
+      where: { id: current_user_id },
+      select: { role: { select: { name: true } } }
+    });
+    const isAdmin = user?.role?.name === "Admin";
+
     const whereClause = {
-      ...bidFilter,
+      ...(isAdmin ? {} : bidFilter),
       ...(status_filter ? { bid_status: status_filter as string } : {})
     };
 
@@ -441,21 +461,14 @@ export const getTeamPerformance = async (req: Request, res: Response) => {
     // Check if user is admin
     const user = await prisma.users.findUnique({
       where: { id: current_user_id },
-      select: {
-        role: {
-          select: {
-            name: true
-          }
-        }
-      }
+      select: { role: { select: { name: true } } }
     });
-
     const isAdmin = user?.role?.name === "Admin";
 
     // Get all employees (or filtered by permission)
-    const employeeFilter = isAdmin 
+    const employeeFilter = isAdmin
       ? {} // Admin sees all employees
-      : permissionScope === "own" 
+      : permissionScope === "own"
         ? { user_id: current_user_id }
         : {};
 

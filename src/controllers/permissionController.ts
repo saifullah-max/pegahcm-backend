@@ -162,24 +162,6 @@ export const getPermissionsOfRole = async (req: Request, res: Response) => {
   }
 };
 
-export const updateSubRolePermissions = async (req: Request, res: Response) => {
-  try {
-    const { sub_role_id, permission_ids } = req.body;
-
-    await prisma.sub_role_permissions.deleteMany({ where: { sub_role_id } });
-
-    await prisma.sub_role_permissions.createMany({
-      data: permission_ids.map((id: string) => ({ sub_role_id, permission_id: id })),
-      skipDuplicates: true,
-    });
-
-    res.status(200).json({ message: 'Updated successfully' });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Failed to update' });
-  }
-};
-
 // GET /permissions/user/:userId
 export const getPermissionsOfUser = async (req: Request, res: Response) => {
   try {

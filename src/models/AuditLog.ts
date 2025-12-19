@@ -44,7 +44,7 @@ AuditLogSchema.post('init', (doc: any) => {
 });
 
 AuditLogSchema.post('save', (doc: any) => {
-  console.log('💾 [AuditLog] Document saved:', doc._id);
+  // console.log('💾 [AuditLog] Document saved:', doc._id);
 });
 
 AuditLogSchema.post('error', (error: any, doc: any, next: any) => {

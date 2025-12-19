@@ -58,7 +58,6 @@ interface CreateEmployeeRequest {
   address: string;
 
   role_id: string;
-  sub_role_id?: string;
   role_tag?: string;
 
   // Employee details
@@ -428,7 +427,6 @@ export const listEmployees = async (req: Request, res: Response) => {
             email: true,
             status: true,
             role: { select: { name: true } },
-            sub_role: { select: { name: true } },
           },
         },
         designation: true,
@@ -457,7 +455,6 @@ export const listEmployees = async (req: Request, res: Response) => {
         full_name: emp.user.full_name,
         email: emp.user.email,
         role: emp.user.role.name,
-        sub_role: emp.user.sub_role?.name,
         designation: emp.designation?.name,
         department: emp.department?.name,
         sub_department: emp.sub_department?.name,
@@ -541,7 +538,6 @@ export const ListSingleEmployee = async (req: Request, res: Response) => {
           full_name: employee.user.full_name,
           email: employee.user.email,
           role_id: employee.user.role_id,
-          sub_role_id: employee.user.sub_role_id,
           status: employee.user.status,
           date_joined: employee.user.date_joined,
         },
