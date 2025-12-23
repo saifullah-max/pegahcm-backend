@@ -197,7 +197,7 @@ export const update_project = async (req: Request, res: Response) => {
       assignee_id,
       status,
       bid_id,
-    } = req.body;
+    } = req.body || {};
 
     const user_id = req.user?.userId;
 
@@ -218,13 +218,16 @@ export const update_project = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "Project not found." });
     }
 
-    // Validate Upwork profile
-    const upworkProfile = await prisma.upwork_ids.findUnique({ where: { id: upwork_id } });
-    if (!upworkProfile) {
-      return res.status(400).json({
-        success: false,
-        message: "Provided upwork ID does not exist.",
-      });
+    // Validate Upwork profile (only if upwork_id is provided)
+    let upworkProfile = null;
+    if (upwork_id) {
+      upworkProfile = await prisma.upwork_ids.findUnique({ where: { id: upwork_id } });
+      if (!upworkProfile) {
+        return res.status(400).json({
+          success: false,
+          message: "Provided upwork ID does not exist.",
+        });
+      }
     }
 
     // Prepare employee arrays
@@ -254,29 +257,41 @@ export const update_project = async (req: Request, res: Response) => {
       ...documentsObj,
     ];
 
+    // Build update data object - only include fields that are provided
+    const updateData: any = {
+      updated_by: user_id,
+    };
+
+    if (client_name !== undefined) updateData.client_name = client_name;
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+    if (start_date !== undefined) updateData.start_date = start_date ? new Date(start_date) : undefined;
+    if (end_date !== undefined) updateData.end_date = end_date ? new Date(end_date) : undefined;
+    if (deadline !== undefined) updateData.deadline = deadline ? new Date(deadline) : undefined;
+    if (number_of_hours !== undefined) updateData.number_of_hours = number_of_hours ? Number(number_of_hours) : undefined;
+    if (status !== undefined) updateData.status = status;
+    if (upworkProfile) updateData.upwork_profile = { connect: { id: upworkProfile.id } };
+    if (bid_id !== undefined) {
+      updateData.bid = bid_id ? { connect: { id: bid_id } } : { disconnect: true };
+    }
+    if (documentsObj.length > 0) {
+      updateData.documents = updatedDocuments;
+    }
+    if (assignee_id !== undefined) {
+      updateData.assignees = existingAssignees.length
+        ? { set: existingAssignees.map((emp) => ({ id: emp.id })) }
+        : { set: [] };
+    }
+    if (sales_person_id !== undefined) {
+      updateData.sales_persons = existingSalesPersons.length
+        ? { set: existingSalesPersons.map((emp) => ({ id: emp.id })) }
+        : { set: [] };
+    }
+
     // Update project
     const updatedProject = await prisma.projects.update({
       where: { id },
-      data: {
-        client_name,
-        name,
-        description,
-        start_date: start_date ? new Date(start_date) : undefined,
-        end_date: end_date ? new Date(end_date) : undefined,
-        deadline: deadline ? new Date(deadline) : undefined,
-        number_of_hours: Number(number_of_hours),
-        status,
-        upwork_profile: { connect: { id: upworkProfile.id } },
-        bid: bid_id ? { connect: { id: bid_id } } : undefined,
-        documents: updatedDocuments,
-        assignees: existingAssignees.length
-          ? { set: existingAssignees.map((emp) => ({ id: emp.id })) }
-          : { set: [] },
-        sales_persons: existingSalesPersons.length
-          ? { set: existingSalesPersons.map((emp) => ({ id: emp.id })) }
-          : { set: [] },
-        updated_by: user_id,
-      },
+      data: updateData,
     });
 
     res.status(200).json({
