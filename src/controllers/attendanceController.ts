@@ -1812,7 +1812,6 @@ export const getEmployeesAttendanceSummary = async (
   }
 };
 
-// Filtered summary with daily attendance for selected user
 export const getEmployeesAttendanceSummaryFiltered = async (
   req: Request,
   res: Response
@@ -1830,76 +1829,56 @@ export const getEmployeesAttendanceSummaryFiltered = async (
 
     const limitNumber = parseInt(limit as string);
 
-    // ✅ Validate all three required fields
-    if (!filterType || !userId) {
-      return res.status(400).json({
-        success: false,
-        message: "filterType and userId are required.",
+    const isAdminView = !userId;
+
+    // Default filter type for admin view
+    const finalFilterType = filterType ? filterType.toString() : "today";
+
+    // -------------------------
+    // FETCH EMPLOYEES
+    // -------------------------
+    let employees: any[] = [];
+
+    if (userId) {
+      const employee = await prisma.employees.findUnique({
+        where: { id: userId as string },
+        include: {
+          user: { select: { full_name: true, email: true } },
+          department: true,
+        },
       });
-    }
 
-    // ✅ Find the specific employee
-    const employee = await prisma.employees.findUnique({
-      where: { id: userId as string },
-      include: {
-        user: { select: { full_name: true, email: true } },
-        department: true,
-      },
-    });
-
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: "Employee not found.",
-      });
-    }
-
-    // ✅ EDGE CASE VALIDATION
-    // Determine which filters are selected
-    const hasDepartment = departmentId && departmentId !== "All" && departmentId !== "";
-    const hasEmployee = userId && userId !== "";
-    const isDepartmentOnly = hasDepartment && !hasEmployee;
-    const isDepartmentAndEmployee = hasDepartment && hasEmployee;
-    const isEmployeeOnly = !hasDepartment && hasEmployee;
-
-    // EDGE CASE 1: Department only selected
-    // Only yesterday, today, and specific date are allowed
-    if (isDepartmentOnly) {
-      const allowedFilters = ["today", "yesterday", "specific_date"];
-      if (!allowedFilters.includes((filterType as string).toLowerCase())) {
-        return res.status(400).json({
+      if (!employee) {
+        return res.status(404).json({
           success: false,
-          message: "When only department is selected, only 'today', 'yesterday', or 'specific_date' filters are allowed.",
-          allowedFilters,
+          message: "Employee not found.",
         });
       }
 
-      // If specific_date is selected, require startDate
-      if ((filterType as string).toLowerCase() === "specific_date" && !startDate) {
-        return res.status(400).json({
-          success: false,
-          message: "specific_date filter requires startDate parameter.",
-        });
-      }
-    }
-
-    // EDGE CASE 2: Department AND Employee selected
-    // Allow all date filters including custom and predefined options
-    if (isDepartmentAndEmployee) {
-      // Validate department matches employee
-      if (employee.department_id !== departmentId && departmentId !== "All") {
+      // Department + employee validation
+      if (
+        departmentId &&
+        departmentId !== "All" &&
+        employee.department_id !== departmentId
+      ) {
         return res.status(400).json({
           success: false,
           message: "Employee does not belong to the specified department.",
         });
       }
-      // All filters are allowed in this case
-    }
 
-    // EDGE CASE 3: Only Employee selected (no department)
-    // Allow all date filters including custom and predefined options
-    if (isEmployeeOnly) {
-      // All filters are allowed in this case
+      employees = [employee];
+    } else {
+      // ADMIN MODE → ALL EMPLOYEES (optional department filter)
+      employees = await prisma.employees.findMany({
+        where: departmentId && departmentId !== "All"
+          ? { department_id: departmentId as string }
+          : undefined,
+        include: {
+          user: { select: { full_name: true, email: true } },
+          department: true,
+        },
+      });
     }
 
     // -------------------------
@@ -1908,9 +1887,7 @@ export const getEmployeesAttendanceSummaryFiltered = async (
     let rangeStart: Date, rangeEnd: Date;
     const today = moment().startOf("day");
 
-    const filterTypeStr = (filterType || "today").toString().toLowerCase();
-
-    switch (filterTypeStr) {
+    switch (finalFilterType.toLowerCase()) {
       case "yesterday":
         rangeStart = today.clone().subtract(1, "day").toDate();
         rangeEnd = today.clone().subtract(1, "day").endOf("day").toDate();
@@ -1926,11 +1903,6 @@ export const getEmployeesAttendanceSummaryFiltered = async (
         rangeEnd = today.clone().subtract(1, "week").endOf("isoWeek").toDate();
         break;
 
-      case "past_week":
-        rangeStart = today.clone().subtract(7, "days").toDate();
-        rangeEnd = today.clone().subtract(1, "day").endOf("day").toDate();
-        break;
-
       case "this_month":
         rangeStart = today.clone().startOf("month").toDate();
         rangeEnd = today.clone().endOf("month").toDate();
@@ -1943,22 +1915,19 @@ export const getEmployeesAttendanceSummaryFiltered = async (
             message: "Custom range requires startDate and endDate.",
           });
         }
-        const startStr = Array.isArray(startDate) ? startDate[0] : (startDate as string);
-        const endStr = Array.isArray(endDate) ? endDate[0] : (endDate as string);
-        rangeStart = moment(startStr).startOf("day").toDate();
-        rangeEnd = moment(endStr).endOf("day").toDate();
+        rangeStart = moment(startDate as string).startOf("day").toDate();
+        rangeEnd = moment(endDate as string).endOf("day").toDate();
         break;
 
       case "specific_date":
         if (!startDate) {
           return res.status(400).json({
             success: false,
-            message: "specific_date filter requires startDate parameter.",
+            message: "specific_date filter requires startDate.",
           });
         }
-        const dateStr = Array.isArray(startDate) ? startDate[0] : (startDate as string);
-        rangeStart = moment(dateStr).startOf("day").toDate();
-        rangeEnd = moment(dateStr).endOf("day").toDate();
+        rangeStart = moment(startDate as string).startOf("day").toDate();
+        rangeEnd = moment(startDate as string).endOf("day").toDate();
         break;
 
       case "today":
@@ -1968,136 +1937,115 @@ export const getEmployeesAttendanceSummaryFiltered = async (
     }
 
     // -------------------------
-    // GET ALL ATTENDANCE RECORDS FOR THE RANGE
+    // FETCH ATTENDANCE RECORDS
     // -------------------------
     const attendanceRecords = await prisma.attendance_records.findMany({
       where: {
-        employee_id: employee.id,
+        employee_id: { in: employees.map(e => e.id) },
         clock_in: { gte: rangeStart, lte: rangeEnd },
       },
       orderBy: { clock_in: "asc" },
     });
 
-    // Create a map of date -> attendance record for quick lookup
-    const attendanceMap = new Map<string, any>();
-    attendanceRecords.forEach((rec) => {
-      const dateKey = moment(rec.clock_in).format("YYYY-MM-DD");
-      attendanceMap.set(dateKey, rec);
+    // -------------------------
+    // BUILD DAILY ROWS
+    // -------------------------
+    const allDailyAttendance: any[] = [];
+    const endMoment = moment(rangeEnd);
+
+    employees.forEach(employee => {
+      const recordMap = new Map<string, any>();
+
+      attendanceRecords
+        .filter(r => r.employee_id === employee.id)
+        .forEach(r => {
+          recordMap.set(moment(r.clock_in).format("YYYY-MM-DD"), r);
+        });
+
+      const cursor = moment(rangeStart);
+
+      while (cursor.isSameOrBefore(endMoment, "day")) {
+        const dateKey = cursor.format("YYYY-MM-DD");
+        const dayName = cursor.format("dddd");
+        const record = recordMap.get(dateKey);
+
+        const netMinutes = record?.net_working_minutes || 0;
+        const status = record?.status || "Absent";
+
+        allDailyAttendance.push({
+          employee_id: employee.id,
+          full_name: employee.user.full_name,
+          email: employee.user.email,
+          department: employee.department?.name || "N/A",
+          period_status: status,
+          total_leaves: 0,
+          late_arrivals: status === "Late" ? 1 : 0,
+          total_hours: Number((netMinutes / 60).toFixed(2)),
+          attendance_days: `${dayName} (${dateKey})`,
+          date: dateKey,
+          day: dayName,
+          check_in: record?.clock_in
+            ? moment(record.clock_in).format("HH:mm")
+            : null,
+          check_out: record?.clock_out
+            ? moment(record.clock_out).format("HH:mm")
+            : null,
+          net_working_minutes: netMinutes,
+          late_minutes: record?.late_minutes || null,
+        });
+
+        cursor.add(1, "day");
+      }
     });
 
     // -------------------------
-    // BUILD DAILY ATTENDANCE ARRAY (one row per day)
+    // PAGINATION (DATE CURSOR)
     // -------------------------
-    const allDailyAttendance: any[] = [];
-    const currentDate = moment(rangeStart);
-    const endDateMoment = moment(rangeEnd);
-
-    // Calculate total days in range for pagination
-    const totalDays = endDateMoment.diff(moment(rangeStart), "days") + 1;
-
-    // Handle pagination: skip if lastCursorId provided
-    // lastCursorId should be a date (YYYY-MM-DD), but frontend might send employee_id (UUID)
     let skipDays = 0;
     if (lastCursorId) {
-      const cursorStr = lastCursorId as string;
-
-      // Check if it's a valid date format (YYYY-MM-DD)
-      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-      if (datePattern.test(cursorStr)) {
-        // It's a date, use it for pagination
-        const lastDate = moment(cursorStr);
-        if (lastDate.isValid() && lastDate.isSameOrAfter(moment(rangeStart))) {
-          // Skip to the day AFTER the last date we showed
-          skipDays = lastDate.diff(moment(rangeStart), "days") + 1;
-        }
-      } else {
-        // Invalid cursor format - return helpful error instead of defaulting to skipDays = 0
-        // This prevents repeated data when frontend sends employee_id instead of date
+      const cursorDate = moment(lastCursorId as string, "YYYY-MM-DD", true);
+      if (!cursorDate.isValid()) {
         return res.status(400).json({
           success: false,
-          message: "Invalid pagination cursor format.",
-          details: "lastCursorId must be a date in YYYY-MM-DD format (e.g., '2025-12-05').",
-          received: cursorStr,
-          solution: "Use the 'date' field from the last item in previous response, or use 'pagination.nextCursor' from the pagination object."
+          message: "Invalid pagination cursor. Use YYYY-MM-DD.",
         });
       }
+      skipDays = allDailyAttendance.findIndex(
+        d => d.date === cursorDate.format("YYYY-MM-DD")
+      ) + 1;
     }
 
-    // Build all days first
-    while (currentDate.isSameOrBefore(endDateMoment, "day")) {
-      const dateKey = currentDate.format("YYYY-MM-DD");
-      const dayName = currentDate.format("dddd");
-      const attendanceRecord = attendanceMap.get(dateKey);
+    const totalDays = allDailyAttendance.length;
+    const dailyAttendance = allDailyAttendance.slice(
+      skipDays,
+      skipDays + limitNumber
+    );
 
-      let checkIn = null;
-      let checkOut = null;
-      let status = "Absent";
-      let netWorkingMinutes = 0;
-      let lateMinutes = null;
-
-      if (attendanceRecord) {
-        // Employee has attendance for this day
-        checkIn = attendanceRecord.clock_in
-          ? moment(attendanceRecord.clock_in).format("HH:mm")
-          : null;
-        checkOut = attendanceRecord.clock_out
-          ? moment(attendanceRecord.clock_out).format("HH:mm")
-          : null;
-        status = attendanceRecord.status || "Absent";
-        netWorkingMinutes = attendanceRecord.net_working_minutes || 0;
-        lateMinutes = attendanceRecord.late_minutes || null;
-      }
-
-      // Create a row for each day with employee info + day info
-      allDailyAttendance.push({
-        employee_id: employee.id,
-        full_name: employee.user.full_name,
-        email: employee.user.email,
-        department: employee.department?.name || "N/A",
-        period_status: status,
-        total_leaves: 0, // Ignored as per requirement
-        late_arrivals: status === "Late" ? 1 : 0,
-        total_hours: Number((netWorkingMinutes / 60).toFixed(2)),
-        attendance_days: `${dayName} (${dateKey})`,
-        date: dateKey,
-        day: dayName,
-        check_in: checkIn,
-        check_out: checkOut,
-        net_working_minutes: netWorkingMinutes,
-        late_minutes: lateMinutes,
-      });
-
-      currentDate.add(1, "day");
-    }
-
-    // Apply pagination: skip and take
-    const dailyAttendance = allDailyAttendance.slice(skipDays, skipDays + limitNumber);
-
-    // Calculate next cursor (date of last item) for frontend pagination
-    const nextCursor = dailyAttendance.length > 0
-      ? dailyAttendance[dailyAttendance.length - 1].date
-      : null;
+    const nextCursor =
+      dailyAttendance.length > 0
+        ? dailyAttendance[dailyAttendance.length - 1].date
+        : null;
 
     return res.status(200).json({
       success: true,
-      data: dailyAttendance, // Array of daily records (paginated)
+      data: dailyAttendance,
       pagination: {
         limit: limitNumber,
         total: totalDays,
         total_pages: Math.ceil(totalDays / limitNumber),
-        nextCursor, // Date to use as lastCursorId for next page
+        nextCursor,
       },
       filter: {
         start: rangeStart,
         end: rangeEnd,
-        filterType,
+        filterType: finalFilterType,
         departmentId,
         userId,
       },
     });
   } catch (error) {
     console.error("Failed to fetch filtered employee summary:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Internal server error",
     });
