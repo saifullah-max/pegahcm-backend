@@ -5,7 +5,8 @@ import {
   getAllDepartments,
   getDepartmentById,
   updateDepartment,
-  deleteDepartment
+  deleteDepartment,
+  getAllHeadDepartments
 } from '../controllers/departmentController';
 import { checkPermission } from '../middlewares/checkPermissions';
 
@@ -20,5 +21,6 @@ router.get('/', checkPermission("Department", "view"), getAllDepartments as any)
 router.get('/:id', checkPermission("Department", "view"), getDepartmentById as any);
 router.put('/:id', checkPermission("Department", "update"), updateDepartment as any);
 router.delete('/:id', checkPermission("Department", "delete"), deleteDepartment as any);
+router.get('/head/all', checkPermission("Department", "view"), getAllHeadDepartments as any)
 
 export default router; 

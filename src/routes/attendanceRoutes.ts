@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { checkIn, checkOut, checkTodayAttendance, createBreak, createLeaveType, endBreak, getAllAttendance, getAllAttendanceRecords, getAllLeaveTypes, getBreaksByAttendanceRecord, getEmployeeHoursSummary, getEmployeeLeaves, leaveRequest } from "../controllers/attendanceController";
+import { checkIn, checkOut, checkTodayAttendance, createBreak, createLeaveType, endBreak, getAllAttendance, getAllAttendanceRecords, getAllLeaveTypes, getBreaksByAttendanceRecord, getEmployeeDailyHoursSummary, getEmployeeHoursSummary, getEmployeeLeaves, leaveRequest } from "../controllers/attendanceController";
 import { authenticateToken } from "../middlewares/authMiddleware";
 import { isAdmin } from "../middlewares/roleMiddleware";
 import { checkPermission } from "../middlewares/checkPermissions";
@@ -27,7 +27,9 @@ router.get('/leave-type', checkPermission("Attendance", "view"), getAllLeaveType
 
 router.get('/all', checkPermission("Attendance", "view"), getAllAttendance as any);
 
-router.get('/hours-lock', checkPermission("Attendance", "view"), getEmployeeHoursSummary as any)
+router.get('/hours-lock/', checkPermission("Attendance", "view"), getEmployeeHoursSummary as any)
+
+router.get('/hours-lock/:employeeId', checkPermission("Attendance", "view"), getEmployeeDailyHoursSummary as any)
 
 router.post('/break/create', checkPermission("Attendance", "create"), createBreak as any);
 

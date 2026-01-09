@@ -1,28 +1,29 @@
+import { PermissionSource } from "@prisma/client";
 import prisma from "../utils/Prisma";
 
 export const getAllPermissions = async () => {
-    return await prisma.permission.findMany();
+    return await prisma.permissions.findMany();
 };
 
-export const getUserEffectivePermissions = async (userId: string) => {
-    const user = await prisma.user.findUnique({
-        where: { id: userId },
+export const getUserEffectivePermissions = async (user_id: string) => {
+    const user = await prisma.users.findUnique({
+        where: { id: user_id },
         include: {
             role: {
                 include: {
-                    RolePermission: {
+                    role_permission: {
                         include: { permission: true },
                     },
                 },
             },
-            UserPermission: {
+            user_permission: {
                 include: { permission: true },
             },
         },
     });
 
-    const rolePerms = user?.role?.RolePermission?.map(rp => rp.permission) || [];
-    const userPerms = user?.UserPermission?.map(up => up.permission) || [];
+    const rolePerms = user?.role?.role_permission?.map(rp => rp.permission) || [];
+    const userPerms = user?.user_permission?.map(up => up.permission) || [];
 
     const allPermsMap = new Map<string, { module: string; action: string }>();
     [...rolePerms, ...userPerms].forEach(p => {
@@ -32,24 +33,25 @@ export const getUserEffectivePermissions = async (userId: string) => {
     return Array.from(allPermsMap.values());
 };
 
-export const updateUserPermissions = async (userId: string, permissions: { permissionId: string }[]) => {
-    await prisma.userPermission.deleteMany({ where: { userId } });
+export const updateUserPermissions = async (user_id: string, permissions: { permission_id: string }[]) => {
+    await prisma.user_permissions.deleteMany({ where: { user_id } });
 
-    await prisma.userPermission.createMany({
+    await prisma.user_permissions.createMany({
         data: permissions.map(p => ({
-            userId,
-            permissionId: p.permissionId,
+            user_id,
+            permission_id: p.permission_id,
+            source: PermissionSource.ROLE
         })),
     });
 };
 
-export const updateRolePermissions = async (roleId: string, permissions: { permissionId: string }[]) => {
-    await prisma.rolePermission.deleteMany({ where: { roleId } });
+export const updateRolePermissions = async (role_id: string, permissions: { permission_id: string }[]) => {
+    await prisma.role_permissions.deleteMany({ where: { role_id } });
 
-    await prisma.rolePermission.createMany({
+    await prisma.role_permissions.createMany({
         data: permissions.map(p => ({
-            roleId,
-            permissionId: p.permissionId,
+            role_id,
+            permission_id: p.permission_id,
         })),
     });
 };

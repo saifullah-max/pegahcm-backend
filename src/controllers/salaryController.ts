@@ -15,45 +15,56 @@ export const calculateTotalSalary = (
 // Create salary
 export const createSalary = async (req: Request, res: Response) => {
     try {
-        const { employeeId, baseSalary, deductions, bonuses, allowances, effectiveFrom, effectiveTo } = req.body;
-        console.log("Employee ID:", employeeId);
-        if (!employeeId) {
-            return res.status(400).json({ error: "employeeId is required" });
+        const { employee_id, base_salary, deductions, bonuses, allowances, effective_from, effective_to } = req.body;
+        console.log("Employee ID:", employee_id);
+        if (!employee_id) {
+            return res.status(400).json({ error: "employee_id is required" });
         }
 
-        const createdSalary = await prisma.salaryDetail.create({
+        const createdSalary = await prisma.salary_details.create({
             data: {
-                employeeId,
-                baseSalary,
+                base_salary,
                 deductions,
                 bonuses,
-                totalPay: 0, // will update after allowances
-                effectiveFrom,
-                effectiveTo,
-                createdBy: req.user?.userId || 'system',
-            }
+                total_pay: 0,
+                effective_from,
+                effective_to,
+                created_by: req.user?.userId,
+                employee: {
+                    connect: { id: employee_id },
+                },
+                allowances: allowances && allowances.length > 0
+                    ? {
+                        create: allowances.map((a: any) => ({
+                            type: a.type,
+                            amount: Number(a.amount) || 0,
+                        })),
+                    }
+                    : undefined,
+                created_at: new Date(),
+            },
         });
 
-        if (allowances && allowances.length > 0) {
-            await prisma.allowance.createMany({
-                data: allowances.map((a: any) => ({
-                    salaryId: createdSalary.id,
-                    type: a.type,
-                    amount: Number(a.amount) || 0
-                }))
-            });
-        }
+        // if (allowances && allowances.length > 0) {
+        //     await prisma.allowances.createMany({
+        //         data: allowances.map((a: any) => ({
+        //             salary_id: createdSalary.id,
+        //             type: a.type,
+        //             amount: Number(a.amount) || 0
+        //         }))
+        //     });
+        // }
 
         // Calculate total
         const totalAllowances = allowances?.reduce((sum: number, a: any) => sum + Number(a.amount || 0), 0) || 0;
-        const totalPay = Number(baseSalary) + totalAllowances + Number(bonuses) - Number(deductions);
+        const total_pay = Number(base_salary) + totalAllowances + Number(bonuses) - Number(deductions);
 
-        await prisma.salaryDetail.update({
+        await prisma.salary_details.update({
             where: { id: createdSalary.id },
-            data: { totalPay }
+            data: { total_pay }
         });
 
-        res.status(201).json({ success: true, data: { ...createdSalary, totalPay } });
+        res.status(201).json({ success: true, data: { ...createdSalary, total_pay } });
     } catch (error) {
         console.error(error);
         res.status(500).json({ success: false, message: 'Error creating salary', error });
@@ -64,10 +75,10 @@ export const createSalary = async (req: Request, res: Response) => {
 export const updateSalary = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { baseSalary, deductions, bonuses, allowances, effectiveFrom, effectiveTo } = req.body;
+        const { base_salary, deductions, bonuses, allowances, effective_from, effective_to } = req.body;
 
         // 1️⃣ Fetch existing salary
-        const existingSalary = await prisma.salaryDetail.findUnique({
+        const existingSalary = await prisma.salary_details.findUnique({
             where: { id },
             include: { allowances: true }
         });
@@ -77,15 +88,15 @@ export const updateSalary = async (req: Request, res: Response) => {
         }
 
         // 2️⃣ Update basic salary fields
-        const updatedSalary = await prisma.salaryDetail.update({
+        const updatedSalary = await prisma.salary_details.update({
             where: { id },
             data: {
-                baseSalary: baseSalary !== undefined ? Number(baseSalary) : existingSalary.baseSalary,
+                base_salary: base_salary !== undefined ? Number(base_salary) : existingSalary.base_salary,
                 deductions: deductions !== undefined ? Number(deductions) : existingSalary.deductions,
                 bonuses: bonuses !== undefined ? Number(bonuses) : existingSalary.bonuses,
-                effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : existingSalary.effectiveFrom,
-                effectiveTo: effectiveTo ? new Date(effectiveTo) : existingSalary.effectiveTo,
-                updatedBy: req.user?.userId || existingSalary.updatedBy
+                effective_from: effective_from ? new Date(effective_from) : existingSalary.effective_from,
+                effective_to: effective_to ? new Date(effective_to) : existingSalary.effective_to,
+                updated_by: req.user?.userId || existingSalary.updated_by
             }
         });
 
@@ -93,13 +104,13 @@ export const updateSalary = async (req: Request, res: Response) => {
         // 3️⃣ If allowances are provided, replace them
         if (Array.isArray(allowances)) {
             // Delete old allowances
-            await prisma.allowance.deleteMany({ where: { salaryId: id } });
+            await prisma.allowances.deleteMany({ where: { salary_id: id } });
 
             // Insert new ones
             if (allowances.length > 0) {
-                await prisma.allowance.createMany({
+                await prisma.allowances.createMany({
                     data: allowances.map((a: any) => ({
-                        salaryId: id,
+                        salary_id: id,
                         type: a.type,
                         amount: Number(a.amount) || 0
                     }))
@@ -107,19 +118,19 @@ export const updateSalary = async (req: Request, res: Response) => {
             }
         }
 
-        // 4️⃣ Recalculate totalPay
-        const updatedAllowances = await prisma.allowance.findMany({ where: { salaryId: id } });
+        // 4️⃣ Recalculate total_pay
+        const updatedAllowances = await prisma.allowances.findMany({ where: { salary_id: id } });
         const totalAllowances = updatedAllowances.reduce((sum: any, a: any) => sum + Number(a.amount), 0);
 
-        const totalPay = Number(updatedSalary.baseSalary) + totalAllowances + Number(updatedSalary.bonuses) - Number(updatedSalary.deductions);
+        const total_pay = Number(updatedSalary.base_salary) + totalAllowances + Number(updatedSalary.bonuses) - Number(updatedSalary.deductions);
 
-        await prisma.salaryDetail.update({
+        await prisma.salary_details.update({
             where: { id },
-            data: { totalPay }
+            data: { total_pay }
         });
 
         // 5️⃣ Return updated record with allowances
-        const finalRecord = await prisma.salaryDetail.findUnique({
+        const finalRecord = await prisma.salary_details.findUnique({
             where: { id },
             include: { allowances: true }
         });
@@ -136,7 +147,7 @@ export const updateSalary = async (req: Request, res: Response) => {
 export const deleteSalary = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        await prisma.salaryDetail.delete({ where: { id } });
+        await prisma.salary_details.delete({ where: { id } });
         res.json({ success: true, message: 'Salary deleted' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error deleting salary', error });
@@ -146,13 +157,13 @@ export const deleteSalary = async (req: Request, res: Response) => {
 // Get all salaries
 export const getAllSalaries = async (req: Request, res: Response) => {
     try {
-        const salaries = await prisma.salaryDetail.findMany({
+        const salaries = await prisma.salary_details.findMany({
             include: {
                 employee: {
                     select: {
                         id: true,
-                        position: true,
-                        user: { select: { fullName: true, email: true } },
+                        designation: true,
+                        user: { select: { full_name: true, email: true } },
                     },
                 },
                 allowances: true, // 👈 Add this
@@ -169,14 +180,14 @@ export const getAllSalaries = async (req: Request, res: Response) => {
 export const getSalaryById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const salary = await prisma.salaryDetail.findUnique({
+        const salary = await prisma.salary_details.findUnique({
             where: { id },
             include: {
                 employee: {
                     select: {
                         id: true,
-                        position: true,
-                        user: { select: { fullName: true, email: true } },
+                        designation: true,
+                        user: { select: { full_name: true, email: true } },
                     },
                 },
                 allowances: true, // 👈 Add this
@@ -192,15 +203,15 @@ export const getSalaryById = async (req: Request, res: Response) => {
 // Get own salary
 export const getMySalary = async (req: Request, res: Response) => {
     try {
-        const userId = req.user?.userId;
-        if (!userId) {
+        const user_id = req.user?.userId;
+        if (!user_id) {
             return res.status(401).json({ success: false, message: 'Unauthorized' });
         }
 
-        const employee = await prisma.employee.findUnique({
-            where: { userId },
+        const employee = await prisma.employees.findUnique({
+            where: { user_id },
             include: {
-                salaryDetails: {
+                salary_details: {
                     include: {
                         allowances: true
                     }
@@ -209,7 +220,7 @@ export const getMySalary = async (req: Request, res: Response) => {
 
         });
 
-        res.json({ success: true, data: employee?.salaryDetails || [] });
+        res.json({ success: true, data: employee?.salary_details || [] });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error fetching salary', error });
     }
@@ -218,15 +229,15 @@ export const getMySalary = async (req: Request, res: Response) => {
 // incase of no change for next month salary
 export const copyPreviousSalaryByEmployee = async (req: Request, res: Response) => {
     try {
-        const { employeeId } = req.params;
-        if (!employeeId) return res.status(400).json({ success: false, message: 'employeeId is required' });
+        const { employee_id } = req.params;
+        if (!employee_id) return res.status(400).json({ success: false, message: 'employee_id is required' });
 
         // Optionally verify user permission here if needed
 
-        // Find latest salary for the given employeeId
-        const latestSalary = await prisma.salaryDetail.findFirst({
-            where: { employeeId },
-            orderBy: { effectiveFrom: 'desc' },
+        // Find latest salary for the given employee_id
+        const latestSalary = await prisma.salary_details.findFirst({
+            where: { employee_id },
+            orderBy: { effective_from: 'desc' },
             include: { allowances: true },
         });
 
@@ -235,26 +246,26 @@ export const copyPreviousSalaryByEmployee = async (req: Request, res: Response) 
         }
 
         // Calculate next month dates
-        const nextEffectiveFrom = new Date(latestSalary.effectiveFrom);
+        const nextEffectiveFrom = new Date(latestSalary.effective_from);
         nextEffectiveFrom.setMonth(nextEffectiveFrom.getMonth() + 1);
 
         let nextEffectiveTo = null;
-        if (latestSalary.effectiveTo) {
-            nextEffectiveTo = new Date(latestSalary.effectiveTo);
+        if (latestSalary.effective_to) {
+            nextEffectiveTo = new Date(latestSalary.effective_to);
             nextEffectiveTo.setMonth(nextEffectiveTo.getMonth() + 1);
         }
 
         // Create new salary with same amounts and allowances but updated dates
-        const newSalary = await prisma.salaryDetail.create({
+        const newSalary = await prisma.salary_details.create({
             data: {
-                employeeId,
-                baseSalary: latestSalary.baseSalary,
+                employee_id,
+                base_salary: latestSalary.base_salary,
                 deductions: latestSalary.deductions,
                 bonuses: latestSalary.bonuses,
-                effectiveFrom: nextEffectiveFrom,
-                effectiveTo: nextEffectiveTo,
-                createdBy: req.user?.userId || 'system',
-                totalPay: latestSalary.totalPay,
+                effective_from: nextEffectiveFrom,
+                effective_to: nextEffectiveTo,
+                created_by: req.user?.userId,
+                total_pay: latestSalary.total_pay,
                 allowances: {
                     create: latestSalary.allowances.map((a: any) => ({
                         type: a.type,
@@ -278,36 +289,40 @@ export const copyPreviousSalaryByEmployee = async (req: Request, res: Response) 
  */
 export const getSalarySlip = async (req: Request, res: Response) => {
     try {
-        const { employeeId } = req.params;
+        const { employee_id } = req.params;
         const { month } = req.query as { month?: string }; // optional month filter
 
         // Fetch employee details including user info
-        const employee = await prisma.employee.findUnique({
-            where: { id: employeeId }
+        const employee = await prisma.employees.findUnique({
+            where: { id: employee_id }
             ,
-            include: { user: true, department: true, subDepartment: true, salaryDetails: { include: { allowances: true } } }
+            include: {
+                user: true, department: true,
+                // sub_department: true, 
+                salary_details: { include: { allowances: true } }
+            }
         });
 
         if (!employee) return res.status(404).send('Employee not found');
-        console.log("Available salary months:", employee.salaryDetails.map((s: any) => s.effectiveFrom));
+        console.log("Available salary months:", employee.salary_details.map((s: any) => s.effective_from));
 
         // Determine salary for requested month or latest
-        let salary: typeof employee.salaryDetails[0] | undefined;
+        let salary: typeof employee.salary_details[0] | undefined;
         if (month) {
             const [year, mon] = month.split('-').map(Number);
-            salary = employee.salaryDetails.find((s: any) =>
-                s.effectiveFrom.getFullYear() === year && s.effectiveFrom.getMonth() + 1 === mon
+            salary = employee.salary_details.find((s: any) =>
+                s.effective_from.getFullYear() === year && s.effective_from.getMonth() + 1 === mon
             );
         }
         if (!salary) {
-            salary = employee.salaryDetails.sort((a: any, b: any) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime())[0];
+            salary = employee.salary_details.sort((a: any, b: any) => b.effective_from.getTime() - a.effective_from.getTime())[0];
         }
         if (!salary) return res.status(404).send('Salary not found for the selected month');
 
-        // Generate password: employeeNumber + DOB (DDMMYYYY)
-        const dob = employee.dateOfBirth;
+        // Generate password: employee_number + DOB (DDMMYYYY)
+        const dob = employee.date_of_birth;
         const dobStr = `${('0' + dob.getDate()).slice(-2)}${('0' + (dob.getMonth() + 1)).slice(-2)}${dob.getFullYear()}`;
-        const password = `${employee.employeeNumber}_${dobStr}`;
+        const password = `${employee.employee_number}_${dobStr}`;
         console.log("Password is:", password);
 
         // Create PDF
@@ -319,7 +334,7 @@ export const getSalarySlip = async (req: Request, res: Response) => {
             res
                 .writeHead(200, {
                     'Content-Type': 'application/pdf',
-                    'Content-Disposition': `attachment; filename=Payslip_${employee.employeeNumber}.pdf`,
+                    'Content-Disposition': `attachment; filename=Payslip_${employee.employee_number}.pdf`,
                     'Content-Length': pdfData.length,
                 })
                 .end(pdfData);
@@ -329,22 +344,22 @@ export const getSalarySlip = async (req: Request, res: Response) => {
         doc.fontSize(18).text('Payslip', { align: 'center' });
         doc.moveDown();
 
-        doc.fontSize(12).text(`Employee: ${employee.user.fullName}`);
-        doc.text(`Employee No: ${employee.employeeNumber}`);
-        doc.text(`Designation: ${employee.position}`);
+        doc.fontSize(12).text(`Employee: ${employee.user.full_name}`);
+        doc.text(`Employee No: ${employee.employee_number}`);
+        doc.text(`Designation: ${employee.designation_id}`);
         doc.text(`Department: ${employee.department?.name || 'N/A'}`);
-        doc.text(`Sub Department: ${employee.subDepartment?.name || 'N/A'}`);
-        doc.text(`Hire Date: ${employee.hireDate.toLocaleDateString()}`);
-        doc.text(`Work Location: ${employee.workLocation}`);
+        // doc.text(`Sub Department: ${employee.sub_department?.name || 'N/A'}`);
+        doc.text(`Hire Date: ${employee.hire_date.toLocaleDateString()}`);
+        doc.text(`Work Location: ${employee.work_location}`);
         doc.moveDown();
 
         // Earnings
         doc.text('--- Earnings ---');
-        doc.text(`Basic Salary: Rs.${salary.baseSalary.toFixed(2)}`);
+        doc.text(`Basic Salary: Rs.${salary.base_salary.toFixed(2)}`);
         salary.allowances.forEach((a: any) => doc.text(`${a.type}: Rs.${a.amount.toFixed(2)}`));
         doc.text(`Bonuses: Rs.${salary.bonuses.toFixed(2)}`);
         const totalEarnings =
-            Number(salary.baseSalary) +
+            Number(salary.base_salary) +
             salary.allowances.reduce((sum: any, a: any) => sum + Number(a.amount), 0) +
             Number(salary.bonuses); doc.text(`Total Earnings: Rs.${totalEarnings.toFixed(2)}`);
         doc.moveDown();
@@ -352,7 +367,7 @@ export const getSalarySlip = async (req: Request, res: Response) => {
         // Deductions
         doc.text('--- Deductions ---');
         doc.text(`Deductions: Rs.${salary.deductions.toFixed(2)}`);
-        const netPay = salary.totalPay;
+        const netPay = salary.total_pay;
         doc.text(`Net Salary: Rs.${netPay.toFixed(2)}`);
 
         doc.end();

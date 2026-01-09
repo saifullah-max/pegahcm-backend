@@ -1,110 +1,252 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, PermissionSource } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const userId = '31af5a53-f18b-4916-a71a-da4acdefd0e4';
+  console.log("🚀 Seeding started...");
 
-  const permissions = [
-    '01980f58-cdca-4308-a698-2f94e3cce3d7',
-    '02a1c50b-e400-4902-819d-08a9695956d2',
-    '07f55665-267c-4448-b00f-7bf6c13e883f',
-    '088f4503-4a86-46ab-849a-7329f90c9be5',
-    '08bc43e3-dc4c-432c-8511-5a34a8980e35',
-    '0ef2671d-fa35-42e7-982d-f1b2a1fb260c',
-    '0f4ad3ad-5493-44f3-906b-f9799fcf2e0f',
-    '225fc016-9f6a-4dd3-a96d-5f4fe687e630',
-    '23246974-13b7-4126-96b0-0ba45abef7bc',
-    '24fb165f-697f-44ab-b8a6-f5c345ef6246',
-    '25e0d667-dc5e-4b93-847f-c568312730d0',
-    '28c354a5-8c4e-4605-b60e-dfcf7ae65597',
-    '29c17201-d2fb-4f53-aca7-6d672d66919a',
-    '2f07b91b-6745-4911-a0be-cecf57a167c4',
-    '2f83ddd7-00f8-4046-af39-115ff5d35a43',
-    '353bee83-0c4d-4112-bba7-e8a532d7daa8',
-    '36317037-a0ae-47d3-b150-da43f3379370',
-    '3ba6aa4d-01c9-49a3-9d02-3879fd2f6628',
-    '3d68ac23-4693-4d24-83b9-f0a435c34c3e',
-    '3ec44d59-3908-47f9-9d82-1dd37780674d',
-    '47a22538-15af-438b-8053-41f59904851f',
-    '48811c38-2229-4a48-a4e5-1b5f6b76a115',
-    '4c40feb8-44c9-438e-b404-2636c3ae7a5b',
-    '514e2518-0929-4655-800c-b4a3d8905e60',
-    '51950d3e-996a-454b-a7be-ee7e3fee0269',
-    '52fbdbf4-3511-400f-bc3b-b0b2c96e21f4',
-    '54c44d99-e2f3-47ae-91bc-9abb5fd61943',
-    '58e9d44f-62ce-4467-8279-5e37e787a618',
-    '5b2ebd61-0623-4ead-93d8-d679ec449634',
-    '5f4f4204-d800-4c90-9735-400122dd9a9f',
-    '695d71d7-4ded-49c4-bbc6-c482e3044efa',
-    '6ca59356-10c9-4530-9944-047997413126',
-    '6cf8191f-d025-4af1-b548-91fcba368fd9',
-    '6ffd545f-fb3c-43e3-9b55-44b93160f2c1',
-    '725d08d4-3046-4ce3-b859-7bb02e5602b3',
-    '72a3811c-a823-4947-bf9e-7e23c1a04359',
-    '75bedbad-6b94-4880-86c6-2f292bfe64a1',
-    '76994099-8677-4618-9daf-63bb3c73c683',
-    '7859f833-a8be-4139-bcd8-ae0c3ea89931',
-    '7b005c73-f26c-4fde-a5b9-e2c3ab2bd9ec',
-    '7d587151-0188-4921-b7f0-6372285d94e9',
-    '834fff04-79a0-4a9c-a405-ac51ff9c9036',
-    '84cf28ed-5a05-4b1d-b674-fa6c1cd3f33a',
-    '857ae9c3-cadd-4015-98cc-bf70e96c6114',
-    '8a7675d3-32ee-4841-b123-4240693b34c6',
-    '8c721f7a-9aec-4e2b-9eb7-e6a3dbbe0da1',
-    '8ce82f0a-4c8d-434c-830b-8b8dfe638ab8',
-    '8df7f826-01d0-45df-b304-8b242aae335d',
-    '8f3b414b-3d19-4bb9-93dd-773545a5e6ba',
-    '93355116-78e3-4450-b723-277c781b524f',
-    '96f9a2a5-f338-4684-a620-c8d6c47d6452',
-    '9781c024-9387-4cbb-9004-e750a05e8132',
-    'a72c9478-b86c-4610-8df2-e7b7738a3a55',
-    'aa236ab6-76e3-4e24-9478-f62aae204e07',
-    'ac0f7efa-5692-4b4d-b4d8-8396a66d48fd',
-    'b06de67b-b143-4d57-92e8-8e498468c0c3',
-    'b9a4461c-f83d-4f5a-9e97-7e2b9f0d6f40',
-    'bc1c61e2-24ba-4b0d-bb0a-7902efaf1d45',
-    'bc82791d-a7b4-4cc1-96ad-bb0ba4ef4324',
-    'bdce77c2-0c1e-4aea-9b10-50c8c3da13c8',
-    'bf073caf-6f6a-4448-98df-553ba4fb6dd1',
-    'cd3cceaf-64e9-4ef3-9510-376f6ff14f67',
-    'd2f792a0-057c-4830-9253-53c5f2b0b987',
-    'd48c8954-265b-48ab-902e-14b9e41168ca',
-    'd57ef965-f2a5-47cd-96fd-b75fc0e287b3',
-    'd9611414-e40b-406e-9289-07536914cec1',
-    'dbd70a9e-e3f6-4938-8aa5-29de1a0d6290',
-    'dcd7e8e8-4b7f-47a4-9fe3-eeaab6333d69',
-    'ddb7d230-29b7-44ed-97f2-3de8a2727713',
-    'e882c2fd-ff65-4c7d-bcb6-92ba46f2fdf1',
-    'ea212072-127b-4d6e-b883-b604cc7afcfd',
-    'eb35f073-978e-40f1-8b7b-b79375b5082b',
-    'f0f2c8d1-38c5-46eb-8558-90e2ac3ddbd5',
-    'fa6db83d-0bf1-48c3-b973-897446213dc1',
-    'fc07ea79-c8e2-49b3-887f-f137d749638a'
+  const ADMIN_EMAIL = "admin@pegahub.com";
+  const ADMIN_USERNAME = "admin";
+  const ADMIN_FULLNAME = "System Admin";
+  const ADMIN_PASSWORD = "admin123";
+
+  const password_hash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+
+  // ✅ Create base roles
+  console.log("⏳ Creating roles...");
+  const [adminRole, teamRole] = await Promise.all([
+    prisma.roles.upsert({
+      where: { name: "admin" },
+      update: {},
+      create: {
+        name: "admin",
+        description: "Admin role with All access",
+      },
+    }),
+    prisma.roles.upsert({
+      where: { name: "teamMember" },
+      update: {},
+      create: {
+        name: "teamMember",
+        description: "Team member role",
+      },
+    }),
+  ]);
+
+  // ✅ Permissions Data
+  const permissionsData = [
+    { module: "Dashboard", action: "view", description: "Access Dashboard" },
+
+    { module: "Permission", action: "view", description: "View permissions" },
+    { module: "Permission", action: "create", description: "Create permissions" },
+    { module: "Permission", action: "update", description: "Update permissions" },
+    { module: "Permission", action: "delete", description: "Delete permissions" },
+
+    { module: "Salary", action: "view-all", description: "view-all Salary" },
+    { module: "Salary", action: "create", description: "create Salary" },
+    { module: "Salary", action: "update", description: "update Salary" },
+    { module: "Salary", action: "delete", description: "delete Salary" },
+    { module: "Salary", action: "approve", description: "approve Salary" },
+    { module: "Salary", action: "view", description: "view Salary" },
+
+    { module: "Role", action: "view-all", description: "view-all Role" },
+    { module: "Role", action: "view", description: "view Role" },
+    { module: "Role", action: "create", description: "create Role" },
+    { module: "Role", action: "update", description: "update Role" },
+    { module: "Role", action: "delete", description: "delete Role" },
+    { module: "Role", action: "approve", description: "approve Role" },
+
+    { module: "SubDepartment", action: "view-all", description: "view-all SubDepartment" },
+    { module: "SubDepartment", action: "view", description: "view SubDepartment" },
+    { module: "SubDepartment", action: "create", description: "create SubDepartment" },
+    { module: "SubDepartment", action: "update", description: "update SubDepartment" },
+    { module: "SubDepartment", action: "delete", description: "delete SubDepartment" },
+    { module: "SubDepartment", action: "approve", description: "approve SubDepartment" },
+
+    { module: "FixAttendance", action: "view-all", description: "view-all FixAttendance" },
+    { module: "FixAttendance", action: "view", description: "view FixAttendance" },
+    { module: "FixAttendance", action: "create", description: "create FixAttendance" },
+    { module: "FixAttendance", action: "update", description: "update FixAttendance" },
+    { module: "FixAttendance", action: "delete", description: "delete FixAttendance" },
+    { module: "FixAttendance", action: "approve", description: "approve FixAttendance" },
+
+    { module: "Bid", action: "view-all", description: "view-all Bid" },
+    { module: "Bid", action: "view", description: "view Bid" },
+    { module: "Bid", action: "view-own", description: "view own Bid" },
+    { module: "Bid", action: "create", description: "create Bid" },
+
+    { module: "Employee", action: "view-all", description: "view-all Employee" },
+    { module: "Employee", action: "view-own", description: "view-own Employee" },
+    { module: "Employee", action: "view", description: "view Employee" },
+    { module: "Employee", action: "create", description: "create Employee" },
+    { module: "Employee", action: "update", description: "update Employee" },
+    { module: "Employee", action: "delete", description: "delete Employee" },
+    { module: "Employee", action: "approve", description: "approve Employee" },
+
+    { module: "Notification", action: "view", description: "view Notification" },
+
+    { module: "Department", action: "view-all", description: "view-all Department" },
+    { module: "Department", action: "view", description: "view Department" },
+    { module: "Department", action: "create", description: "create Department" },
+    { module: "Department", action: "update", description: "update Department" },
+    { module: "Department", action: "delete", description: "delete Department" },
+    { module: "Department", action: "approve", description: "approve Department" },
+
+    { module: "Designation", action: "view-all", description: "view-all Designation" },
+    { module: "Designation", action: "view", description: "view Designation" },
+    { module: "Designation", action: "create", description: "create Designation" },
+    { module: "Designation", action: "update", description: "update Designation" },
+    { module: "Designation", action: "delete", description: "delete Designation" },
+    { module: "Designation", action: "approve", description: "approve Designation" },
+
+    { module: "Shift", action: "view-all", description: "view-all Shift" },
+    { module: "Shift", action: "view", description: "view Shift" },
+    { module: "Shift", action: "create", description: "create Shift" },
+    { module: "Shift", action: "update", description: "update Shift" },
+    { module: "Shift", action: "delete", description: "delete Shift" },
+    { module: "Shift", action: "approve", description: "approve Shift" },
+
+    { module: "Setting", action: "view", description: "view Setting" },
+    { module: "Setting", action: "create", description: "create Setting" },
+
+    { module: "Ticket", action: "view", description: "view Ticket" },
+    { module: "Ticket", action: "create", description: "create Ticket" },
+    { module: "Ticket", action: "comment", description: "Comment on ticket" },
+    { module: "Ticket", action: "delete", description: "Delete Ticket" },
+    { module: "Ticket", action: "update", description: "Update Ticket" },
+    { module: "Ticket", action: "view-all", description: "view all Ticket" },
+    { module: "Ticket", action: "view-own", description: "view own Ticket" },
+
+    { module: "Comment", action: "view", description: "view Comment" },
+    { module: "Comment", action: "create", description: "create Comment" },
+    { module: "Comment", action: "delete", description: "Delete Comment" },
+    { module: "Comment", action: "update", description: "Update Comment" },
+    { module: "Comment", action: "view-all", description: "view all Comment" },
+    { module: "Comment", action: "view-own", description: "view own Comment" },
+
+    { module: "Milestone", action: "view", description: "view Milestone" },
+    { module: "Milestone", action: "create", description: "create Milestone" },
+    { module: "Milestone", action: "update", description: "update Milestone" },
+    { module: "Milestone", action: "view-all", description: "view all Milestone" },
+    { module: "Milestone", action: "view-own", description: "view own Milestone" },
+    { module: "Milestone", action: "delete", description: "Delete Milestone" },
+
+    { module: "Attendance", action: "view-all", description: "view-all Attendance" },
+    { module: "Attendance", action: "view", description: "view Attendance" },
+    { module: "Attendance", action: "create", description: "create Attendance" },
+    { module: "Attendance", action: "update", description: "update Attendance" },
+    { module: "Attendance", action: "delete", description: "delete Attendance" },
+    { module: "Attendance", action: "approve", description: "approve Attendance" },
+
+    { module: "Leave", action: "view-all", description: "view-all Leave" },
+    { module: "Leave", action: "view", description: "view Leave" },
+    { module: "Leave", action: "create", description: "create Leave" },
+    { module: "Leave", action: "update", description: "update Leave" },
+    { module: "Leave", action: "delete", description: "delete Leave" },
+    { module: "Leave", action: "approve", description: "approve Leave" },
+
+    { module: "Project", action: "view", description: "view Project" },
+    { module: "Project", action: "create", description: "create Project" },
+    { module: "Project", action: "view-all", description: "view all Project" },
+    { module: "Project", action: "view-own", description: "view own Project" },
+    { module: "Project", action: "delete", description: "Delete Project" },
+
+    { module: "Upwork", action: "view-all", description: "view-all Upwork" },
+    { module: "Upwork", action: "view", description: "view Upwork" },
+    { module: "Upwork", action: "create", description: "create Upwork" },
+    { module: "Upwork", action: "update", description: "update Upwork" },
+    { module: "Upwork", action: "delete", description: "delete Upwork" },
+    { module: "Upwork", action: "approve", description: "approve Upwork" },
+
   ];
 
-  for (const permissionId of permissions) {
-    await prisma.userPermission.upsert({
-      where: {
-        userId_permissionId: {
-          userId,
-          permissionId,
-        },
-      },
-      update: {}, // Do nothing if it already exists
-      create: {
-        userId,
-        permissionId,
-      },
-    });
-  }
+  console.log("⏳ Seeding permissions...");
+  await prisma.permissions.createMany({
+    data: permissionsData,
+    skipDuplicates: true,
+  });
 
-  console.log('Permissions assigned successfully!');
+  const allPermissions = await prisma.permissions.findMany({
+    select: { id: true },
+  });
+
+  // ✅ Connect permissions -> admin role
+  console.log("⏳ Assigning permissions to admin role...");
+  await prisma.role_permissions.createMany({
+    data: allPermissions.map((p) => ({
+      role_id: adminRole.id,
+      permission_id: p.id,
+    })),
+    skipDuplicates: true,
+  });
+
+  // ✅ Create Admin User
+  console.log("⏳ Creating admin user...");
+  const adminUser = await prisma.users.upsert({
+    where: { email: ADMIN_EMAIL },
+    update: {},
+    create: {
+      username: ADMIN_USERNAME,
+      full_name: ADMIN_FULLNAME,
+      email: ADMIN_EMAIL,
+      password_hash,
+      role_id: adminRole.id,
+      status: "ACTIVE",
+    },
+  });
+
+  await prisma.employees.upsert({
+    where: { user_id: adminUser.id },
+    update: {},
+    create: {
+      id: crypto.randomUUID(),
+      user_id: adminUser.id,
+      employee_number: "ADM-001",
+      department_id: null,
+      designation_id: null,
+      designation: undefined,
+      work_location: "Onsite",
+      gender: "Other",
+      status: "ACTIVE",
+      hire_date: new Date(),
+      date_of_birth: new Date("2000-01-01"),
+      address: "N/A",
+      emergency_contact_name: "N/A",
+      emergency_contact_phone: "N/A",
+      salary: 0,
+    },
+  });
+
+  // ✅ Assign permissions to Admin User
+  console.log("⏳ Assigning permissions to admin user...");
+  await prisma.user_permissions.createMany({
+    data: allPermissions.map((p) => ({
+      user_id: adminUser.id,
+      permission_id: p.id,
+      source: PermissionSource.ROLE,
+    })),
+    skipDuplicates: true,
+  });
+
+  // ✅ Head Departments
+  console.log("⏳ Seeding head departments...");
+  await prisma.head_departments.createMany({
+    data: [
+      { name: "Production", description: "Production Head Department", code: "PROD" },
+      { name: "Finance", description: "Finance Head Department", code: "FIN" },
+      { name: "Commercial", description: "Commercial Head Department", code: "COM" },
+      { name: "HR", description: "Human Resource Head Department", code: "HR" },
+    ],
+    skipDuplicates: true,
+  });
+
+  console.log("✅ Seeding completed successfully!");
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("❌ Seeding error:", e);
     process.exit(1);
   })
   .finally(async () => {

@@ -4,60 +4,58 @@ import prisma from "../utils/Prisma";
 export interface CustomJwtPayload {
   userId: string;
   role: string;
-  subRole?: string;
-  visibilityLevel?: number;
-  departmentId?: string;
-  subDepartmentId?: string;
+  visibility_level?: number;
+  department_id?: string;
+  sub_department_id?: string;
 }
 
-// export const getUserNotifications = async (req: Request, res: Response) => {
-//     try {
-//         const user = req.user as CustomJwtPayload;
+export const getUserNotifications = async (req: Request, res: Response) => {
+    try {
+        const user = req.user as CustomJwtPayload;
 
-//         const {
-//             userId,
-//             role,
-//             subRole,
-//             visibilityLevel = 99,
-//             departmentId,
-//             subDepartmentId
-//         } = user;
+        const {
+            userId,
+            role,
+            visibility_level = 99,
+            department_id,
+            sub_department_id
+        } = user;
 
-//         if (!userId) {
-//             return res.status(401).json({ message: 'Unauthorized' });
-//         }
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthorized' });
+        }
 
-//         const notifications = await prisma.notification.findMany({
-//             where: {
-//                 OR: [
-//                     { userId },
+        const notifications = await prisma.notifications.findMany({
+            where: {
+                OR: [
+                    { user_id: userId },
 
-//                     // ✅ Removed `scope` — doesn't exist in schema, so should not be here
+                    // ✅ Removed `scope` — doesn't exist in schema, so should not be here
 
-//                     {
-//                         visibilityLevel: {
-//                             lte: visibilityLevel
-//                         }
-//                     },
-//                     {
-//                         departmentId: departmentId ?? undefined
-//                     },
-//                     {
-//                         subDepartmentId: subDepartmentId ?? undefined
-//                     }
-//                 ]
-//             },
-//             orderBy: {
-//                 createdAt: 'desc'
-//             }
-//         });
+                    {
+                        visibility_level: {
+                            lte: visibility_level
+                        }
+                    },
+                    {
+                        department_id: department_id ?? undefined
+                    },
+                    {
+                        sub_department_id: sub_department_id ?? undefined
+                    }
+                ]
+            },
+            orderBy: {
+                created_at: 'desc'
+            }
+        });
 
-//         res.status(200).json(notifications);
-//     } catch (error) {
-//         console.error('Error fetching notifications:', error);
-//         res.status(500).json({ message: 'Internal Server Error' });
-//     }
-// };
+        res.status(200).json(notifications);
+    } catch (error) {
+        console.error('Error fetching notifications:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
 
 // GET /api/notifications?page=1&limit=10
 
@@ -69,24 +67,24 @@ export const getFilteredNotifications = async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
 
-    const userNotifications = await prisma.userNotification.findMany({
+    const userNotifications = await prisma.user_notifications.findMany({
       where: {
-        userId: user.userId,
+        user_id: user.userId,
       },
       include: {
         notification: true,
       },
       orderBy: {
         notification: {
-          createdAt: "desc",
+          created_at: "desc",
         },
       },
       skip,
       take: limit,
     });
 
-    const total = await prisma.userNotification.count({
-      where: { userId: user.userId },
+    const total = await prisma.user_notifications.count({
+      where: { user_id: user.userId },
     });
 
     res.status(200).json({
@@ -104,13 +102,13 @@ export const getFilteredNotifications = async (req: Request, res: Response) => {
 // to mark as read - single notif
 export const markNotificationAsRead = async (req: Request, res: Response) => {
   try {
-    const { id: notificationId } = req.params;
+    const { id: notification_id } = req.params;
     const user = req.user as CustomJwtPayload;
 
-    const userNotif = await prisma.userNotification.findFirst({
+    const userNotif = await prisma.user_notifications.findFirst({
       where: {
-        notificationId,
-        userId: user.userId,
+        notification_id,
+        user_id: user.userId,
       },
     });
 
@@ -122,11 +120,11 @@ export const markNotificationAsRead = async (req: Request, res: Response) => {
       return res.status(200).json({ message: "Already marked as read" });
     }
 
-    await prisma.userNotification.update({
+    await prisma.user_notifications.update({
       where: { id: userNotif.id },
       data: {
         read: true,
-        readAt: new Date(),
+        read_at: new Date(),
       },
     });
 
@@ -152,9 +150,9 @@ export const markGroupNotificationsAsRead = async (
         .json({ message: "title, message, and type are required" });
     }
 
-    const groupNotifs = await prisma.userNotification.findMany({
+    const groupNotifs = await prisma.user_notifications.findMany({
       where: {
-        userId: user.userId,
+        user_id: user.userId,
         notification: {
           title,
           message,
@@ -165,9 +163,9 @@ export const markGroupNotificationsAsRead = async (
     });
 
     const updates = groupNotifs.map((n: any) =>
-      prisma.userNotification.update({
+      prisma.user_notifications.update({
         where: { id: n.id },
-        data: { read: true, readAt: new Date() },
+        data: { read: true, read_at: new Date() },
       })
     );
 
@@ -188,14 +186,14 @@ export const markAllNotificationsAsRead = async (
   try {
     const user = req.user as CustomJwtPayload;
 
-    await prisma.userNotification.updateMany({
+    await prisma.user_notifications.updateMany({
       where: {
-        userId: user.userId,
+        user_id: user.userId,
         read: false,
       },
       data: {
         read: true,
-        readAt: new Date(),
+        read_at: new Date(),
       },
     });
 

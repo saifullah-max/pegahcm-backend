@@ -1,7 +1,13 @@
 import { Server } from "socket.io";
 import http from "http";
 
-let io: Server;
+let io: Server | null = null; // <-- nullable for safe access
+
+export function initSocket(server: http.Server): Server {
+    if (io) {
+        console.warn('[Socket.IO] Server already initialized — skipping re-init.');
+        return io;
+    }
 
 export function initSocket(server: http.Server, allowedOrigins: string[]) {
   if (io) {
